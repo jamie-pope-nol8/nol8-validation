@@ -5,6 +5,8 @@ import json
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +14,7 @@ from framework.cli.main import (
     PolicyDeploymentError,
     apply_policy_to_run,
     deploy_policy,
+    main,
 )
 
 
@@ -95,10 +98,18 @@ class ValidatePolicyTests(unittest.TestCase):
 
     @patch("framework.cli.main.deploy_policy")
     def test_successful_deployment_updates_manifest(self, mocked_deploy) -> None:
-        mocked_deploy.return_value = {
-            "deployment_id": "deployment-123",
-            "status": "active",
-        }
+        mocked_deploy.return_value = (
+            200,
+            {
+                "ok": True,
+                "command_id": "cmd-354",
+                "stage": "apollo",
+                "message": "loaded 6 rules",
+                "error_code": None,
+                "apollo_response": "OK reload_rules dispatched",
+                "rules": 6,
+            },
+        )
         run_directory, original = self.create_run()
 
         manifest = apply_policy_to_run(run_directory, "aergia")
@@ -112,7 +123,9 @@ class ValidatePolicyTests(unittest.TestCase):
         self.assertEqual(
             stage["policy_sha256"], original["artifacts"]["policy"]["sha256"]
         )
-        self.assertEqual(stage["response"]["deployment_id"], "deployment-123")
+        self.assertEqual(stage["http_status"], 200)
+        self.assertEqual(stage["response"]["command_id"], "cmd-354")
+        self.assertIsNone(stage["response"]["error_code"])
         self.assertIn("started_at", stage)
         self.assertIn("completed_at", stage)
         for later_stage in ("execution", "comparison", "reporting"):
@@ -158,7 +171,7 @@ class ValidatePolicyTests(unittest.TestCase):
                 self.assertEqual(caught.exception.category, category)
 
     @patch("framework.cli.main.subprocess.run")
-    def test_success_response_is_allowlisted_and_secrets_are_not_written(
+    def test_real_themis_response_is_allowlisted_and_secrets_are_not_written(
         self, mocked_run
     ) -> None:
         policy_path = self.root / "policy.nol"
@@ -168,24 +181,136 @@ class ValidatePolicyTests(unittest.TestCase):
             0,
             stdout=json.dumps(
                 {
-                    "deployment_id": "deployment-123",
-                    "status": "active",
-                    "token": "top-secret-token",
-                    "authorization": "Bearer top-secret-token",
-                    "nested": {"password": "secret"},
+                    "http_status": 200,
+                    "response": {
+                        "ok": True,
+                        "command_id": "cmd-354",
+                        "stage": "apollo",
+                        "message": "loaded 6 rule(s)",
+                        "error_code": None,
+                        "apollo_response": "OK reload_rules dispatched",
+                        "rules": 6,
+                        "token": "top-secret-token",
+                        "authorization": "Bearer top-secret-token",
+                        "nested": {"password": "secret"},
+                        "unknown": "excluded",
+                    },
                 }
             ),
             stderr="",
         )
 
-        response = deploy_policy(policy_path, "themis")
+        http_status, response = deploy_policy(policy_path, "themis")
 
         serialized = json.dumps(response)
+        self.assertEqual(http_status, 200)
         self.assertEqual(
-            response, {"deployment_id": "deployment-123", "status": "active"}
+            response,
+            {
+                "ok": True,
+                "command_id": "cmd-354",
+                "stage": "apollo",
+                "message": "loaded 6 rule(s)",
+                "error_code": None,
+                "apollo_response": "OK reload_rules dispatched",
+                "rules": 6,
+            },
         )
         self.assertNotIn("top-secret-token", serialized)
         self.assertNotIn("Bearer", serialized)
+        self.assertNotIn("unknown", serialized)
+
+    @patch("framework.cli.main.subprocess.run")
+    def test_ok_false_is_failure_with_sanitized_response(self, mocked_run) -> None:
+        policy_path = self.root / "policy.nol"
+        policy_path.write_text('"x" -> "y";\n')
+        mocked_run.return_value = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=json.dumps(
+                {
+                    "http_status": 200,
+                    "response": {
+                        "ok": False,
+                        "message": "reload rejected",
+                        "error_code": "INVALID_POLICY",
+                        "secret": "excluded",
+                    },
+                }
+            ),
+            stderr="",
+        )
+
+        with self.assertRaises(PolicyDeploymentError) as caught:
+            deploy_policy(policy_path, "themis")
+
+        self.assertEqual(caught.exception.http_status, 200)
+        self.assertEqual(caught.exception.response["ok"], False)
+        self.assertEqual(caught.exception.response["error_code"], "INVALID_POLICY")
+        self.assertNotIn("secret", caught.exception.response)
+
+    @patch("framework.cli.main.subprocess.run")
+    def test_missing_ok_is_failure(self, mocked_run) -> None:
+        policy_path = self.root / "policy.nol"
+        policy_path.write_text('"x" -> "y";\n')
+        mocked_run.return_value = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=json.dumps(
+                {
+                    "http_status": 200,
+                    "response": {"message": "ambiguous response", "error_code": None},
+                }
+            ),
+            stderr="",
+        )
+
+        with self.assertRaises(PolicyDeploymentError) as caught:
+            deploy_policy(policy_path, "themis")
+        self.assertEqual(caught.exception.category, "deployment")
+        self.assertNotIn("ok", caught.exception.response)
+
+    @patch("framework.cli.main.deploy_policy")
+    def test_cli_output_contains_all_themis_fields(self, mocked_deploy) -> None:
+        mocked_deploy.return_value = (
+            200,
+            {
+                "ok": True,
+                "command_id": "cmd-354",
+                "stage": "apollo",
+                "message": "loaded 6 rules",
+                "error_code": None,
+                "apollo_response": "OK reload_rules dispatched",
+                "rules": 6,
+            },
+        )
+        run_directory, _ = self.create_run()
+        output = StringIO()
+
+        with redirect_stdout(output):
+            exit_code = main(
+                ["policy", "--run", str(run_directory), "--target", "themis"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        rendered = output.getvalue()
+        for expected in (
+            "Validation policy deployed",
+            "Run ID:",
+            "Run directory:",
+            "Target:        themis",
+            "Policy file:   generated/scale-policy.nol",
+            "Policy SHA256:",
+            "HTTP status:   200",
+            "ok: true",
+            "command_id: cmd-354",
+            "stage: apollo",
+            "message: loaded 6 rules",
+            "error_code: null",
+            "apollo_response: OK reload_rules dispatched",
+            "rules: 6",
+        ):
+            self.assertIn(expected, rendered)
 
 
 if __name__ == "__main__":

@@ -95,7 +95,9 @@ if [[ "$HTTP_CODE" -lt 200 || "$HTTP_CODE" -ge 300 ]]; then
   exit 6
 fi
 
-if ! jq . "$RESPONSE_FILE"; then
+if ! jq --arg http_status "$HTTP_CODE" \
+  '{http_status: ($http_status | tonumber), response: .}' \
+  "$RESPONSE_FILE"; then
   echo "Policy deployment returned an invalid JSON response." >&2
   exit 6
 fi

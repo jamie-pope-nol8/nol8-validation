@@ -18,9 +18,18 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 class PolicyDeploymentError(Exception):
-    def __init__(self, category: str, message: str):
+    def __init__(
+        self,
+        category: str,
+        message: str,
+        *,
+        http_status: int | None = None,
+        response: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.category = category
+        self.http_status = http_status
+        self.response = response or {}
 
 
 def utc_now() -> datetime:
@@ -219,7 +228,30 @@ def _policy_path(run_directory: Path, manifest: dict[str, Any]) -> tuple[Path, s
     return policy_path, policy_sha256
 
 
-def deploy_policy(policy_path: Path, target: str) -> dict[str, Any]:
+def _sanitize_themis_response(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {}
+
+    allowed_fields = (
+        "ok",
+        "command_id",
+        "stage",
+        "message",
+        "error_code",
+        "apollo_response",
+        "rules",
+    )
+    sanitized: dict[str, Any] = {}
+    for key in allowed_fields:
+        if key not in response:
+            continue
+        value = response[key]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            sanitized[key] = value
+    return sanitized
+
+
+def deploy_policy(policy_path: Path, target: str) -> tuple[int, dict[str, Any]]:
     deployment_script = REPOSITORY_ROOT / "scripts" / "load-policy.sh"
     result = subprocess.run(
         [str(deployment_script), target, str(policy_path)],
@@ -243,20 +275,36 @@ def deploy_policy(policy_path: Path, target: str) -> dict[str, Any]:
         )
         raise PolicyDeploymentError(category, message)
 
-    response: dict[str, Any] = {}
     try:
         parsed = json.loads(result.stdout)
     except json.JSONDecodeError:
-        parsed = None
+        raise PolicyDeploymentError(
+            "deployment", "Policy deployment returned an invalid response."
+        )
 
-    if isinstance(parsed, dict):
-        for key in ("id", "deployment_id", "policy_id", "status"):
-            value = parsed.get(key)
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                if key in parsed:
-                    response[key] = value
+    if not isinstance(parsed, dict):
+        raise PolicyDeploymentError(
+            "deployment", "Policy deployment returned an invalid response."
+        )
 
-    return response
+    http_status = parsed.get("http_status")
+    if not isinstance(http_status, int):
+        raise PolicyDeploymentError(
+            "deployment", "Policy deployment response did not include HTTP status."
+        )
+
+    response = _sanitize_themis_response(parsed.get("response"))
+    if response.get("ok") is not True:
+        service_message = response.get("message", "Themis did not confirm deployment.")
+        error_code = response.get("error_code", "unavailable")
+        raise PolicyDeploymentError(
+            "deployment",
+            f"{service_message} (error_code: {error_code})",
+            http_status=http_status,
+            response=response,
+        )
+
+    return http_status, response
 
 
 def apply_policy_to_run(run_directory: Path, target: str) -> dict[str, Any]:
@@ -302,14 +350,17 @@ def apply_policy_to_run(run_directory: Path, target: str) -> dict[str, Any]:
                 "policy_sha256": policy_sha256,
             }
         )
-        response = deploy_policy(policy_path, target)
+        http_status, response = deploy_policy(policy_path, target)
 
         completed_at = isoformat_utc(utc_now())
         policy_stage.update(
-            {"status": "completed", "completed_at": completed_at}
+            {
+                "status": "completed",
+                "completed_at": completed_at,
+                "http_status": http_status,
+                "response": response,
+            }
         )
-        if response:
-            policy_stage["response"] = response
         manifest["status"] = "policy_deployed"
         manifest["updated_at"] = completed_at
         write_manifest_atomic(manifest_path, manifest)
@@ -327,6 +378,10 @@ def apply_policy_to_run(run_directory: Path, target: str) -> dict[str, Any]:
                 },
             }
         )
+        if error.http_status is not None:
+            policy_stage["http_status"] = error.http_status
+        if error.response:
+            policy_stage["response"] = error.response
         manifest["status"] = "policy_failed"
         manifest["updated_at"] = failed_at
         write_manifest_atomic(manifest_path, manifest)
@@ -382,14 +437,44 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "policy":
         try:
-            apply_policy_to_run(args.run, args.target)
+            manifest = apply_policy_to_run(args.run, args.target)
         except PolicyDeploymentError as error:
             print(f"Policy deployment failed: {error}", file=sys.stderr)
             return 1
 
+        policy_stage = manifest["stages"]["policy"]
+        response = policy_stage["response"]
+
+        def display_response_value(field: str) -> str:
+            if field not in response:
+                return "unavailable"
+            value = response[field]
+            if value is None:
+                return "null"
+            if isinstance(value, bool):
+                return str(value).lower()
+            return str(value)
+
         print("Validation policy deployed")
+        print()
+        print(f"Run ID:        {manifest.get('run_id', 'unavailable')}")
         print(f"Run directory: {args.run}")
         print(f"Target:        {args.target}")
+        print(f"Policy file:   {policy_stage['policy_path']}")
+        print(f"Policy SHA256: {policy_stage['policy_sha256']}")
+        print(f"HTTP status:   {policy_stage['http_status']}")
+        print()
+        print("Themis response")
+        for field in (
+            "ok",
+            "command_id",
+            "stage",
+            "message",
+            "error_code",
+            "apollo_response",
+            "rules",
+        ):
+            print(f"  {field}: {display_response_value(field)}")
         return 0
 
     return 2
