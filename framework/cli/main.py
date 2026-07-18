@@ -965,26 +965,31 @@ class _ScaleGenerationProgress:
 
     def __call__(self, event: str, completed: int, total: int) -> None:
         if event == "configuration_loaded":
-            print("Generating validation workload")
-            print()
-            print("Step 1/4: Loading workload configuration")
-            print("Complete")
-            print()
+            print("Generating validation workload", flush=True)
+            print(flush=True)
+            print("Step 1/4: Loading workload configuration", flush=True)
+            print("Complete", flush=True)
+            print(flush=True)
         elif event == "rules_started":
-            print("Step 2/4: Building rule catalog")
+            print("Step 2/4: Building rule catalog", flush=True)
         elif event == "rules_completed":
-            print(f"Rules generated: {completed}/{total}")
-            print()
+            print(f"Rules generated: {completed}/{total}", flush=True)
+            print(flush=True)
         elif event == "documents_started":
-            print("Step 3/4: Generating documents")
+            print("Step 3/4: Generating documents", flush=True)
+        elif event == "expected_started":
+            print(flush=True)
+            print("Calculating expected transformations", flush=True)
         elif event == "documents_progress":
-            print(f"Documents generated: {completed}/{total}")
+            print(f"Documents generated: {completed}/{total}", flush=True)
+        elif event == "expected_progress":
+            print(f"Expected records completed: {completed}/{total}", flush=True)
         elif event == "artifacts_started":
-            print()
-            print("Step 4/4: Writing artifacts")
+            print(flush=True)
+            print("Step 4/4: Writing artifacts", flush=True)
         elif event == "complete":
-            print("Complete")
-            print()
+            print("Complete", flush=True)
+            print(flush=True)
             self.completed = True
 
 

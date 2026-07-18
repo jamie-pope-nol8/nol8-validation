@@ -223,6 +223,9 @@ def generate_scale_artifacts(
     _report_progress(
         progress_callback, "documents_started", 0, realized_records
     )
+    _report_progress(
+        progress_callback, "expected_started", 0, realized_records
+    )
 
     try:
         with input_temporary.open("w", encoding="utf-8") as input_handle, \
@@ -265,7 +268,20 @@ def generate_scale_artifacts(
                     format_name=format_name,
                     random_source=rng,
                 )
-                expected_message, expected_matches = _expected_result(message, rules)
+                if index % progress_interval == 0 or index == realized_records:
+                    _report_progress(
+                        progress_callback,
+                        "documents_progress",
+                        index,
+                        realized_records,
+                    )
+
+                # Only selected rules can occur as generated scale markers. Using
+                # that exact injection evidence preserves the full transformation
+                # contract without rescanning the message for every policy rule.
+                expected_message, expected_matches = _expected_result(
+                    message, selected_rules
+                )
                 kind = "dirty" if expected_matches else "clean"
 
                 input_handle.write(
@@ -308,7 +324,7 @@ def generate_scale_artifacts(
                 if index % progress_interval == 0 or index == realized_records:
                     _report_progress(
                         progress_callback,
-                        "documents_progress",
+                        "expected_progress",
                         index,
                         realized_records,
                     )
