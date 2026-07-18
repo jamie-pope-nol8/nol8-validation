@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from html import escape
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 import yaml
@@ -645,6 +645,9 @@ def _pad_document(
     format_name: str,
     random_source: random.Random,
 ) -> str:
+    if target_size < 0:
+        raise ValueError("Document target size cannot be negative.")
+
     encoded_size = len(content.encode("utf-8"))
 
     if encoded_size >= target_size:
@@ -658,13 +661,16 @@ def _pad_document(
     )
 
     chunks: list[str] = []
+    filler_size = 0
     sequence = 1
 
-    while sum(len(chunk.encode("utf-8")) for chunk in chunks) < remaining:
-        chunks.append(
+    while filler_size < remaining:
+        chunk = (
             f"{filler_seed} sequence={sequence} "
             f"token={_token(random_source, 16)}\n"
         )
+        chunks.append(chunk)
+        filler_size += len(chunk.encode("utf-8"))
         sequence += 1
 
     filler = "".join(chunks)
@@ -678,8 +684,7 @@ def _pad_document(
     if format_name == "html":
         return _append_html_filler(content, filler, target_size)
 
-    padded = content + filler
-    return _truncate_utf8(padded, target_size)
+    return content + _truncate_utf8(filler, remaining)
 
 
 def _append_json_filler(
@@ -688,9 +693,18 @@ def _append_json_filler(
     target_size: int,
 ) -> str:
     data = json.loads(content)
-    data["_synthetic_padding"] = filler
-    serialized = json.dumps(data, indent=2, sort_keys=True) + "\n"
-    return _truncate_utf8(serialized, target_size)
+    data["_synthetic_padding"] = ""
+    empty = json.dumps(data, indent=2, sort_keys=True) + "\n"
+    available = target_size - len(empty.encode("utf-8"))
+    if available < 0:
+        return content
+
+    data["_synthetic_padding"] = _prefix_for_encoded_budget(
+        filler,
+        available,
+        _json_character_size,
+    )
+    return json.dumps(data, indent=2, sort_keys=True) + "\n"
 
 
 def _append_xml_filler(
@@ -699,14 +713,21 @@ def _append_xml_filler(
     target_size: int,
 ) -> str:
     closing_tag = "</enterprise_record>\n"
-    insertion = f"<synthetic_padding>{escape(filler)}</synthetic_padding>"
+    if not content.endswith(closing_tag):
+        return content
 
-    if content.endswith(closing_tag):
-        content = content[: -len(closing_tag)] + insertion + closing_tag
-    else:
-        content += insertion
+    prefix = content[: -len(closing_tag)]
+    empty = prefix + "<synthetic_padding></synthetic_padding>" + closing_tag
+    available = target_size - len(empty.encode("utf-8"))
+    if available < 0:
+        return content
 
-    return _truncate_utf8(content, target_size)
+    fitted = _prefix_for_encoded_budget(filler, available, _xml_character_size)
+    return (
+        prefix
+        + f"<synthetic_padding>{escape(fitted)}</synthetic_padding>"
+        + closing_tag
+    )
 
 
 def _append_html_filler(
@@ -714,14 +735,46 @@ def _append_html_filler(
     filler: str,
     target_size: int,
 ) -> str:
-    insertion = f"<pre>{escape(filler)}</pre>\n"
+    if "</body>" not in content:
+        return content
 
-    if "</body>" in content:
-        content = content.replace("</body>", insertion + "</body>", 1)
-    else:
-        content += insertion
+    empty = content.replace("</body>", "<pre></pre>\n</body>", 1)
+    available = target_size - len(empty.encode("utf-8"))
+    if available < 0:
+        return content
 
-    return _truncate_utf8(content, target_size)
+    fitted = _prefix_for_encoded_budget(filler, available, _xml_character_size)
+    insertion = f"<pre>{escape(fitted)}</pre>\n"
+    return content.replace("</body>", insertion + "</body>", 1)
+
+
+def _prefix_for_encoded_budget(
+    value: str,
+    byte_budget: int,
+    character_size: Callable[[str], int],
+) -> str:
+    used = 0
+    end = 0
+    for end, character in enumerate(value, start=1):
+        encoded_size = character_size(character)
+        if used + encoded_size > byte_budget:
+            return value[: end - 1]
+        used += encoded_size
+    return value[:end]
+
+
+def _json_character_size(character: str) -> int:
+    if character in {'"', "\\", "\b", "\f", "\n", "\r", "\t"}:
+        return 2
+    if ord(character) < 0x20:
+        return 6
+    if ord(character) > 0x7F:
+        return len(json.dumps(character).encode("utf-8")) - 2
+    return 1
+
+
+def _xml_character_size(character: str) -> int:
+    return len(escape(character).encode("utf-8"))
 
 
 def _truncate_utf8(content: str, target_size: int) -> str:

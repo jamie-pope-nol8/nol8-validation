@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 import yaml
 
-from framework.cli.main import generate_run
+from framework.cli.main import generate_run, main
 from framework.workload.generate_scale_artifacts import generate_scale_artifacts
 
 
@@ -38,6 +40,7 @@ class ValidateScaleGenerateTests(unittest.TestCase):
                     },
                     "documents": {
                         "count": 8,
+                        "progress_interval_records": 3,
                         "scenarios": {
                             "customer_record": {
                                 "weight": 1,
@@ -93,6 +96,24 @@ class ValidateScaleGenerateTests(unittest.TestCase):
         self.assertEqual(manifest["realized_rules"], 12)
         self.assertTrue(all(" -> " in line for line in policy_lines))
 
+    def test_scale_values_and_distributions_come_from_configuration(self) -> None:
+        output = self.root / "generated"
+        manifest = generate_scale_artifacts(self.config, output)
+        requested = manifest["requested_scale"]
+        realized = manifest["realized_scale"]
+
+        self.assertEqual(requested["rule_count"], 12)
+        self.assertEqual(requested["record_count"], 8)
+        self.assertEqual(
+            requested["size_distribution"]["small"],
+            {"weight": 1, "minimum_bytes": 300, "maximum_bytes": 400},
+        )
+        self.assertEqual(realized["rule_count"], 12)
+        self.assertEqual(realized["record_count"], 8)
+        self.assertEqual(realized["size_profile_distribution"], {"small": 8})
+        self.assertGreaterEqual(realized["payload_bytes"]["minimum"], 300)
+        self.assertLessEqual(realized["payload_bytes"]["maximum"], 400)
+
     def test_canonical_input_and_expected_artifacts_share_evidence(self) -> None:
         output = self.root / "generated"
         manifest = generate_scale_artifacts(self.config, output)
@@ -137,6 +158,39 @@ class ValidateScaleGenerateTests(unittest.TestCase):
             self.assertTrue(
                 (run_directory / manifest["artifacts"][artifact]["path"]).is_file()
             )
+
+    def test_scale_cli_reports_bounded_generation_progress(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            result = main(
+                [
+                    "generate",
+                    "--config",
+                    str(self.config),
+                    "--runs-dir",
+                    str(self.root / "progress-runs"),
+                ]
+            )
+
+        output = stdout.getvalue()
+        self.assertEqual(result, 0)
+        self.assertIn("Generating validation workload", output)
+        self.assertIn("Step 1/4: Loading workload configuration", output)
+        self.assertIn("Step 2/4: Building rule catalog", output)
+        self.assertIn("Rules generated: 12/12", output)
+        self.assertIn("Step 3/4: Generating documents", output)
+        self.assertIn("Documents generated: 3/8", output)
+        self.assertIn("Documents generated: 6/8", output)
+        self.assertIn("Documents generated: 8/8", output)
+        self.assertIn("Step 4/4: Writing artifacts", output)
+        self.assertIn("Generation completed", output)
+        self.assertEqual(output.count("Documents generated:"), 3)
+
+    def test_direct_scale_generation_is_quiet_without_callback(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            generate_scale_artifacts(self.config, self.root / "quiet-generated")
+        self.assertEqual(stdout.getvalue(), "")
 
 
 if __name__ == "__main__":

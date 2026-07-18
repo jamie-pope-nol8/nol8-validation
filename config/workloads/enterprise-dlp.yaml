@@ -7,6 +7,8 @@ description: >
 
 seed: 42
 
+# Primary scale controls. Rule count, family weights, record count, document
+# distributions, and payload-size ranges are all operator-controlled here.
 policy:
   rule_count: 5000
 
@@ -70,6 +72,9 @@ policy:
 
 documents:
   count: 10000
+
+  # Progress reporting is presentation-only and does not affect artifacts.
+  progress_interval_records: 1000
 
   scenarios:
     customer_record:

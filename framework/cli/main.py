@@ -113,7 +113,12 @@ def create_run_directory(runs_directory: Path) -> tuple[str, Path, datetime]:
         return run_id, run_directory, created_at
 
 
-def generate_run(config_path: Path, runs_directory: Path) -> tuple[str, Path]:
+def generate_run(
+    config_path: Path,
+    runs_directory: Path,
+    *,
+    scale_progress_callback: Callable[[str, int, int], None] | None = None,
+) -> tuple[str, Path]:
     run_id, run_directory, created = create_run_directory(runs_directory)
     created_at = isoformat_utc(created)
     manifest_path = run_directory / "manifest.json"
@@ -161,7 +166,11 @@ def generate_run(config_path: Path, runs_directory: Path) -> tuple[str, Path]:
             manifest["stages"]["generation"]["generator"] = (
                 "framework.workload.generate_scale_artifacts"
             )
-            generate_scale_artifacts(snapshot_path, generated_directory)
+            generate_scale_artifacts(
+                snapshot_path,
+                generated_directory,
+                progress_callback=scale_progress_callback,
+            )
         else:
             generate_functional_artifacts(snapshot_path, generated_directory)
         os.replace(
@@ -950,6 +959,35 @@ class _LiveRunProgress:
         self.rendered = True
 
 
+class _ScaleGenerationProgress:
+    def __init__(self) -> None:
+        self.completed = False
+
+    def __call__(self, event: str, completed: int, total: int) -> None:
+        if event == "configuration_loaded":
+            print("Generating validation workload")
+            print()
+            print("Step 1/4: Loading workload configuration")
+            print("Complete")
+            print()
+        elif event == "rules_started":
+            print("Step 2/4: Building rule catalog")
+        elif event == "rules_completed":
+            print(f"Rules generated: {completed}/{total}")
+            print()
+        elif event == "documents_started":
+            print("Step 3/4: Generating documents")
+        elif event == "documents_progress":
+            print(f"Documents generated: {completed}/{total}")
+        elif event == "artifacts_started":
+            print()
+            print("Step 4/4: Writing artifacts")
+        elif event == "complete":
+            print("Complete")
+            print()
+            self.completed = True
+
+
 def _cli_percentile(values: list[float], percentage: float) -> float:
     if not values:
         return 0.0
@@ -975,13 +1013,21 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "generate":
+        scale_progress = _ScaleGenerationProgress()
         try:
-            run_id, run_directory = generate_run(args.config, args.runs_dir)
+            run_id, run_directory = generate_run(
+                args.config,
+                args.runs_dir,
+                scale_progress_callback=scale_progress,
+            )
         except (OSError, KeyError, TypeError, ValueError) as error:
             print(f"Generation failed: {error}", file=sys.stderr)
             return 1
 
-        print("Validation run generated")
+        if scale_progress.completed:
+            print("Generation completed")
+        else:
+            print("Validation run generated")
         print(f"Run ID:        {run_id}")
         print(f"Run directory: {run_directory}")
         return 0

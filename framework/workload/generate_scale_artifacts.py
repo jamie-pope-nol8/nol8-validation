@@ -6,9 +6,10 @@ import json
 import os
 import random
 from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from framework.workload.generate_workload import (
     _generate_field_value,
@@ -26,6 +27,19 @@ class ScaleRule:
     pattern_id: str
     variant: str
     replacement: str
+
+
+ScaleProgressCallback = Callable[[str, int, int], None]
+
+
+def _report_progress(
+    callback: ScaleProgressCallback | None,
+    event: str,
+    completed: int,
+    total: int,
+) -> None:
+    if callback is not None:
+        callback(event, completed, total)
 
 
 def is_scale_workload(config: Mapping[str, Any]) -> bool:
@@ -159,21 +173,31 @@ def generate_scale_artifacts(
     output_dir: Path,
     *,
     document_count: int | None = None,
+    progress_callback: ScaleProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Generate policy, input, expected, and metadata artifacts for a workload."""
 
     workload = load_workload(workload_path)
     if not is_scale_workload(workload):
         raise ValueError("Configuration is not an enterprise workload schema.")
+    _report_progress(progress_callback, "configuration_loaded", 1, 1)
 
-    rules = _rule_catalog(workload)
     documents = workload["documents"]
+    requested_rules = int(workload["policy"]["rule_count"])
+    _report_progress(progress_callback, "rules_started", 0, requested_rules)
+    rules = _rule_catalog(workload)
+    _report_progress(
+        progress_callback, "rules_completed", len(rules), requested_rules
+    )
     requested_records = int(documents["count"])
     realized_records = (
         requested_records if document_count is None else int(document_count)
     )
     if realized_records < 1:
         raise ValueError("Document count must be at least 1.")
+    progress_interval = int(documents.get("progress_interval_records", 1000))
+    if progress_interval < 1:
+        raise ValueError("'documents.progress_interval_records' must be at least 1.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     policy_path = output_dir / "scale-policy.nol"
@@ -190,6 +214,15 @@ def generate_scale_artifacts(
     expected_total = 0
     scenario_counts: Counter[str] = Counter()
     format_counts: Counter[str] = Counter()
+    match_profile_counts: Counter[str] = Counter()
+    size_profile_counts: Counter[str] = Counter()
+    payload_bytes_total = 0
+    payload_bytes_min: int | None = None
+    payload_bytes_max = 0
+
+    _report_progress(
+        progress_callback, "documents_started", 0, realized_records
+    )
 
     try:
         with input_temporary.open("w", encoding="utf-8") as input_handle, \
@@ -198,8 +231,12 @@ def generate_scale_artifacts(
                 document_id = f"document-{index:06d}"
                 scenario_name, scenario = _weighted_item(documents["scenarios"], rng)
                 format_name, _ = _weighted_item(documents["formats"], rng)
-                _, match_profile = _weighted_item(documents["match_distribution"], rng)
-                _, size_profile = _weighted_item(documents["size_distribution"], rng)
+                match_profile_name, match_profile = _weighted_item(
+                    documents["match_distribution"], rng
+                )
+                size_profile_name, size_profile = _weighted_item(
+                    documents["size_distribution"], rng
+                )
                 match_range = match_profile["matches_per_document"]
                 match_count = rng.randint(
                     int(match_range["minimum"]), int(match_range["maximum"])
@@ -253,11 +290,29 @@ def generate_scale_artifacts(
                 )
                 scenario_counts[scenario_name] += 1
                 format_counts[format_name] += 1
+                match_profile_counts[match_profile_name] += 1
+                size_profile_counts[size_profile_name] += 1
+                message_size = len(message.encode("utf-8"))
+                payload_bytes_total += message_size
+                payload_bytes_min = (
+                    message_size
+                    if payload_bytes_min is None
+                    else min(payload_bytes_min, message_size)
+                )
+                payload_bytes_max = max(payload_bytes_max, message_size)
                 expected_total += len(expected_matches)
                 if kind == "dirty":
                     dirty_count += 1
                 else:
                     clean_count += 1
+                if index % progress_interval == 0 or index == realized_records:
+                    _report_progress(
+                        progress_callback,
+                        "documents_progress",
+                        index,
+                        realized_records,
+                    )
+        _report_progress(progress_callback, "artifacts_started", 0, 0)
         os.replace(input_temporary, input_path)
         os.replace(expected_temporary, expected_path)
     except Exception:
@@ -273,12 +328,48 @@ def generate_scale_artifacts(
         "seed": workload["seed"],
         "requested_records": requested_records,
         "realized_records": realized_records,
-        "requested_rules": int(workload["policy"]["rule_count"]),
+        "requested_rules": requested_rules,
         "realized_rules": len(rules),
         "clean_record_count": clean_count,
         "dirty_record_count": dirty_count,
         "scenario_distribution": dict(sorted(scenario_counts.items())),
         "format_distribution": dict(sorted(format_counts.items())),
+        "match_profile_distribution": dict(sorted(match_profile_counts.items())),
+        "size_profile_distribution": dict(sorted(size_profile_counts.items())),
+        "payload_bytes_total": payload_bytes_total,
+        "payload_bytes_minimum": payload_bytes_min or 0,
+        "payload_bytes_maximum": payload_bytes_max,
+        "payload_bytes_average": round(
+            payload_bytes_total / realized_records, 3
+        ),
+        "requested_scale": {
+            "rule_count": requested_rules,
+            "record_count": requested_records,
+            "policy_families": deepcopy(workload["policy"]["families"]),
+            "scenarios": deepcopy(documents["scenarios"]),
+            "formats": deepcopy(documents["formats"]),
+            "match_distribution": deepcopy(documents["match_distribution"]),
+            "size_distribution": deepcopy(documents["size_distribution"]),
+        },
+        "realized_scale": {
+            "rule_count": len(rules),
+            "record_count": realized_records,
+            "policy_family_distribution": dict(
+                sorted(Counter(rule.category_id for rule in rules).items())
+            ),
+            "scenario_distribution": dict(sorted(scenario_counts.items())),
+            "format_distribution": dict(sorted(format_counts.items())),
+            "match_profile_distribution": dict(
+                sorted(match_profile_counts.items())
+            ),
+            "size_profile_distribution": dict(sorted(size_profile_counts.items())),
+            "payload_bytes": {
+                "total": payload_bytes_total,
+                "minimum": payload_bytes_min or 0,
+                "maximum": payload_bytes_max,
+                "average": round(payload_bytes_total / realized_records, 3),
+            },
+        },
         "expected_total_matches": expected_total,
         "rule_catalog": [
             {
@@ -302,4 +393,5 @@ def generate_scale_artifacts(
         encoding="utf-8",
     )
     os.replace(temporary_manifest, manifest_path)
+    _report_progress(progress_callback, "complete", realized_records, realized_records)
     return manifest
