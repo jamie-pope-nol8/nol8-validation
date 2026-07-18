@@ -245,7 +245,7 @@ class ValidateRunTests(unittest.TestCase):
 
     @patch("framework.cli.main._check_run_target")
     @patch("framework.cli.main.execute_request")
-    def test_progress_reports_every_fifty_records_and_at_completion(
+    def test_progress_callback_uses_configured_interval_and_completion(
         self, mocked_execute, mocked_check
     ) -> None:
         del mocked_check
@@ -263,12 +263,136 @@ class ValidateRunTests(unittest.TestCase):
             run_directory,
             "themis",
             progress_callback=lambda *values: progress.append(values),
+            progress_interval=40,
         )
 
         self.assertEqual(
             progress,
-            [(50, 120, 50, 0), (100, 120, 100, 0), (120, 120, 120, 0)],
+            [(40, 120, 40, 0), (80, 120, 80, 0), (120, 120, 120, 0)],
         )
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_direct_run_is_quiet_without_callback(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 1.0,
+            "success": True,
+            "response": {"message": "processed"},
+        }
+        run_directory = self.create_run()
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            run_validation_corpus(run_directory, "themis")
+
+        self.assertEqual(stdout.getvalue(), "")
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_progress_callback_does_not_change_execution_results(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 1.25,
+            "success": True,
+            "response": {"message": "processed"},
+        }
+        quiet_run = self.create_run(run_name="quiet-run")
+        reported_run = self.create_run(run_name="reported-run")
+
+        quiet_manifest = run_validation_corpus(quiet_run, "themis")
+        reported_manifest = run_validation_corpus(
+            reported_run,
+            "themis",
+            progress_callback=lambda *_values: None,
+            progress_interval=2,
+        )
+
+        self.assertEqual(self.read_output(quiet_run), self.read_output(reported_run))
+        for field in (
+            "requests_total",
+            "requests_completed",
+            "requests_failed",
+            "average_latency_ms",
+            "output_path",
+            "status",
+        ):
+            self.assertEqual(
+                quiet_manifest["stages"]["run"][field],
+                reported_manifest["stages"]["run"][field],
+            )
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_interrupted_execution_preserves_output_and_manifest_counters(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.side_effect = [
+            {
+                "http_status": 200,
+                "latency_ms": 1.0,
+                "success": True,
+                "response": {"message": "processed-first"},
+            },
+            {
+                "http_status": 503,
+                "latency_ms": 2.0,
+                "success": False,
+                "response": {"message": "service unavailable"},
+            },
+            KeyboardInterrupt(),
+        ]
+        run_directory = self.create_run()
+
+        with self.assertRaises(KeyboardInterrupt):
+            run_validation_corpus(run_directory, "themis")
+
+        output = self.read_output(run_directory)
+        manifest = self.read_manifest(run_directory)
+        stage = manifest["stages"]["run"]
+        self.assertEqual([row["request_index"] for row in output], [1, 2])
+        self.assertEqual(stage["requests_total"], 3)
+        self.assertEqual(stage["requests_completed"], 2)
+        self.assertEqual(stage["requests_failed"], 1)
+        self.assertEqual(stage["status"], "failed")
+        self.assertEqual(stage["error"]["category"], "interrupted")
+        self.assertEqual(manifest["status"], "run_failed")
+
+    @patch("framework.cli.main.write_manifest_atomic")
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_manifest_counters_are_updated_during_execution(
+        self, mocked_execute, mocked_check, mocked_write_manifest
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 1.0,
+            "success": True,
+            "response": {"message": "processed"},
+        }
+        run_directory = self.create_run()
+        snapshots: list[dict] = []
+        mocked_write_manifest.side_effect = lambda _path, manifest: snapshots.append(
+            json.loads(json.dumps(manifest))
+        )
+
+        run_validation_corpus(run_directory, "themis")
+
+        completed_values = [
+            snapshot["stages"]["run"]["requests_completed"]
+            for snapshot in snapshots
+        ]
+        self.assertIn(1, completed_values)
+        self.assertIn(2, completed_values)
+        self.assertIn(3, completed_values)
 
     @patch("framework.cli.main.time.perf_counter")
     def test_terminal_progress_renderer_updates_same_area_with_color_and_rate(
@@ -284,7 +408,7 @@ class ValidateRunTests(unittest.TestCase):
         rendered = output.getvalue()
         self.assertIn("[██████████------------------------------]", rendered)
         self.assertIn("250/1000", rendered)
-        self.assertIn("Passed: 250", rendered)
+        self.assertIn("Succeeded: 250", rendered)
         self.assertIn("Rate: 25.0 req/s", rendered)
         self.assertIn("\033[32m", rendered)
         self.assertIn("\033[31m", rendered)

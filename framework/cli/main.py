@@ -493,12 +493,42 @@ def _write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
     os.replace(temporary_path, path)
 
 
+def _initialize_jsonl_atomic(path: Path) -> None:
+    temporary_path = path.with_name(f".{path.name}.tmp")
+    temporary_path.write_bytes(b"")
+    os.replace(temporary_path, path)
+
+
+def _append_jsonl_durable(path: Path, row: dict[str, Any]) -> None:
+    encoded = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    with path.open("ab", buffering=0) as handle:
+        handle.write(encoded)
+        os.fsync(handle.fileno())
+
+
+def _repair_jsonl_tail(path: Path) -> None:
+    if not path.is_file():
+        return
+    data = path.read_bytes()
+    if not data or data.endswith(b"\n"):
+        return
+    last_complete = data.rfind(b"\n")
+    repaired = data[: last_complete + 1] if last_complete >= 0 else b""
+    temporary_path = path.with_name(f".{path.name}.repair")
+    temporary_path.write_bytes(repaired)
+    os.replace(temporary_path, path)
+
+
 def run_validation_corpus(
     run_directory: Path,
     target: str,
     *,
     progress_callback: Callable[[int, int, int, int], None] | None = None,
+    progress_interval: int = 50,
 ) -> dict[str, Any]:
+    if progress_interval < 1:
+        raise ValueError("Progress interval must be at least 1.")
+
     if not run_directory.is_dir():
         raise RunExecutionError(
             "prerequisite", f"Run directory does not exist: {run_directory}"
@@ -539,6 +569,8 @@ def run_validation_corpus(
     output_path = run_directory / run_stage["output_path"]
     output_rows: list[dict[str, Any]] = []
     stage_failure: RunExecutionError | None = None
+    succeeded_so_far = 0
+    failed_so_far = 0
 
     try:
         generation = manifest.get("stages", {}).get("generation", {})
@@ -562,6 +594,9 @@ def run_validation_corpus(
         _check_run_target(target)
         lines = input_path.read_text(encoding="utf-8").splitlines()
         run_stage["requests_total"] = len(lines)
+        manifest["updated_at"] = isoformat_utc(utc_now())
+        write_manifest_atomic(manifest_path, manifest)
+        _initialize_jsonl_atomic(output_path)
 
         for request_index, line in enumerate(lines, start=1):
             request_result: dict[str, Any]
@@ -580,6 +615,10 @@ def run_validation_corpus(
                     "latency_ms": 0.0,
                     "success": False,
                     "response": None,
+                    "error": {
+                        "category": "malformed_request",
+                        "message": "Request is not valid corpus JSON.",
+                    },
                 }
                 if stage_failure is None:
                     stage_failure = RunExecutionError(
@@ -592,25 +631,36 @@ def run_validation_corpus(
                     "latency_ms": 0.0,
                     "success": False,
                     "response": None,
+                    "error": {
+                        "category": error.category,
+                        "message": str(error),
+                    },
                 }
                 if stage_failure is None:
                     stage_failure = error
 
-            output_rows.append(
-                {"request_index": request_index, **request_result}
-            )
+            output_row = {"request_index": request_index, **request_result}
+            _append_jsonl_durable(output_path, output_row)
+            output_rows.append(output_row)
+            if request_result["success"]:
+                succeeded_so_far += 1
+            else:
+                failed_so_far += 1
+            run_stage["requests_completed"] = request_index
+            run_stage["requests_failed"] = failed_so_far
+            manifest["updated_at"] = isoformat_utc(utc_now())
+            write_manifest_atomic(manifest_path, manifest)
             if progress_callback is not None and (
-                request_index % 50 == 0 or request_index == len(lines)
+                request_index % progress_interval == 0
+                or request_index == len(lines)
             ):
-                failed_so_far = sum(not row["success"] for row in output_rows)
                 progress_callback(
                     request_index,
                     len(lines),
-                    request_index - failed_so_far,
+                    succeeded_so_far,
                     failed_so_far,
                 )
 
-        _write_jsonl_atomic(output_path, output_rows)
         failed_count = sum(not row["success"] for row in output_rows)
         run_stage["requests_completed"] = len(output_rows)
         run_stage["requests_failed"] = failed_count
@@ -653,6 +703,40 @@ def run_validation_corpus(
             manifest["status"] = "run_failed"
             manifest["updated_at"] = failed_at
             write_manifest_atomic(manifest_path, manifest)
+        raise
+    except BaseException as error:
+        _repair_jsonl_tail(output_path)
+        persisted_rows = (
+            _read_comparison_jsonl(output_path, "output.jsonl")
+            if output_path.is_file()
+            else []
+        )
+        failed_at = isoformat_utc(utc_now())
+        run_stage.update(
+            {
+                "status": "failed",
+                "completed_at": failed_at,
+                "requests_completed": len(persisted_rows),
+                "requests_failed": sum(
+                    row.get("success") is not True for row in persisted_rows
+                ),
+                "error": {
+                    "category": (
+                        "interrupted"
+                        if isinstance(error, (KeyboardInterrupt, SystemExit))
+                        else "execution"
+                    ),
+                    "message": (
+                        "Run execution was interrupted."
+                        if isinstance(error, (KeyboardInterrupt, SystemExit))
+                        else str(error)
+                    ),
+                },
+            }
+        )
+        manifest["status"] = "run_failed"
+        manifest["updated_at"] = failed_at
+        write_manifest_atomic(manifest_path, manifest)
         raise
 
 
@@ -877,6 +961,13 @@ def compare_run(run_directory: Path) -> dict[str, Any]:
         raise
 
 
+def _positive_integer(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="validate")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -919,6 +1010,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="themis",
         help="Processing target (default: themis)",
     )
+    run_parser.add_argument(
+        "--progress-interval",
+        type=_positive_integer,
+        default=50,
+        help="Requests between progress updates (default: 50)",
+    )
 
     compare_parser = subparsers.add_parser(
         "compare", help="Compare execution output with expected results"
@@ -950,11 +1047,15 @@ class _LiveRunProgress:
         reset = "\033[0m"
 
         if self.rendered:
-            print("\033[2A", end="")
-        print(f"\r\033[2K{color}[{bar}] {processed}/{total}{reset}")
+            print("\033[2A", end="", flush=True)
         print(
-            f"\r\033[2K{color}Passed: {passed}  Failed: {failed}  "
-            f"Rate: {rate:.1f} req/s{reset}"
+            f"\r\033[2K{color}[{bar}] {processed}/{total}{reset}",
+            flush=True,
+        )
+        print(
+            f"\r\033[2K{color}Succeeded: {passed}  Failed: {failed}  "
+            f"Rate: {rate:.1f} req/s{reset}",
+            flush=True,
         )
         self.rendered = True
 
@@ -1088,10 +1189,14 @@ def main(argv: list[str] | None = None) -> int:
                 args.run,
                 args.target,
                 progress_callback=progress,
+                progress_interval=args.progress_interval,
             )
         except RunExecutionError as error:
             print(f"Run execution failed: {error}", file=sys.stderr)
             return 1
+        except KeyboardInterrupt:
+            print("Run execution interrupted; completed evidence was preserved.", file=sys.stderr)
+            return 130
 
         run_stage = manifest["stages"]["run"]
         succeeded = run_stage["requests_completed"] - run_stage["requests_failed"]
