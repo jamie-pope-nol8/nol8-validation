@@ -1,0 +1,257 @@
+name: enterprise-dlp
+version: 0.1
+description: >
+  Synthetic mixed-format enterprise data-loss-prevention workload containing
+  realistic business records, known sensitive values, clean records, and
+  deterministic expected results.
+
+seed: 42
+
+policy:
+  rule_count: 5000
+
+  families:
+    pii:
+      weight: 30
+      patterns:
+        - person_name
+        - email_address
+        - phone_number
+        - street_address
+        - social_security_number
+        - date_of_birth
+
+    credentials:
+      weight: 20
+      patterns:
+        - api_key
+        - access_token
+        - bearer_token
+        - password
+        - private_key_marker
+        - connection_string
+
+    financial:
+      weight: 15
+      patterns:
+        - credit_card_number
+        - bank_account_number
+        - routing_number
+        - iban
+        - invoice_number
+
+    infrastructure:
+      weight: 15
+      patterns:
+        - ipv4_address
+        - ipv6_address
+        - hostname
+        - internal_url
+        - cloud_resource_id
+        - database_uri
+
+    healthcare:
+      weight: 10
+      patterns:
+        - patient_id
+        - member_id
+        - claim_number
+        - medical_record_number
+
+    business_terms:
+      weight: 10
+      patterns:
+        - customer_id
+        - employee_id
+        - project_codename
+        - internal_product_name
+        - support_case_id
+        - contract_number
+
+documents:
+  count: 10000
+
+  scenarios:
+    customer_record:
+      weight: 15
+      fields:
+        - customer_id
+        - person_name
+        - email_address
+        - phone_number
+        - street_address
+        - account_status
+        - internal_notes
+
+    employee_record:
+      weight: 10
+      fields:
+        - employee_id
+        - person_name
+        - email_address
+        - phone_number
+        - department
+        - manager
+        - internal_notes
+
+    support_ticket:
+      weight: 15
+      fields:
+        - support_case_id
+        - customer_id
+        - person_name
+        - email_address
+        - issue_summary
+        - issue_description
+        - internal_notes
+
+    email_message:
+      weight: 10
+      fields:
+        - sender
+        - recipients
+        - subject
+        - message_body
+        - signature
+        - quoted_thread
+
+    application_log:
+      weight: 10
+      fields:
+        - timestamp
+        - log_level
+        - hostname
+        - ipv4_address
+        - request_id
+        - message
+        - stack_trace
+
+    api_transaction:
+      weight: 10
+      fields:
+        - request_id
+        - endpoint
+        - headers
+        - request_body
+        - response_status
+        - response_body
+
+    financial_transaction:
+      weight: 10
+      fields:
+        - transaction_id
+        - customer_id
+        - bank_account_number
+        - routing_number
+        - amount
+        - currency
+        - description
+
+    healthcare_claim:
+      weight: 10
+      fields:
+        - claim_number
+        - patient_id
+        - member_id
+        - person_name
+        - date_of_birth
+        - provider
+        - diagnosis_description
+
+    ai_interaction:
+      weight: 10
+      fields:
+        - session_id
+        - system_prompt
+        - user_prompt
+        - retrieved_context
+        - tool_output
+        - model_response
+
+  formats:
+    json:
+      weight: 25
+
+    xml:
+      weight: 15
+
+    html:
+      weight: 15
+
+    text:
+      weight: 15
+
+    email:
+      weight: 10
+
+    log:
+      weight: 10
+
+    csv:
+      weight: 10
+
+  match_distribution:
+    clean:
+      weight: 25
+      matches_per_document:
+        minimum: 0
+        maximum: 0
+
+    light:
+      weight: 35
+      matches_per_document:
+        minimum: 1
+        maximum: 5
+
+    moderate:
+      weight: 25
+      matches_per_document:
+        minimum: 6
+        maximum: 25
+
+    heavy:
+      weight: 15
+      matches_per_document:
+        minimum: 26
+        maximum: 100
+
+  size_distribution:
+    small:
+      weight: 40
+      minimum_bytes: 512
+      maximum_bytes: 4096
+
+    medium:
+      weight: 35
+      minimum_bytes: 4097
+      maximum_bytes: 65536
+
+    large:
+      weight: 20
+      minimum_bytes: 65537
+      maximum_bytes: 524288
+
+    near_limit:
+      weight: 5
+      minimum_bytes: 900000
+      maximum_bytes: 1000000
+
+validation:
+  track_expected_matches: true
+  track_expected_replacements: true
+  preserve_original_document: true
+  generate_clean_control_records: true
+
+  detect:
+    - false_positive
+    - false_negative
+    - incorrect_replacement
+    - truncated_replacement
+    - malformed_output
+    - unexpected_content_change
+
+output:
+  policy_file: generated/enterprise-dlp-policy.nol
+  records_file: generated/enterprise-dlp-records.jsonl
+  manifest_file: generated/enterprise-dlp-manifest.json
+  expected_results_file: generated/enterprise-dlp-expected.jsonl

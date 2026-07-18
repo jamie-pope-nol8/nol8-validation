@@ -1,0 +1,12 @@
+{
+  "_synthetic_padding": "Synthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=1 token=98q1zxoi65fdhjk1\nSynthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=2 token=eyy37q9ah8rvhs1k\nSynthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=3 token=3aq6l6gt6mjxk87a\nSynthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=4 token=u5bhxtpdpff5e8ii\nSynthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=5 token=49kq71n8mtzx272h\nSynthetic enterprise validation content. This text is intentionally non-sensitive and exists only to create the requested document size.  sequence=6 token=poevb9ooaedoecve\n",
+  "document_id": "document-000001",
+  "endpoint": "/api/v1/payments",
+  "generated_at": "2026-07-17T19:06:07.888563+00:00",
+  "headers": {
+    "authorization": "Bearer gfygwwqc38hyf9sxmecosfogyr3xkxwn",
+    "content-type": "application/json",
+    "x-request-id": "req-rek8pk3yr9oudocuzrenun5z"
+  },
+  "request_body": "{'operation': 'lookup', 'reference': 'CUST-774079'}\nvalidation_marker_1: email_address=cameron.hayes152@example.test",
+  "request_id": 

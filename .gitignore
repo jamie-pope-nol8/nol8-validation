@@ -1,0 +1,20 @@
+# Environment and secrets
+.env
+keys/
+*.pem
+*.key
+
+# Generated output
+output/
+scale-test/generated/
+scale-test/reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors and OS
+.vscode/
+.DS_Store
