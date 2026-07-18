@@ -524,6 +524,7 @@ def run_validation_corpus(
     target: str,
     *,
     progress_callback: Callable[[int, int, int, int], None] | None = None,
+    startup_callback: Callable[[int], None] | None = None,
     progress_interval: int = 50,
 ) -> dict[str, Any]:
     if progress_interval < 1:
@@ -591,12 +592,14 @@ def run_validation_corpus(
                 "prerequisite", f"Generated input corpus does not exist: {relative_input}"
             )
 
-        _check_run_target(target)
         lines = input_path.read_text(encoding="utf-8").splitlines()
         run_stage["requests_total"] = len(lines)
         manifest["updated_at"] = isoformat_utc(utc_now())
         write_manifest_atomic(manifest_path, manifest)
         _initialize_jsonl_atomic(output_path)
+        if startup_callback is not None:
+            startup_callback(len(lines))
+        _check_run_target(target)
 
         for request_index, line in enumerate(lines, start=1):
             request_result: dict[str, Any]
@@ -651,7 +654,8 @@ def run_validation_corpus(
             manifest["updated_at"] = isoformat_utc(utc_now())
             write_manifest_atomic(manifest_path, manifest)
             if progress_callback is not None and (
-                request_index % progress_interval == 0
+                request_index == 1
+                or request_index % progress_interval == 0
                 or request_index == len(lines)
             ):
                 progress_callback(
@@ -1031,6 +1035,12 @@ class _LiveRunProgress:
         self.started_at = time.perf_counter()
         self.rendered = False
 
+    def start(self, total: int) -> None:
+        print(f"Requests loaded: {total}", flush=True)
+        print(flush=True)
+        print("Starting execution...", flush=True)
+        print(flush=True)
+
     def __call__(
         self,
         processed: int,
@@ -1181,14 +1191,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
-        print("Running validation corpus")
-        print()
+        print("Running validation corpus", flush=True)
+        print(flush=True)
+        print(f"Run ID: {args.run.name}", flush=True)
+        print(f"Target: {args.target}", flush=True)
+        print(flush=True)
         progress = _LiveRunProgress()
         try:
             manifest = run_validation_corpus(
                 args.run,
                 args.target,
                 progress_callback=progress,
+                startup_callback=progress.start,
                 progress_interval=args.progress_interval,
             )
         except RunExecutionError as error:

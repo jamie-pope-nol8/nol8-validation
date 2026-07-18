@@ -268,8 +268,41 @@ class ValidateRunTests(unittest.TestCase):
 
         self.assertEqual(
             progress,
-            [(40, 120, 40, 0), (80, 120, 80, 0), (120, 120, 120, 0)],
+            [
+                (1, 120, 1, 0),
+                (40, 120, 40, 0),
+                (80, 120, 80, 0),
+                (120, 120, 120, 0),
+            ],
         )
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_startup_callback_runs_before_request_execution(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        events: list[tuple[str, int | None]] = []
+
+        def execute(_target: str, _payload: dict[str, str]) -> dict:
+            events.append(("execute", None))
+            return {
+                "http_status": 200,
+                "latency_ms": 1.0,
+                "success": True,
+                "response": {"message": "processed"},
+            }
+
+        mocked_execute.side_effect = execute
+        run_directory = self.create_run()
+        run_validation_corpus(
+            run_directory,
+            "themis",
+            startup_callback=lambda total: events.append(("startup", total)),
+        )
+
+        self.assertEqual(events[0], ("startup", 3))
+        self.assertEqual(events[1], ("execute", None))
 
     @patch("framework.cli.main._check_run_target")
     @patch("framework.cli.main.execute_request")
@@ -415,6 +448,16 @@ class ValidateRunTests(unittest.TestCase):
         self.assertIn("\033[2A", rendered)
         self.assertIn("Failed: 1", rendered)
 
+    def test_terminal_startup_renderer_shows_loaded_request_count(self) -> None:
+        output = StringIO()
+        progress = _LiveRunProgress()
+        with redirect_stdout(output):
+            progress.start(10_000)
+
+        rendered = output.getvalue()
+        self.assertIn("Requests loaded: 10000", rendered)
+        self.assertIn("Starting execution...", rendered)
+
     @patch("framework.cli.main.run_validation_corpus")
     def test_cli_prints_v1_functional_run_summary(self, mocked_run) -> None:
         run_directory = self.create_run()
@@ -447,6 +490,9 @@ class ValidateRunTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         rendered = output.getvalue()
         for expected in (
+            "Running validation corpus",
+            f"Run ID: {run_directory.name}",
+            "Target: themis",
             "Functional Run Summary",
             "Records processed:  3",
             "Requests succeeded: 2",
