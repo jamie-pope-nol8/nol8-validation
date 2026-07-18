@@ -10,7 +10,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from framework.policy.generate_functional_test import generate_functional_artifacts
 
@@ -467,7 +467,12 @@ def _write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
     os.replace(temporary_path, path)
 
 
-def run_validation_corpus(run_directory: Path, target: str) -> dict[str, Any]:
+def run_validation_corpus(
+    run_directory: Path,
+    target: str,
+    *,
+    progress_callback: Callable[[int, int, int, int], None] | None = None,
+) -> dict[str, Any]:
     if not run_directory.is_dir():
         raise RunExecutionError(
             "prerequisite", f"Run directory does not exist: {run_directory}"
@@ -568,6 +573,16 @@ def run_validation_corpus(run_directory: Path, target: str) -> dict[str, Any]:
             output_rows.append(
                 {"request_index": request_index, **request_result}
             )
+            if progress_callback is not None and (
+                request_index % 50 == 0 or request_index == len(lines)
+            ):
+                failed_so_far = sum(not row["success"] for row in output_rows)
+                progress_callback(
+                    request_index,
+                    len(lines),
+                    request_index - failed_so_far,
+                    failed_so_far,
+                )
 
         _write_jsonl_atomic(output_path, output_rows)
         failed_count = sum(not row["success"] for row in output_rows)
@@ -888,6 +903,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_run_progress(
+    processed: int,
+    total: int,
+    passed: int,
+    failed: int,
+) -> None:
+    bar_width = 40
+    filled = int(bar_width * processed / total) if total else bar_width
+    bar = "█" * filled + "-" * (bar_width - filled)
+    print(
+        f"[{bar}] {processed} / {total} "
+        f"| Passed: {passed} | Failed: {failed}"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -946,8 +976,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
+        print("Running validation corpus")
+        print()
         try:
-            manifest = run_validation_corpus(args.run, args.target)
+            manifest = run_validation_corpus(
+                args.run,
+                args.target,
+                progress_callback=_print_run_progress,
+            )
         except RunExecutionError as error:
             print(f"Run execution failed: {error}", file=sys.stderr)
             return 1

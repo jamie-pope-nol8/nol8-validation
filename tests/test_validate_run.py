@@ -3,10 +3,16 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from framework.cli.main import RunExecutionError, run_validation_corpus
+from framework.cli.main import (
+    RunExecutionError,
+    _print_run_progress,
+    run_validation_corpus,
+)
 
 
 class ValidateRunTests(unittest.TestCase):
@@ -235,6 +241,44 @@ class ValidateRunTests(unittest.TestCase):
         self.assertEqual(
             manifest["stages"]["run"]["error"]["category"], "configuration"
         )
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_progress_reports_every_fifty_records_and_at_completion(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 1.0,
+            "success": True,
+            "response": {"message": "processed"},
+        }
+        lines = [json.dumps({"message": f"record-{index}"}) for index in range(120)]
+        run_directory = self.create_run(lines=lines)
+        progress: list[tuple[int, int, int, int]] = []
+
+        run_validation_corpus(
+            run_directory,
+            "themis",
+            progress_callback=lambda *values: progress.append(values),
+        )
+
+        self.assertEqual(
+            progress,
+            [(50, 120, 50, 0), (100, 120, 100, 0), (120, 120, 120, 0)],
+        )
+
+    def test_terminal_progress_renderer_is_readable(self) -> None:
+        output = StringIO()
+        with redirect_stdout(output):
+            _print_run_progress(250, 1000, 249, 1)
+
+        rendered = output.getvalue()
+        self.assertIn("[██████████------------------------------]", rendered)
+        self.assertIn("250 / 1000", rendered)
+        self.assertIn("Passed: 249", rendered)
+        self.assertIn("Failed: 1", rendered)
 
 
 if __name__ == "__main__":
