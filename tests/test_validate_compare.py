@@ -191,6 +191,158 @@ class ValidateCompareTests(unittest.TestCase):
         self.assertIsNone(first["actual_message"])
         self.assertEqual(manifest["stages"]["comparison"]["execution_failures"], 1)
 
+    def test_long_replacement_mismatches_without_maximum_length(self) -> None:
+        expected_message = "Contact: [PII:EMAIL_ADDRESS]"
+        actual_message = "Contact: [PII:EMAIL_ADDR"
+        input_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "message": "Contact: user@example.test",
+            }
+        ]
+        expected_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "expected_message": expected_message,
+                "expected_match_count": 1,
+                "expected_matches": [
+                    {
+                        "category_id": "pii",
+                        "case_id": "email_address",
+                        "variant": "user@example.test",
+                        "replacement": "[PII:EMAIL_ADDRESS]",
+                    }
+                ],
+            }
+        ]
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": actual_message},
+                }
+            ],
+            input_rows=input_rows,
+            expected_rows=expected_rows,
+        )
+
+        manifest = compare_run(run_directory)
+        row = self.read_comparison(run_directory)[0]
+
+        self.assertEqual(row["status"], "CONTENT_MISMATCH")
+        self.assertEqual(row["record_id"], "record-1")
+        self.assertEqual(row["expected_message"], expected_message)
+        self.assertEqual(row["actual_message"], actual_message)
+        self.assertEqual(row["expected_matches"][0]["category_id"], "pii")
+        self.assertEqual(manifest["stages"]["comparison"]["content_mismatches"], 1)
+
+    def test_long_replacement_passes_with_maximum_length(self) -> None:
+        input_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "message": "Contact: user@example.test",
+            }
+        ]
+        expected_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "expected_message": "Contact: [PII:EMAIL_ADDRESS]",
+                "expected_match_count": 1,
+                "expected_matches": [
+                    {
+                        "category_id": "pii",
+                        "case_id": "email_address",
+                        "variant": "user@example.test",
+                        "replacement": "[PII:EMAIL_ADDRESS]",
+                    }
+                ],
+            }
+        ]
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "Contact: [PII:EMAIL_ADDR"},
+                }
+            ],
+            input_rows=input_rows,
+            expected_rows=expected_rows,
+        )
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            exit_code = main(
+                [
+                    "compare",
+                    "--run",
+                    str(run_directory),
+                    "--replacement-max-length",
+                    "15",
+                ]
+            )
+        row = self.read_comparison(run_directory)[0]
+        manifest = json.loads((run_directory / "manifest.json").read_text())
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(row["status"], "PASS")
+        self.assertEqual(row["expected_message"], "Contact: [PII:EMAIL_ADDR")
+        self.assertEqual(
+            manifest["stages"]["comparison"]["replacement_max_length"], 15
+        )
+
+    def test_short_replacement_is_unchanged_by_maximum_length(self) -> None:
+        input_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "message": "Customer CUST-1",
+            }
+        ]
+        expected_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "expected_message": "Customer [CUSTOMER]",
+                "expected_match_count": 1,
+                "expected_matches": [
+                    {
+                        "category_id": "business_terms",
+                        "case_id": "customer_id",
+                        "variant": "CUST-1",
+                        "replacement": "[CUSTOMER]",
+                    }
+                ],
+            }
+        ]
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "Customer [CUSTOMER]"},
+                }
+            ],
+            input_rows=input_rows,
+            expected_rows=expected_rows,
+        )
+
+        compare_run(run_directory, replacement_max_length=15)
+        row = self.read_comparison(run_directory)[0]
+        self.assertEqual(row["status"], "PASS")
+        self.assertEqual(row["expected_message"], "Customer [CUSTOMER]")
+
     def test_invalid_alignment_fails_stage_without_comparison_artifact(self) -> None:
         run_directory = self.create_run(
             [

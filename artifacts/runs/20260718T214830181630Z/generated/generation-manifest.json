@@ -1,0 +1,237 @@
+{
+  "generator_version": 1,
+  "generator_schema": "enterprise-dlp-scale",
+  "workload_name": "customer-record-json",
+  "workload_version": 0.1,
+  "seed": 42,
+  "requested_records": 10,
+  "realized_records": 10,
+  "requested_rules": 10,
+  "realized_rules": 10,
+  "clean_record_count": 5,
+  "dirty_record_count": 5,
+  "scenario_distribution": {
+    "customer_record": 10
+  },
+  "format_distribution": {
+    "json": 10
+  },
+  "match_profile_distribution": {
+    "clean": 5,
+    "light": 4,
+    "moderate": 1
+  },
+  "size_profile_distribution": {
+    "small": 10
+  },
+  "payload_bytes_total": 27684,
+  "payload_bytes_minimum": 1278,
+  "payload_bytes_maximum": 4340,
+  "payload_bytes_average": 2768.4,
+  "requested_scale": {
+    "rule_count": 10,
+    "record_count": 10,
+    "policy_families": {
+      "pii": {
+        "weight": 50,
+        "patterns": [
+          "person_name",
+          "email_address",
+          "phone_number",
+          "street_address",
+          "social_security_number",
+          "date_of_birth"
+        ]
+      },
+      "credentials": {
+        "weight": 10,
+        "patterns": [
+          "api_key",
+          "access_token",
+          "bearer_token",
+          "password"
+        ]
+      },
+      "financial": {
+        "weight": 20,
+        "patterns": [
+          "credit_card_number",
+          "bank_account_number",
+          "routing_number",
+          "invoice_number"
+        ]
+      },
+      "business_terms": {
+        "weight": 20,
+        "patterns": [
+          "customer_id",
+          "support_case_id",
+          "contract_number"
+        ]
+      }
+    },
+    "scenarios": {
+      "customer_record": {
+        "weight": 100,
+        "fields": [
+          "customer_id",
+          "person_name",
+          "email_address",
+          "phone_number",
+          "street_address",
+          "account_status",
+          "internal_notes"
+        ]
+      }
+    },
+    "formats": {
+      "json": {
+        "weight": 100
+      }
+    },
+    "match_distribution": {
+      "clean": {
+        "weight": 25,
+        "matches_per_document": {
+          "minimum": 0,
+          "maximum": 0
+        }
+      },
+      "light": {
+        "weight": 50,
+        "matches_per_document": {
+          "minimum": 1,
+          "maximum": 3
+        }
+      },
+      "moderate": {
+        "weight": 25,
+        "matches_per_document": {
+          "minimum": 4,
+          "maximum": 8
+        }
+      },
+      "heavy": {
+        "weight": 0,
+        "matches_per_document": {
+          "minimum": 9,
+          "maximum": 10
+        }
+      }
+    },
+    "size_distribution": {
+      "small": {
+        "weight": 100,
+        "minimum_bytes": 700,
+        "maximum_bytes": 4096
+      }
+    }
+  },
+  "realized_scale": {
+    "rule_count": 10,
+    "record_count": 10,
+    "policy_family_distribution": {
+      "business_terms": 1,
+      "financial": 3,
+      "pii": 6
+    },
+    "scenario_distribution": {
+      "customer_record": 10
+    },
+    "format_distribution": {
+      "json": 10
+    },
+    "match_profile_distribution": {
+      "clean": 5,
+      "light": 4,
+      "moderate": 1
+    },
+    "size_profile_distribution": {
+      "small": 10
+    },
+    "payload_bytes": {
+      "total": 27684,
+      "minimum": 1278,
+      "maximum": 4340,
+      "average": 2768.4
+    }
+  },
+  "expected_total_matches": 17,
+  "rule_catalog": [
+    {
+      "rule_id": "rule-000001",
+      "category_id": "financial",
+      "pattern_id": "credit_card_number",
+      "variant": "4111-1111-0001-0007",
+      "replacement": "[FINANCIAL:CREDIT_CARD_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000002",
+      "category_id": "pii",
+      "pattern_id": "email_address",
+      "variant": "James.Hernandez2@northstar.dev",
+      "replacement": "[PII:EMAIL_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000003",
+      "category_id": "pii",
+      "pattern_id": "phone_number",
+      "variant": "+1-704-203-0003",
+      "replacement": "[PII:PHONE_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000004",
+      "category_id": "pii",
+      "pattern_id": "street_address",
+      "variant": "104 Cedar Avenue, Charlotte NC",
+      "replacement": "[PII:STREET_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000005",
+      "category_id": "financial",
+      "pattern_id": "credit_card_number",
+      "variant": "4111-1111-0005-0035",
+      "replacement": "[FINANCIAL:CREDIT_CARD_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000006",
+      "category_id": "financial",
+      "pattern_id": "bank_account_number",
+      "variant": "100000000006",
+      "replacement": "[FINANCIAL:BANK_ACCOUNT_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000007",
+      "category_id": "business_terms",
+      "pattern_id": "customer_id",
+      "variant": "CUST-000007",
+      "replacement": "[BUSINESS_TERMS:CUSTOMER_ID]"
+    },
+    {
+      "rule_id": "rule-000008",
+      "category_id": "pii",
+      "pattern_id": "email_address",
+      "variant": "Thomas.Hernandez8@brightline.co",
+      "replacement": "[PII:EMAIL_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000009",
+      "category_id": "pii",
+      "pattern_id": "phone_number",
+      "variant": "+1-704-209-0009",
+      "replacement": "[PII:PHONE_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000010",
+      "category_id": "pii",
+      "pattern_id": "street_address",
+      "variant": "110 Cedar Avenue, Charlotte NC",
+      "replacement": "[PII:STREET_ADDRESS]"
+    }
+  ],
+  "artifacts": {
+    "policy": "scale-policy.nol",
+    "input": "input.jsonl",
+    "expected": "expected.jsonl"
+  }
+}

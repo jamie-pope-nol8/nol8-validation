@@ -789,7 +789,43 @@ def _read_comparison_jsonl(path: Path, artifact_name: str) -> list[dict[str, Any
     return rows
 
 
-def compare_run(run_directory: Path) -> dict[str, Any]:
+def _normalize_expected_replacements(
+    expected_message: Any,
+    expected_matches: Any,
+    replacement_max_length: int | None,
+) -> Any:
+    if (
+        replacement_max_length is None
+        or not isinstance(expected_message, str)
+        or not isinstance(expected_matches, list)
+    ):
+        return expected_message
+
+    replacements = {
+        match.get("replacement")
+        for match in expected_matches
+        if isinstance(match, dict)
+        and isinstance(match.get("replacement"), str)
+        and match.get("replacement")
+    }
+    normalized = expected_message
+    for replacement in sorted(replacements, key=lambda value: (-len(value), value)):
+        normalized = normalized.replace(
+            replacement,
+            replacement[:replacement_max_length],
+        )
+    return normalized
+
+
+def compare_run(
+    run_directory: Path,
+    *,
+    replacement_max_length: int | None = None,
+) -> dict[str, Any]:
+    if replacement_max_length is not None and replacement_max_length < 1:
+        raise ComparisonError(
+            "configuration", "Replacement maximum length must be at least 1."
+        )
     if not run_directory.is_dir():
         raise ComparisonError(
             "prerequisite", f"Run directory does not exist: {run_directory}"
@@ -818,6 +854,8 @@ def compare_run(run_directory: Path) -> dict[str, Any]:
         "started_at": started_at,
         "output_path": "generated/comparison.jsonl",
     }
+    if replacement_max_length is not None:
+        comparison_stage["replacement_max_length"] = replacement_max_length
     manifest.setdefault("stages", {})["comparison"] = comparison_stage
     manifest["updated_at"] = started_at
     write_manifest_atomic(manifest_path, manifest)
@@ -906,7 +944,12 @@ def compare_run(run_directory: Path) -> dict[str, Any]:
             input_row = input_rows[request_index - 1]
             record_id = input_row["record_id"]
             expected_row = expected_by_id[record_id]
-            expected_message = expected_row.get("expected_message")
+            expected_matches = expected_row.get("expected_matches")
+            expected_message = _normalize_expected_replacements(
+                expected_row.get("expected_message"),
+                expected_matches,
+                replacement_max_length,
+            )
             response = output_row.get("response")
             actual_message = (
                 response.get("message") if isinstance(response, dict) else None
@@ -942,7 +985,7 @@ def compare_run(run_directory: Path) -> dict[str, Any]:
                     "expected_match_count": expected_row.get(
                         "expected_match_count"
                     ),
-                    "expected_matches": expected_row.get("expected_matches"),
+                    "expected_matches": expected_matches,
                     "error": error,
                 }
             )
@@ -1060,6 +1103,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument(
         "--run", type=Path, required=True, help="Existing validation Run directory"
+    )
+    compare_parser.add_argument(
+        "--replacement-max-length",
+        type=_positive_integer,
+        help="Normalize expected replacement literals to at most N characters",
     )
     return parser
 
@@ -1287,7 +1335,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "compare":
         try:
-            manifest = compare_run(args.run)
+            manifest = compare_run(
+                args.run,
+                replacement_max_length=args.replacement_max_length,
+            )
         except ComparisonError as error:
             print(f"Comparison failed: {error}", file=sys.stderr)
             return 1
