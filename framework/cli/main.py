@@ -13,7 +13,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+import yaml
+
 from framework.policy.generate_functional_test import generate_functional_artifacts
+from framework.workload.generate_scale_artifacts import (
+    generate_scale_artifacts,
+    is_scale_workload,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -147,7 +153,17 @@ def generate_run(config_path: Path, runs_directory: Path) -> tuple[str, Path]:
         shutil.copyfile(config_path, snapshot_path)
         generated_directory.mkdir()
 
-        generate_functional_artifacts(snapshot_path, generated_directory)
+        loaded_config = yaml.safe_load(snapshot_path.read_text(encoding="utf-8"))
+        if not isinstance(loaded_config, dict):
+            raise ValueError("The YAML configuration must contain a mapping.")
+        if is_scale_workload(loaded_config):
+            manifest["run_type"] = "scale"
+            manifest["stages"]["generation"]["generator"] = (
+                "framework.workload.generate_scale_artifacts"
+            )
+            generate_scale_artifacts(snapshot_path, generated_directory)
+        else:
+            generate_functional_artifacts(snapshot_path, generated_directory)
         os.replace(
             generated_directory / "manifest.json",
             generated_directory / "generation-manifest.json",
@@ -857,10 +873,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     generate_parser = subparsers.add_parser(
-        "generate", help="Create a functional validation run"
+        "generate", help="Create a validation run"
     )
     generate_parser.add_argument(
-        "--config", type=Path, required=True, help="Functional test YAML"
+        "--config", type=Path, required=True, help="Validation generator YAML"
     )
     generate_parser.add_argument(
         "--runs-dir",
