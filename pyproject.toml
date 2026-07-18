@@ -9,6 +9,7 @@ description = "Nol8 Validation Framework"
 requires-python = ">=3.12"
 dependencies = [
     "requests",
+    "PyYAML",
 ]
 
 [project.scripts]
