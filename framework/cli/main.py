@@ -1094,6 +1094,16 @@ def main(argv: list[str] | None = None) -> int:
             comparison_stage["content_mismatches"]
             + comparison_stage["execution_failures"]
         )
+        comparison_latencies = [
+            float(row["latency_ms"])
+            for row in comparison_rows
+            if isinstance(row.get("latency_ms"), (int, float))
+        ]
+        average_comparison_latency = (
+            sum(comparison_latencies) / len(comparison_latencies)
+            if comparison_latencies
+            else 0.0
+        )
         print("Functional Validation Summary")
         print()
         print(f"Run ID:             {manifest.get('run_id', 'unavailable')}")
@@ -1101,24 +1111,25 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(f"Records evaluated:  {records_total}")
         print(f"Records passed:     {comparison_stage['records_passed']}")
-        print(f"Content mismatches: {comparison_stage['content_mismatches']}")
-        print(f"Execution failures: {comparison_stage['execution_failures']}")
+        print(f"Records failed:     {total_failures}")
         print(f"Pass rate:          {pass_rate:.3f}%")
         print()
-        print(f"Expected replacements: {expected_replacements}")
+        print("Record breakdown:")
+        print(f"- Clean records: {clean_records}")
+        print(f"- Dirty records: {dirty_records}")
         print()
-        print(f"Clean records: {clean_records}")
-        print(f"Dirty records: {dirty_records}")
+        print("Expected transformations:")
+        print(f"- Total expected replacements: {expected_replacements}")
         print()
-        print("Expected matches by category:")
+        print("Transformations by category:")
         if category_counts:
             for category_id, count in sorted(category_counts.items()):
                 print(f"- {category_id}: {count}")
         else:
             print("- none: 0")
         print()
-        print("Failures:")
-        print(f"- total: {total_failures}")
+        print("Outcome breakdown:")
+        print(f"- PASS: {comparison_stage['records_passed']}")
         print(
             f"- CONTENT_MISMATCH: {comparison_stage['content_mismatches']}"
         )
@@ -1126,7 +1137,20 @@ def main(argv: list[str] | None = None) -> int:
             f"- EXECUTION_FAILURE: {comparison_stage['execution_failures']}"
         )
         print()
-        print(f"Comparison: {comparison_stage['output_path']}")
+        print("Latency:")
+        print(f"- Average latency: {average_comparison_latency:.3f} ms")
+        print(
+            f"- p50: {_cli_percentile(comparison_latencies, 0.50):.3f} ms"
+        )
+        print(
+            f"- p95: {_cli_percentile(comparison_latencies, 0.95):.3f} ms"
+        )
+        print(
+            f"- p99: {_cli_percentile(comparison_latencies, 0.99):.3f} ms"
+        )
+        print()
+        print("Comparison artifact:")
+        print(comparison_stage["output_path"])
         return 0
 
     return 2
