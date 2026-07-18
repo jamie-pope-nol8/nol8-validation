@@ -72,6 +72,7 @@ class TransportScriptTests(unittest.TestCase):
             str(self.bin_directory) + os.pathsep + self.environment["PATH"]
         )
         self.environment["TRANSPORT_CAPTURE"] = str(self.capture_path)
+        self.environment["THEMIS_TOKEN"] = "test-token"
 
     def capture(self) -> dict:
         return json.loads(self.capture_path.read_text())

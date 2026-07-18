@@ -5,23 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config/demo.env"
-SECRETS_FILE="$PROJECT_ROOT/.env"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Config file not found: $CONFIG_FILE" >&2
   exit 2
 fi
 
-if [[ ! -f "$SECRETS_FILE" ]]; then
-  echo "Secrets file not found: $SECRETS_FILE" >&2
-  exit 2
-fi
-
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
-
-# shellcheck disable=SC1090
-source "$SECRETS_FILE"
 
 if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=true
