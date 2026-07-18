@@ -4,9 +4,12 @@ import hashlib
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
-from framework.cli.main import ComparisonError, compare_run
+from framework.cli.main import ComparisonError, compare_run, main
 
 
 class ValidateCompareTests(unittest.TestCase):
@@ -216,6 +219,46 @@ class ValidateCompareTests(unittest.TestCase):
         self.assertEqual(manifest["status"], "comparison_failed")
         self.assertEqual(manifest["stages"]["comparison"]["status"], "failed")
         self.assertFalse((run_directory / "generated/comparison.jsonl").exists())
+
+    def test_cli_prints_v1_functional_validation_summary(self) -> None:
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "[REDACTED]"},
+                },
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "wrong"},
+                },
+            ]
+        )
+        manifest = compare_run(run_directory)
+        output = StringIO()
+
+        with patch("framework.cli.main.compare_run", return_value=manifest):
+            with redirect_stdout(output):
+                exit_code = main(["compare", "--run", str(run_directory)])
+
+        self.assertEqual(exit_code, 0)
+        rendered = output.getvalue()
+        for expected in (
+            "Functional Validation Summary",
+            "Records evaluated:  2",
+            "Records passed:     1",
+            "Content mismatches: 1",
+            "Execution failures: 0",
+            "Pass rate:          50.000%",
+            "Expected replacements: 1",
+            "Comparison: generated/comparison.jsonl",
+        ):
+            self.assertIn(expected, rendered)
 
 
 if __name__ == "__main__":

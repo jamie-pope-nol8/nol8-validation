@@ -918,6 +918,27 @@ def _print_run_progress(
     )
 
 
+def _cli_percentile(values: list[float], percentage: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentage
+    lower_index = int(position)
+    upper_index = min(lower_index + 1, len(ordered) - 1)
+    fraction = position - lower_index
+    return ordered[lower_index] + (
+        ordered[upper_index] - ordered[lower_index]
+    ) * fraction
+
+
+def _read_cli_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [
+        row
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if isinstance((row := json.loads(line)), dict)
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -990,20 +1011,32 @@ def main(argv: list[str] | None = None) -> int:
 
         run_stage = manifest["stages"]["run"]
         succeeded = run_stage["requests_completed"] - run_stage["requests_failed"]
-        print("Run execution completed")
+        output_rows = _read_cli_jsonl(args.run / run_stage["output_path"])
+        latencies = [
+            float(row["latency_ms"])
+            for row in output_rows
+            if isinstance(row.get("latency_ms"), (int, float))
+        ]
+        print("Functional Run Summary")
         print()
         print(f"Run ID:        {manifest.get('run_id', 'unavailable')}")
         print(f"Run directory: {args.run}")
         print(f"Target:        {args.target}")
         print()
-        print(f"Requests:  {run_stage['requests_total']}")
-        print(f"Succeeded: {succeeded}")
-        print(f"Failed:    {run_stage['requests_failed']}")
+        print(f"Records processed:  {run_stage['requests_completed']}")
+        print(f"Requests succeeded: {succeeded}")
+        print(f"Requests failed:    {run_stage['requests_failed']}")
+        print()
+        print(
+            f"Total duration: {run_stage['total_runtime_seconds']:.3f} seconds"
+        )
+        print()
+        print(f"Latency average: {run_stage['average_latency_ms']:.3f} ms")
+        print(f"Latency p50:     {_cli_percentile(latencies, 0.50):.3f} ms")
+        print(f"Latency p95:     {_cli_percentile(latencies, 0.95):.3f} ms")
+        print(f"Latency p99:     {_cli_percentile(latencies, 0.99):.3f} ms")
         print()
         print(f"Output: {run_stage['output_path']}")
-        print()
-        print(f"Average latency: {run_stage['average_latency_ms']:.3f} ms")
-        print(f"Total runtime:   {run_stage['total_runtime_seconds']:.3f} seconds")
         return 0
 
     if args.command == "compare":
@@ -1014,16 +1047,33 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         comparison_stage = manifest["stages"]["comparison"]
-        print("Validation comparison completed")
+        comparison_rows = _read_cli_jsonl(
+            args.run / comparison_stage["output_path"]
+        )
+        expected_replacements = sum(
+            int(row.get("expected_match_count", 0))
+            for row in comparison_rows
+        )
+        records_total = comparison_stage["records_total"]
+        pass_rate = (
+            comparison_stage["records_passed"] / records_total * 100
+            if records_total
+            else 0.0
+        )
+        print("Functional Validation Summary")
         print()
         print(f"Run ID:             {manifest.get('run_id', 'unavailable')}")
         print(f"Run directory:      {args.run}")
-        print(f"Records:            {comparison_stage['records_total']}")
-        print(f"Passed:             {comparison_stage['records_passed']}")
+        print()
+        print(f"Records evaluated:  {records_total}")
+        print(f"Records passed:     {comparison_stage['records_passed']}")
         print(f"Content mismatches: {comparison_stage['content_mismatches']}")
         print(f"Execution failures: {comparison_stage['execution_failures']}")
+        print(f"Pass rate:          {pass_rate:.3f}%")
         print()
-        print(f"Output: {comparison_stage['output_path']}")
+        print(f"Expected replacements: {expected_replacements}")
+        print()
+        print(f"Comparison: {comparison_stage['output_path']}")
         return 0
 
     return 2

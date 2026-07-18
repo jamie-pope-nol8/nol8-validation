@@ -11,6 +11,7 @@ from unittest.mock import patch
 from framework.cli.main import (
     RunExecutionError,
     _print_run_progress,
+    main,
     run_validation_corpus,
 )
 
@@ -279,6 +280,51 @@ class ValidateRunTests(unittest.TestCase):
         self.assertIn("250 / 1000", rendered)
         self.assertIn("Passed: 249", rendered)
         self.assertIn("Failed: 1", rendered)
+
+    @patch("framework.cli.main.run_validation_corpus")
+    def test_cli_prints_v1_functional_run_summary(self, mocked_run) -> None:
+        run_directory = self.create_run()
+        output_rows = [
+            {"latency_ms": 1.0},
+            {"latency_ms": 2.0},
+            {"latency_ms": 3.0},
+        ]
+        (run_directory / "generated/output.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in output_rows)
+        )
+        mocked_run.return_value = {
+            "run_id": run_directory.name,
+            "stages": {
+                "run": {
+                    "requests_total": 3,
+                    "requests_completed": 3,
+                    "requests_failed": 1,
+                    "average_latency_ms": 2.0,
+                    "total_runtime_seconds": 0.25,
+                    "output_path": "generated/output.jsonl",
+                }
+            },
+        }
+        output = StringIO()
+
+        with redirect_stdout(output):
+            exit_code = main(["run", "--run", str(run_directory)])
+
+        self.assertEqual(exit_code, 0)
+        rendered = output.getvalue()
+        for expected in (
+            "Functional Run Summary",
+            "Records processed:  3",
+            "Requests succeeded: 2",
+            "Requests failed:    1",
+            "Total duration: 0.250 seconds",
+            "Latency average: 2.000 ms",
+            "Latency p50:     2.000 ms",
+            "Latency p95:     2.900 ms",
+            "Latency p99:     2.980 ms",
+            "Output: generated/output.jsonl",
+        ):
+            self.assertIn(expected, rendered)
 
 
 if __name__ == "__main__":
