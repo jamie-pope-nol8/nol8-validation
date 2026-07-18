@@ -5,14 +5,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config/demo.env"
+SECRETS_FILE="$PROJECT_ROOT/.env"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Config file not found: $CONFIG_FILE" >&2
   exit 2
 fi
 
+if [[ ! -f "$SECRETS_FILE" ]]; then
+  echo "Secrets file not found: $SECRETS_FILE" >&2
+  exit 2
+fi
+
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
+
+# shellcheck disable=SC1090
+source "$SECRETS_FILE"
 
 if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=true
@@ -25,6 +34,7 @@ fi
 case "$TARGET" in
   themis)
     ENDPOINT="${THEMIS_PROCESS_ENDPOINT:-}"
+    TOKEN="${THEMIS_TOKEN:-}"
     ;;
   *)
     echo "Usage: $0 [--check] <themis>" >&2
@@ -34,6 +44,11 @@ esac
 
 if [[ -z "$ENDPOINT" ]]; then
   echo "Processing endpoint is not configured for target: $TARGET" >&2
+  exit 2
+fi
+
+if [[ -z "$TOKEN" ]]; then
+  echo "Token is not configured for target: $TARGET" >&2
   exit 2
 fi
 
@@ -58,9 +73,12 @@ fi
 
 set +e
 CURL_METADATA="$(curl -sS \
+  --connect-timeout 5 \
+  --max-time 30 \
   -o "$RESPONSE_FILE" \
   -w '%{http_code} %{time_total}' \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   --data-binary "@$REQUEST_FILE" \
   "$ENDPOINT")"
 CURL_STATUS=$?

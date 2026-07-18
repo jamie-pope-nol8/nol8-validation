@@ -72,6 +72,8 @@ trap cleanup EXIT
 
 set +e
 HTTP_CODE="$(curl -skS \
+  --connect-timeout 5 \
+  --max-time 30 \
   -o "$RESPONSE_FILE" \
   -w '%{http_code}' \
   -X POST "$ENDPOINT" \
