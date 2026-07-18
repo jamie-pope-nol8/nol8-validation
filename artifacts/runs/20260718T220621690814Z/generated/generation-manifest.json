@@ -1,0 +1,239 @@
+{
+  "generator_version": 1,
+  "generator_schema": "enterprise-dlp-scale",
+  "workload_name": "support-ticket-json",
+  "workload_version": 0.1,
+  "seed": 42,
+  "requested_records": 10,
+  "realized_records": 10,
+  "requested_rules": 12,
+  "realized_rules": 12,
+  "clean_record_count": 2,
+  "dirty_record_count": 8,
+  "scenario_distribution": {
+    "support_ticket": 10
+  },
+  "format_distribution": {
+    "json": 10
+  },
+  "match_profile_distribution": {
+    "clean": 2,
+    "light": 3,
+    "moderate": 5
+  },
+  "size_profile_distribution": {
+    "small": 10
+  },
+  "payload_bytes_total": 25321,
+  "payload_bytes_minimum": 1182,
+  "payload_bytes_maximum": 3888,
+  "payload_bytes_average": 2532.1,
+  "requested_scale": {
+    "rule_count": 12,
+    "record_count": 10,
+    "policy_families": {
+      "pii": {
+        "weight": 35,
+        "patterns": [
+          "person_name",
+          "email_address",
+          "phone_number"
+        ]
+      },
+      "credentials": {
+        "weight": 20,
+        "patterns": [
+          "api_key",
+          "access_token",
+          "password"
+        ]
+      },
+      "financial": {
+        "weight": 20,
+        "patterns": [
+          "credit_card_number",
+          "bank_account_number",
+          "invoice_number"
+        ]
+      },
+      "business_terms": {
+        "weight": 25,
+        "patterns": [
+          "customer_id",
+          "support_case_id"
+        ]
+      }
+    },
+    "scenarios": {
+      "support_ticket": {
+        "weight": 100,
+        "fields": [
+          "support_case_id",
+          "customer_id",
+          "person_name",
+          "email_address",
+          "issue_summary",
+          "issue_description",
+          "internal_notes"
+        ]
+      }
+    },
+    "formats": {
+      "json": {
+        "weight": 100
+      }
+    },
+    "match_distribution": {
+      "clean": {
+        "weight": 25,
+        "matches_per_document": {
+          "minimum": 0,
+          "maximum": 0
+        }
+      },
+      "light": {
+        "weight": 50,
+        "matches_per_document": {
+          "minimum": 1,
+          "maximum": 3
+        }
+      },
+      "moderate": {
+        "weight": 25,
+        "matches_per_document": {
+          "minimum": 4,
+          "maximum": 6
+        }
+      }
+    },
+    "size_distribution": {
+      "small": {
+        "weight": 100,
+        "minimum_bytes": 900,
+        "maximum_bytes": 4096
+      }
+    }
+  },
+  "realized_scale": {
+    "rule_count": 12,
+    "record_count": 10,
+    "policy_family_distribution": {
+      "business_terms": 1,
+      "credentials": 2,
+      "financial": 3,
+      "pii": 6
+    },
+    "scenario_distribution": {
+      "support_ticket": 10
+    },
+    "format_distribution": {
+      "json": 10
+    },
+    "match_profile_distribution": {
+      "clean": 2,
+      "light": 3,
+      "moderate": 5
+    },
+    "size_profile_distribution": {
+      "small": 10
+    },
+    "payload_bytes": {
+      "total": 25321,
+      "minimum": 1182,
+      "maximum": 3888,
+      "average": 2532.1
+    }
+  },
+  "expected_total_matches": 29,
+  "rule_catalog": [
+    {
+      "rule_id": "rule-000001",
+      "category_id": "financial",
+      "pattern_id": "credit_card_number",
+      "variant": "4111-1111-0001-0007",
+      "replacement": "[FINANCIAL:CREDIT_CARD_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000002",
+      "category_id": "pii",
+      "pattern_id": "email_address",
+      "variant": "James.Hernandez2@northstar.dev",
+      "replacement": "[PII:EMAIL_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000003",
+      "category_id": "pii",
+      "pattern_id": "phone_number",
+      "variant": "+1-704-203-0003",
+      "replacement": "[PII:PHONE_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000004",
+      "category_id": "pii",
+      "pattern_id": "person_name",
+      "variant": "Marcus Hernandez",
+      "replacement": "[PII:PERSON_NAME]"
+    },
+    {
+      "rule_id": "rule-000005",
+      "category_id": "financial",
+      "pattern_id": "bank_account_number",
+      "variant": "100000000005",
+      "replacement": "[FINANCIAL:BANK_ACCOUNT_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000006",
+      "category_id": "financial",
+      "pattern_id": "invoice_number",
+      "variant": "INV-20260006",
+      "replacement": "[FINANCIAL:INVOICE_NUMBER]"
+    },
+    {
+      "rule_id": "rule-000007",
+      "category_id": "business_terms",
+      "pattern_id": "customer_id",
+      "variant": "CUST-000007",
+      "replacement": "[BUSINESS_TERMS:CUSTOMER_ID]"
+    },
+    {
+      "rule_id": "rule-000008",
+      "category_id": "pii",
+      "pattern_id": "email_address",
+      "variant": "Thomas.Hernandez8@brightline.co",
+      "replacement": "[PII:EMAIL_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000009",
+      "category_id": "credentials",
+      "pattern_id": "password",
+      "variant": "DemoPass-000009!",
+      "replacement": "[CREDENTIALS:PASSWORD]"
+    },
+    {
+      "rule_id": "rule-000010",
+      "category_id": "pii",
+      "pattern_id": "person_name",
+      "variant": "Victor Hernandez",
+      "replacement": "[PII:PERSON_NAME]"
+    },
+    {
+      "rule_id": "rule-000011",
+      "category_id": "pii",
+      "pattern_id": "email_address",
+      "variant": "Caroline.Hernandez11@riverbend.net",
+      "replacement": "[PII:EMAIL_ADDRESS]"
+    },
+    {
+      "rule_id": "rule-000012",
+      "category_id": "credentials",
+      "pattern_id": "password",
+      "variant": "DemoPass-000012!",
+      "replacement": "[CREDENTIALS:PASSWORD]"
+    }
+  ],
+  "artifacts": {
+    "policy": "scale-policy.nol",
+    "input": "input.jsonl",
+    "expected": "expected.jsonl"
+  }
+}

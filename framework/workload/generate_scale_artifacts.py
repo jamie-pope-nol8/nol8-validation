@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from framework.scenarios.support_ticket import build_support_ticket
 from framework.workload.generate_workload import (
     _generate_field_value,
     _pad_document,
@@ -411,6 +412,22 @@ def generate_scale_artifacts(
                         rng,
                     )
                     _expand_customer_record(record, target_size, rng)
+                elif (
+                    scenario_name == "support_ticket"
+                    and format_name == "json"
+                    and size_profile_name == "small"
+                ):
+                    support_ticket = build_support_ticket(
+                        document_id,
+                        scenario,
+                        rng,
+                        selected_rules,
+                        {rule.variant for rule in rules},
+                    )
+                    record = support_ticket.record
+                    selected_rules = [
+                        placement.rule for placement in support_ticket.placements
+                    ]
                 else:
                     record = _deterministic_record(
                         document_id,
