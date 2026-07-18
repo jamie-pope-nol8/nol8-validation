@@ -3,6 +3,7 @@
 keys/
 *.pem
 *.key
+*.egg-info/
 
 # Generated output
 output/
