@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-validate = "framework.cli:main"
+validate = "framework.cli.main:main"
 
 [tool.setuptools]
 include-package-data = true
