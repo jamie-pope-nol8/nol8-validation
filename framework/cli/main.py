@@ -39,6 +39,12 @@ class RunExecutionError(Exception):
         self.category = category
 
 
+class ComparisonError(Exception):
+    def __init__(self, category: str, message: str):
+        super().__init__(message)
+        self.category = category
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -609,6 +615,227 @@ def run_validation_corpus(run_directory: Path, target: str) -> dict[str, Any]:
         raise
 
 
+def _read_comparison_jsonl(path: Path, artifact_name: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise ComparisonError(
+            "artifact", f"Unable to read {artifact_name}: {error}"
+        ) from error
+
+    for line_number, line in enumerate(lines, start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ComparisonError(
+                "artifact",
+                f"Invalid JSON in {artifact_name} at line {line_number}: {error}",
+            ) from error
+        if not isinstance(row, dict):
+            raise ComparisonError(
+                "artifact",
+                f"Expected a JSON object in {artifact_name} at line {line_number}.",
+            )
+        rows.append(row)
+    return rows
+
+
+def compare_run(run_directory: Path) -> dict[str, Any]:
+    if not run_directory.is_dir():
+        raise ComparisonError(
+            "prerequisite", f"Run directory does not exist: {run_directory}"
+        )
+
+    manifest_path = run_directory / "manifest.json"
+    if not manifest_path.is_file():
+        raise ComparisonError(
+            "prerequisite", f"Run manifest does not exist: {manifest_path}"
+        )
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ComparisonError(
+            "prerequisite", f"Run manifest is not valid JSON: {error}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise ComparisonError(
+            "prerequisite", "Run manifest must contain a JSON object."
+        )
+
+    started_at = isoformat_utc(utc_now())
+    comparison_stage: dict[str, Any] = {
+        "status": "in_progress",
+        "started_at": started_at,
+        "output_path": "generated/comparison.jsonl",
+    }
+    manifest.setdefault("stages", {})["comparison"] = comparison_stage
+    manifest["updated_at"] = started_at
+    write_manifest_atomic(manifest_path, manifest)
+
+    try:
+        stages = manifest.get("stages", {})
+        if stages.get("generation", {}).get("status") != "completed":
+            raise ComparisonError(
+                "prerequisite", "Run generation has not completed successfully."
+            )
+        if stages.get("policy", {}).get("status") != "completed":
+            raise ComparisonError(
+                "prerequisite", "Policy deployment has not completed successfully."
+            )
+        run_status = stages.get("run", {}).get("status")
+        execution_status = stages.get("execution", {}).get("status")
+        if run_status != "completed" and execution_status != "completed":
+            raise ComparisonError(
+                "prerequisite", "Run execution has not completed successfully."
+            )
+
+        artifact_paths = {
+            "input": run_directory / "generated/input.jsonl",
+            "expected": run_directory / "generated/expected.jsonl",
+            "output": run_directory / "generated/output.jsonl",
+        }
+        for artifact_name, artifact_path in artifact_paths.items():
+            if not artifact_path.is_file():
+                raise ComparisonError(
+                    "prerequisite",
+                    f"Required comparison artifact does not exist: "
+                    f"generated/{artifact_path.name}",
+                )
+
+        input_rows = _read_comparison_jsonl(artifact_paths["input"], "input.jsonl")
+        expected_rows = _read_comparison_jsonl(
+            artifact_paths["expected"], "expected.jsonl"
+        )
+        output_rows = _read_comparison_jsonl(artifact_paths["output"], "output.jsonl")
+
+        row_count = len(input_rows)
+        if len(expected_rows) != row_count or len(output_rows) != row_count:
+            raise ComparisonError(
+                "alignment",
+                "Input, expected, and output row counts must match.",
+            )
+
+        request_indexes = [row.get("request_index") for row in output_rows]
+        if request_indexes != list(range(1, row_count + 1)):
+            raise ComparisonError(
+                "alignment", "Output request_index values must be exactly 1..N."
+            )
+
+        def index_records(
+            rows: list[dict[str, Any]], artifact_name: str
+        ) -> dict[str, dict[str, Any]]:
+            indexed: dict[str, dict[str, Any]] = {}
+            for row in rows:
+                record_id = row.get("record_id")
+                if not isinstance(record_id, str) or not record_id:
+                    raise ComparisonError(
+                        "alignment", f"{artifact_name} contains an invalid record_id."
+                    )
+                if record_id in indexed:
+                    raise ComparisonError(
+                        "alignment",
+                        f"{artifact_name} contains duplicate record_id {record_id!r}.",
+                    )
+                indexed[record_id] = row
+            return indexed
+
+        input_by_id = index_records(input_rows, "input.jsonl")
+        expected_by_id = index_records(expected_rows, "expected.jsonl")
+        if set(input_by_id) != set(expected_by_id):
+            raise ComparisonError(
+                "alignment", "Input and expected record_id sets must match."
+            )
+
+        comparison_rows: list[dict[str, Any]] = []
+        status_counts = {
+            "PASS": 0,
+            "CONTENT_MISMATCH": 0,
+            "EXECUTION_FAILURE": 0,
+        }
+        for request_index, output_row in enumerate(output_rows, start=1):
+            input_row = input_rows[request_index - 1]
+            record_id = input_row["record_id"]
+            expected_row = expected_by_id[record_id]
+            expected_message = expected_row.get("expected_message")
+            response = output_row.get("response")
+            actual_message = (
+                response.get("message") if isinstance(response, dict) else None
+            )
+
+            execution_succeeded = (
+                output_row.get("success") is True
+                and isinstance(output_row.get("http_status"), int)
+                and 200 <= output_row["http_status"] < 300
+                and isinstance(actual_message, str)
+            )
+            if not execution_succeeded:
+                status = "EXECUTION_FAILURE"
+                error = "Request execution did not produce a valid processed message."
+            elif actual_message != expected_message:
+                status = "CONTENT_MISMATCH"
+                error = "Processed message did not match expected output."
+            else:
+                status = "PASS"
+                error = None
+
+            status_counts[status] += 1
+            comparison_rows.append(
+                {
+                    "request_index": request_index,
+                    "record_id": record_id,
+                    "kind": expected_row.get("kind"),
+                    "status": status,
+                    "http_status": output_row.get("http_status"),
+                    "latency_ms": output_row.get("latency_ms"),
+                    "expected_message": expected_message,
+                    "actual_message": actual_message,
+                    "expected_match_count": expected_row.get(
+                        "expected_match_count"
+                    ),
+                    "expected_matches": expected_row.get("expected_matches"),
+                    "error": error,
+                }
+            )
+
+        comparison_relative = Path("generated/comparison.jsonl")
+        _write_jsonl_atomic(run_directory / comparison_relative, comparison_rows)
+        manifest.setdefault("artifacts", {})["comparison"] = artifact_metadata(
+            run_directory, comparison_relative
+        )
+
+        completed_at = isoformat_utc(utc_now())
+        comparison_stage.update(
+            {
+                "status": "completed",
+                "completed_at": completed_at,
+                "records_total": row_count,
+                "records_passed": status_counts["PASS"],
+                "content_mismatches": status_counts["CONTENT_MISMATCH"],
+                "execution_failures": status_counts["EXECUTION_FAILURE"],
+            }
+        )
+        manifest["status"] = "comparison_completed"
+        manifest["updated_at"] = completed_at
+        write_manifest_atomic(manifest_path, manifest)
+        return manifest
+
+    except ComparisonError as error:
+        failed_at = isoformat_utc(utc_now())
+        comparison_stage.update(
+            {
+                "status": "failed",
+                "completed_at": failed_at,
+                "error": {"category": error.category, "message": str(error)},
+            }
+        )
+        manifest["status"] = "comparison_failed"
+        manifest["updated_at"] = failed_at
+        write_manifest_atomic(manifest_path, manifest)
+        raise
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="validate")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -650,6 +877,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("themis",),
         default="themis",
         help="Processing target (default: themis)",
+    )
+
+    compare_parser = subparsers.add_parser(
+        "compare", help="Compare execution output with expected results"
+    )
+    compare_parser.add_argument(
+        "--run", type=Path, required=True, help="Existing validation Run directory"
     )
     return parser
 
@@ -734,6 +968,26 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print(f"Average latency: {run_stage['average_latency_ms']:.3f} ms")
         print(f"Total runtime:   {run_stage['total_runtime_seconds']:.3f} seconds")
+        return 0
+
+    if args.command == "compare":
+        try:
+            manifest = compare_run(args.run)
+        except ComparisonError as error:
+            print(f"Comparison failed: {error}", file=sys.stderr)
+            return 1
+
+        comparison_stage = manifest["stages"]["comparison"]
+        print("Validation comparison completed")
+        print()
+        print(f"Run ID:             {manifest.get('run_id', 'unavailable')}")
+        print(f"Run directory:      {args.run}")
+        print(f"Records:            {comparison_stage['records_total']}")
+        print(f"Passed:             {comparison_stage['records_passed']}")
+        print(f"Content mismatches: {comparison_stage['content_mismatches']}")
+        print(f"Execution failures: {comparison_stage['execution_failures']}")
+        print()
+        print(f"Output: {comparison_stage['output_path']}")
         return 0
 
     return 2

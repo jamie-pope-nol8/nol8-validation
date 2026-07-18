@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from framework.cli.main import ComparisonError, compare_run
+
+
+class ValidateCompareTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+
+    def create_run(
+        self,
+        output_rows: list[dict],
+        *,
+        input_rows: list[dict] | None = None,
+        expected_rows: list[dict] | None = None,
+    ) -> Path:
+        run_directory = self.root / "20260718T031425123456Z"
+        generated = run_directory / "generated"
+        generated.mkdir(parents=True)
+
+        if input_rows is None:
+            input_rows = [
+                {"record_id": "record-1", "kind": "dirty", "message": "secret"},
+                {"record_id": "record-2", "kind": "clean", "message": "clean"},
+            ]
+        if expected_rows is None:
+            expected_rows = [
+                {
+                    "record_id": "record-1",
+                    "kind": "dirty",
+                    "expected_message": "[REDACTED]",
+                    "expected_match_count": 1,
+                    "expected_matches": [
+                        {
+                            "category_id": "credentials",
+                            "case_id": "secret-value",
+                            "variant": "secret",
+                            "replacement": "[REDACTED]",
+                        }
+                    ],
+                },
+                {
+                    "record_id": "record-2",
+                    "kind": "clean",
+                    "expected_message": "clean",
+                    "expected_match_count": 0,
+                    "expected_matches": [],
+                },
+            ]
+
+        for filename, rows in (
+            ("input.jsonl", input_rows),
+            ("expected.jsonl", expected_rows),
+            ("output.jsonl", output_rows),
+        ):
+            (generated / filename).write_text(
+                "".join(json.dumps(row) + "\n" for row in rows)
+            )
+
+        manifest = {
+            "schema_version": 1,
+            "run_id": run_directory.name,
+            "status": "run_completed",
+            "updated_at": "2026-07-18T03:14:25.123456Z",
+            "artifacts": {},
+            "stages": {
+                "generation": {"status": "completed"},
+                "policy": {"status": "completed"},
+                "run": {"status": "completed"},
+                "execution": {"status": "pending"},
+                "comparison": {"status": "pending"},
+                "reporting": {"status": "pending"},
+            },
+        }
+        (run_directory / "manifest.json").write_text(json.dumps(manifest))
+        return run_directory
+
+    def read_comparison(self, run_directory: Path) -> list[dict]:
+        return [
+            json.loads(line)
+            for line in (run_directory / "generated/comparison.jsonl")
+            .read_text()
+            .splitlines()
+        ]
+
+    def test_successful_comparison_creates_evidence_and_updates_manifest(self) -> None:
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.1,
+                    "success": True,
+                    "response": {"message": "[REDACTED]"},
+                },
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.2,
+                    "success": True,
+                    "response": {"message": "clean"},
+                },
+            ]
+        )
+
+        manifest = compare_run(run_directory)
+        rows = self.read_comparison(run_directory)
+
+        self.assertEqual([row["status"] for row in rows], ["PASS", "PASS"])
+        self.assertEqual(rows[0]["record_id"], "record-1")
+        self.assertEqual(rows[0]["expected_match_count"], 1)
+        self.assertEqual(len(rows[0]["expected_matches"]), 1)
+        stage = manifest["stages"]["comparison"]
+        self.assertEqual(stage["status"], "completed")
+        self.assertEqual(stage["records_total"], 2)
+        self.assertEqual(stage["records_passed"], 2)
+        self.assertEqual(stage["content_mismatches"], 0)
+        self.assertEqual(stage["execution_failures"], 0)
+        self.assertEqual(manifest["status"], "comparison_completed")
+        artifact = manifest["artifacts"]["comparison"]
+        comparison_path = run_directory / artifact["path"]
+        self.assertEqual(artifact["size_bytes"], comparison_path.stat().st_size)
+        self.assertEqual(
+            artifact["sha256"],
+            hashlib.sha256(comparison_path.read_bytes()).hexdigest(),
+        )
+
+    def test_content_mismatch_is_durable_evidence(self) -> None:
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "wrong"},
+                },
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "clean"},
+                },
+            ]
+        )
+
+        manifest = compare_run(run_directory)
+        first = self.read_comparison(run_directory)[0]
+
+        self.assertEqual(first["status"], "CONTENT_MISMATCH")
+        self.assertEqual(first["actual_message"], "wrong")
+        self.assertIsNotNone(first["error"])
+        self.assertEqual(manifest["stages"]["comparison"]["content_mismatches"], 1)
+
+    def test_execution_failure_is_distinct_from_content_mismatch(self) -> None:
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": None,
+                    "latency_ms": 0.0,
+                    "success": False,
+                    "response": None,
+                },
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "clean"},
+                },
+            ]
+        )
+
+        manifest = compare_run(run_directory)
+        first = self.read_comparison(run_directory)[0]
+
+        self.assertEqual(first["status"], "EXECUTION_FAILURE")
+        self.assertIsNone(first["actual_message"])
+        self.assertEqual(manifest["stages"]["comparison"]["execution_failures"], 1)
+
+    def test_invalid_alignment_fails_stage_without_comparison_artifact(self) -> None:
+        run_directory = self.create_run(
+            [
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "[REDACTED]"},
+                },
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "clean"},
+                },
+            ]
+        )
+
+        with self.assertRaises(ComparisonError) as caught:
+            compare_run(run_directory)
+
+        self.assertEqual(caught.exception.category, "alignment")
+        manifest = json.loads((run_directory / "manifest.json").read_text())
+        self.assertEqual(manifest["status"], "comparison_failed")
+        self.assertEqual(manifest["stages"]["comparison"]["status"], "failed")
+        self.assertFalse((run_directory / "generated/comparison.jsonl").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

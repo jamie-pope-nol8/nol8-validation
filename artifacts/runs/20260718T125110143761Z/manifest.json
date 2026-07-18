@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "run_id": "20260718T125110143761Z",
+  "run_type": "functional",
+  "status": "policy_failed",
+  "created_at": "2026-07-18T12:51:10.143761Z",
+  "updated_at": "2026-07-18T12:51:34.067189Z",
+  "repository_root": ".",
+  "configuration": {
+    "source": "config/test-cases.yaml",
+    "snapshot": "config/test-cases.yaml"
+  },
+  "artifacts": {
+    "configuration": {
+      "path": "config/test-cases.yaml",
+      "sha256": "772b5ee6ab07e1ae560587cd01cfe24f1a1e940e9fc8c7edb3d7ef6d80a6dc78",
+      "size_bytes": 4951
+    },
+    "policy": {
+      "path": "generated/scale-policy.nol",
+      "sha256": "adc5db1a0bd09ac353007de03535ab792c9833ae629ca1f065b337997c883de2",
+      "size_bytes": 2427
+    },
+    "input": {
+      "path": "generated/input.jsonl",
+      "sha256": "4377d90138fdc4cb83d508e6e3640b1212046710d5d45c1267d8c84e2225f870",
+      "size_bytes": 247363
+    },
+    "expected": {
+      "path": "generated/expected.jsonl",
+      "sha256": "7108078b3b718d2e3fa2d1f928dbb445e09802e5fb7e1535b0c124a2ccd45216",
+      "size_bytes": 682873
+    },
+    "generation_manifest": {
+      "path": "generated/generation-manifest.json",
+      "sha256": "392b260495b2d02f57cab750ac04f4b302d6a543e6ca05f1d938d380bc21881c",
+      "size_bytes": 2532
+    }
+  },
+  "stages": {
+    "generation": {
+      "status": "completed",
+      "started_at": "2026-07-18T12:51:10.143761Z",
+      "generator": "framework.policy.generate_functional_test",
+      "completed_at": "2026-07-18T12:51:10.164356Z"
+    },
+    "policy": {
+      "status": "failed",
+      "target": "themis",
+      "started_at": "2026-07-18T12:51:29.035907Z",
+      "policy_path": "generated/scale-policy.nol",
+      "policy_sha256": "adc5db1a0bd09ac353007de03535ab792c9833ae629ca1f065b337997c883de2",
+      "completed_at": "2026-07-18T12:51:34.067189Z",
+      "error": {
+        "category": "network",
+        "message": "Policy deployment could not reach the target service."
+      }
+    },
+    "execution": {
+      "status": "pending"
+    },
+    "comparison": {
+      "status": "pending"
+    },
+    "reporting": {
+      "status": "pending"
+    }
+  }
+}
