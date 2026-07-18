@@ -14,6 +14,7 @@ from framework.cli.main import generate_run, main
 from framework.workload.generate_scale_artifacts import (
     ScaleRule,
     _expected_result,
+    _realistic_rule_value,
     generate_scale_artifacts,
 )
 
@@ -75,6 +76,119 @@ class ValidateScaleGenerateTests(unittest.TestCase):
 
     def _rows(self, path: Path) -> list[dict]:
         return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def realistic_config(self) -> Path:
+        workload = yaml.safe_load(self.config.read_text(encoding="utf-8"))
+        workload["policy"] = {
+            "rule_count": 24,
+            "families": {
+                "pii": {
+                    "weight": 4,
+                    "patterns": [
+                        "person_name",
+                        "email_address",
+                        "phone_number",
+                        "street_address",
+                    ],
+                },
+                "financial": {
+                    "weight": 2,
+                    "patterns": ["credit_card_number", "invoice_number"],
+                },
+                "business_terms": {
+                    "weight": 2,
+                    "patterns": ["customer_id", "support_case_id"],
+                },
+            },
+        }
+        workload["documents"] = {
+            "count": 20,
+            "progress_interval_records": 10,
+            "scenarios": {
+                "customer_record": {
+                    "weight": 1,
+                    "fields": [
+                        "customer_id",
+                        "person_name",
+                        "email_address",
+                        "phone_number",
+                        "street_address",
+                        "account_status",
+                        "internal_notes",
+                    ],
+                }
+            },
+            "formats": {"json": {"weight": 1}},
+            "match_distribution": {
+                "clean": {
+                    "weight": 1,
+                    "matches_per_document": {"minimum": 0, "maximum": 0},
+                },
+                "dirty": {
+                    "weight": 3,
+                    "matches_per_document": {"minimum": 1, "maximum": 3},
+                },
+            },
+            "size_distribution": {
+                "small": {
+                    "weight": 1,
+                    "minimum_bytes": 700,
+                    "maximum_bytes": 1400,
+                }
+            },
+        }
+        path = self.root / "realistic-enterprise-dlp.yaml"
+        path.write_text(yaml.safe_dump(workload, sort_keys=False), encoding="utf-8")
+        return path
+
+    def test_realistic_rule_values_are_deterministic_and_type_shaped(self) -> None:
+        values = {
+            pattern: _realistic_rule_value(pattern, 17)
+            for pattern in (
+                "email_address",
+                "customer_id",
+                "phone_number",
+                "street_address",
+            )
+        }
+        self.assertEqual(values["email_address"], _realistic_rule_value("email_address", 17))
+        self.assertRegex(values["email_address"], r"^[A-Za-z]+\.[A-Za-z]+\d+@[-a-z.]+$")
+        self.assertRegex(values["customer_id"], r"^CUST-\d{6}$")
+        self.assertRegex(values["phone_number"], r"^\+1-704-\d{3}-\d{4}$")
+        self.assertRegex(values["street_address"], r"^\d+ Cedar Avenue, Charlotte NC$")
+        self.assertTrue(all("NOL8_" not in value for value in values.values()))
+
+    def test_realistic_customer_artifacts_share_catalog_values(self) -> None:
+        output = self.root / "realistic-generated"
+        generate_scale_artifacts(self.realistic_config(), output)
+        manifest = json.loads((output / "manifest.json").read_text())
+        inputs = self._rows(output / "input.jsonl")
+        expected = self._rows(output / "expected.jsonl")
+        policy = (output / "scale-policy.nol").read_text()
+        catalog_values = {item["variant"] for item in manifest["rule_catalog"]}
+
+        self.assertNotIn("NOL8_", policy)
+        self.assertNotIn("validation_rule_", "".join(row["message"] for row in inputs))
+        self.assertGreater(manifest["dirty_record_count"], 0)
+        self.assertGreater(manifest["clean_record_count"], 0)
+        for input_row, expected_row in zip(inputs, expected, strict=True):
+            json.loads(input_row["message"])
+            if input_row["kind"] == "clean":
+                self.assertFalse(
+                    any(value in input_row["message"] for value in catalog_values)
+                )
+                self.assertEqual(expected_row["expected_matches"], [])
+                continue
+            for match in expected_row["expected_matches"]:
+                self.assertIn(match["variant"], catalog_values)
+                self.assertIn(match["variant"], policy)
+                self.assertIn(match["variant"], input_row["message"])
+                self.assertIn(match["replacement"], expected_row["expected_message"])
+
+        filler_phrase = "Synthetic enterprise validation content."
+        for row in inputs:
+            filler_bytes = row["message"].count(filler_phrase) * len(filler_phrase)
+            self.assertLess(filler_bytes, len(row["message"].encode("utf-8")) / 2)
 
     def test_generation_is_deterministic(self) -> None:
         first = self.root / "first"
@@ -180,6 +294,8 @@ class ValidateScaleGenerateTests(unittest.TestCase):
         output = stdout.getvalue()
         self.assertEqual(result, 0)
         self.assertIn("Generating validation workload", output)
+        self.assertIn("Rules requested: 12", output)
+        self.assertIn("Records requested: 8", output)
         self.assertIn("Step 1/4: Loading workload configuration", output)
         self.assertIn("Step 2/4: Building rule catalog", output)
         self.assertIn("Rules generated: 12/12", output)
@@ -201,6 +317,78 @@ class ValidateScaleGenerateTests(unittest.TestCase):
         with redirect_stdout(stdout):
             generate_scale_artifacts(self.config, self.root / "quiet-generated")
         self.assertEqual(stdout.getvalue(), "")
+
+    def test_cli_overrides_resolve_into_snapshot_and_artifacts(self) -> None:
+        _, run_directory = generate_run(
+            self.config,
+            self.root / "override-runs",
+            rule_count_override=5,
+            record_count_override=3,
+        )
+        snapshot = yaml.safe_load(
+            (run_directory / "config/enterprise-dlp.yaml").read_text()
+        )
+        generation_manifest = json.loads(
+            (run_directory / "generated/generation-manifest.json").read_text()
+        )
+
+        self.assertEqual(snapshot["policy"]["rule_count"], 5)
+        self.assertEqual(snapshot["documents"]["count"], 3)
+        self.assertEqual(generation_manifest["requested_rules"], 5)
+        self.assertEqual(generation_manifest["realized_rules"], 5)
+        self.assertEqual(generation_manifest["requested_records"], 3)
+        self.assertEqual(generation_manifest["realized_records"], 3)
+        self.assertEqual(
+            len((run_directory / "generated/scale-policy.nol").read_text().splitlines()),
+            5,
+        )
+        self.assertEqual(
+            len((run_directory / "generated/input.jsonl").read_text().splitlines()),
+            3,
+        )
+
+    def test_cli_displays_effective_override_values(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            result = main(
+                [
+                    "generate",
+                    "--config",
+                    str(self.config),
+                    "--runs-dir",
+                    str(self.root / "override-cli-runs"),
+                    "--rules",
+                    "5",
+                    "--records",
+                    "3",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertIn("Rules requested: 5", stdout.getvalue())
+        self.assertIn("Records requested: 3", stdout.getvalue())
+
+    def test_identical_overrides_produce_deterministic_artifacts(self) -> None:
+        generated_directories = []
+        for runs_name in ("override-first", "override-second"):
+            _, run_directory = generate_run(
+                self.config,
+                self.root / runs_name,
+                rule_count_override=7,
+                record_count_override=4,
+            )
+            generated_directories.append(run_directory / "generated")
+
+        for filename in (
+            "scale-policy.nol",
+            "input.jsonl",
+            "expected.jsonl",
+            "generation-manifest.json",
+        ):
+            self.assertEqual(
+                (generated_directories[0] / filename).read_bytes(),
+                (generated_directories[1] / filename).read_bytes(),
+            )
 
     def test_callback_receives_configured_document_progress_updates(self) -> None:
         events: list[tuple[str, int, int]] = []

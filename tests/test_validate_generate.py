@@ -118,6 +118,15 @@ class ValidateGenerateTests(unittest.TestCase):
         self.assertTrue((first_directory / "manifest.json").is_file())
         self.assertTrue((second_directory / "manifest.json").is_file())
 
+    def test_functional_generation_rejects_scale_only_overrides(self) -> None:
+        with self.assertRaisesRegex(ValueError, "only to scale workload"):
+            generate_run(
+                CONFIG_PATH,
+                self.runs_directory,
+                rule_count_override=10,
+                record_count_override=5,
+            )
+
     def test_failure_returns_nonzero_and_records_state(self) -> None:
         missing_config = Path(self.temporary_directory.name) / "missing.yaml"
         stderr = StringIO()

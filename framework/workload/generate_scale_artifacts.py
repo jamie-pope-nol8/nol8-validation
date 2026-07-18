@@ -71,7 +71,7 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
             )
         pattern_id = str(patterns[(index - 1) % len(patterns)])
         rule_id = f"rule-{index:06d}"
-        variant = f"NOL8_{category_id}_{pattern_id}_{index:06d}"
+        variant = _realistic_rule_value(pattern_id, index)
         replacement = f"[{category_id.upper()}:{pattern_id.upper()}]"
         rules.append(
             ScaleRule(
@@ -83,6 +83,71 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
             )
         )
     return rules
+
+
+def _realistic_rule_value(pattern_id: str, index: int) -> str:
+    first_names = (
+        "Sandra", "James", "Alicia", "Marcus", "Priya", "Daniel", "Elena",
+        "Thomas", "Naomi", "Victor", "Caroline", "Anthony", "Maya", "Robert",
+        "Linda", "Samuel", "Diana", "Joseph", "Rachel", "William",
+    )
+    last_names = (
+        "Hernandez", "Lee", "Patel", "Bennett", "Ramirez", "Morgan", "Chen",
+        "Williams", "Johnson", "Davis", "Taylor", "Martin", "Clark", "Lewis",
+        "Walker", "Young", "King", "Wright", "Scott", "Green",
+    )
+    domains = (
+        "brightline.co", "workhub.org", "northstar.dev", "riverbend.net",
+        "cloudpeak.io", "granitehq.com", "summitworks.net", "silverline.org",
+    )
+    first = first_names[(index - 1) % len(first_names)]
+    last = last_names[((index - 1) // len(first_names)) % len(last_names)]
+    suffix = f"{index:06d}"
+    generators: dict[str, Callable[[], str]] = {
+        "person_name": lambda: (
+            f"{first} {last}" if index <= 400 else f"{first} {last} {index}"
+        ),
+        "email_address": lambda: (
+            f"{first}.{last}{index}@{domains[index % len(domains)]}"
+        ),
+        "phone_number": lambda: f"+1-704-{200 + index % 800:03d}-{index % 10000:04d}",
+        "street_address": lambda: f"{100 + index} Cedar Avenue, Charlotte NC",
+        "social_security_number": lambda: (
+            f"{100 + index % 800:03d}-{10 + index % 90:02d}-{index % 10000:04d}"
+        ),
+        "date_of_birth": lambda: f"{1950 + index % 55:04d}-{1 + index % 12:02d}-{1 + index % 28:02d}",
+        "api_key": lambda: f"sk_test_enterprise_{suffix}",
+        "access_token": lambda: f"access_{suffix}_synthetic_demo",
+        "bearer_token": lambda: f"Bearer demo.{suffix}.signature",
+        "password": lambda: f"DemoPass-{suffix}!",
+        "private_key_marker": lambda: f"-----BEGIN PRIVATE KEY----- DEMO-{suffix}",
+        "connection_string": lambda: f"postgresql://demo{index}:safe@db-{index}.internal/customer",
+        "credit_card_number": lambda: f"4111-1111-{index % 10000:04d}-{(index * 7) % 10000:04d}",
+        "bank_account_number": lambda: f"{100000000000 + index}",
+        "routing_number": lambda: f"{100000000 + index % 899999999:09d}",
+        "iban": lambda: f"GB{10 + index % 90:02d}DEMO{index:014d}",
+        "invoice_number": lambda: f"INV-{20260000 + index}",
+        "ipv4_address": lambda: f"10.{index % 250}.{(index // 250) % 250}.{1 + index % 249}",
+        "ipv6_address": lambda: f"2001:db8::{index:x}",
+        "hostname": lambda: f"customer-app-{index:04d}.internal.example",
+        "internal_url": lambda: f"https://portal.internal.example/customers/{suffix}",
+        "cloud_resource_id": lambda: f"arn:aws:s3:::synthetic-customer-{suffix}",
+        "database_uri": lambda: f"postgresql://readonly@db.internal/customer_{suffix}",
+        "patient_id": lambda: f"PAT-{suffix}",
+        "member_id": lambda: f"MEM-{suffix}",
+        "claim_number": lambda: f"CLM-{suffix}",
+        "medical_record_number": lambda: f"MRN-{suffix}",
+        "customer_id": lambda: f"CUST-{suffix}",
+        "employee_id": lambda: f"EMP-{suffix}",
+        "project_codename": lambda: f"Project Cedar-{index}",
+        "internal_product_name": lambda: f"Northstar Suite {index}",
+        "support_case_id": lambda: f"CASE-{suffix}",
+        "contract_number": lambda: f"CTR-{suffix}",
+    }
+    try:
+        return generators[pattern_id]()
+    except KeyError as error:
+        raise ValueError(f"Unsupported policy pattern: {pattern_id}") from error
 
 
 def _write_policy(path: Path, rules: list[ScaleRule]) -> None:
@@ -146,6 +211,83 @@ def _inject_rules(record: dict[str, Any], rules: list[ScaleRule]) -> None:
     record[injection_field] = "\n".join([existing_text, *markers]).strip()
 
 
+def _build_realistic_customer_record(
+    document_id: str,
+    fields: list[str],
+    selected_rules: list[ScaleRule],
+    catalog_values: set[str],
+    rng: random.Random,
+) -> dict[str, Any]:
+    record = _deterministic_record(document_id, "customer_record", fields, rng)
+    direct_fields = {
+        "customer_id": "customer_id",
+        "person_name": "person_name",
+        "email_address": "email_address",
+        "phone_number": "phone_number",
+        "street_address": "street_address",
+    }
+    occupied: set[str] = set()
+    notes = [str(record.get("internal_notes", "Account reviewed by customer care."))]
+    note_templates = {
+        "pii": "Identity verification recorded {pattern}: {value}.",
+        "credentials": "Security review referenced {pattern}: {value}.",
+        "financial": "Billing review referenced {pattern}: {value}.",
+        "infrastructure": "Recent account access included {pattern}: {value}.",
+        "healthcare": "Customer supplied benefit reference {pattern}: {value}.",
+        "business_terms": "Account servicing referenced {pattern}: {value}.",
+    }
+    for rule in selected_rules:
+        field_name = direct_fields.get(rule.pattern_id)
+        if field_name in record and field_name not in occupied:
+            record[field_name] = rule.variant
+            occupied.add(field_name)
+            continue
+        template = note_templates.get(
+            rule.category_id,
+            "Customer record referenced {pattern}: {value}.",
+        )
+        notes.append(
+            template.format(
+                pattern=rule.pattern_id.replace("_", " "),
+                value=rule.variant,
+            )
+        )
+    record["internal_notes"] = " ".join(notes)
+
+    if not selected_rules:
+        serialized = json.dumps(record, sort_keys=True)
+        collisions = [value for value in catalog_values if value in serialized]
+        if collisions:
+            raise ValueError("Clean customer record unexpectedly contains a policy value.")
+    return record
+
+
+def _expand_customer_record(
+    record: dict[str, Any], target_size: int, rng: random.Random
+) -> None:
+    history: list[dict[str, str]] = []
+    actions = (
+        "Account preferences reviewed",
+        "Customer contact information confirmed",
+        "Billing inquiry resolved",
+        "Support follow-up scheduled",
+        "Consent preferences verified",
+    )
+    channels = ("customer portal", "support desk", "billing team", "mobile app")
+    desired_content_size = max(0, target_size - 256)
+    while len(json.dumps(record, sort_keys=True).encode("utf-8")) < desired_content_size:
+        sequence = len(history) + 1
+        history.append(
+            {
+                "event_id": f"EVT-{sequence:04d}",
+                "summary": rng.choice(actions),
+                "channel": rng.choice(channels),
+                "outcome": "completed",
+            }
+        )
+        record["account_history"] = history
+
+
 def _expected_result(
     message: str, rules: list[ScaleRule]
 ) -> tuple[str, list[dict[str, str]]]:
@@ -180,7 +322,12 @@ def generate_scale_artifacts(
     workload = load_workload(workload_path)
     if not is_scale_workload(workload):
         raise ValueError("Configuration is not an enterprise workload schema.")
-    _report_progress(progress_callback, "configuration_loaded", 1, 1)
+    _report_progress(
+        progress_callback,
+        "configuration_loaded",
+        int(workload["policy"]["rule_count"]),
+        int(workload["documents"]["count"]),
+    )
 
     documents = workload["documents"]
     requested_rules = int(workload["policy"]["rule_count"])
@@ -246,21 +393,36 @@ def generate_scale_artifacts(
                 )
                 selected_rules = rng.sample(rules, k=min(match_count, len(rules)))
 
-                record = _deterministic_record(
-                    document_id,
-                    scenario_name,
-                    list(scenario["fields"]),
-                    rng,
+                target_size = rng.randint(
+                    int(size_profile["minimum_bytes"]),
+                    int(size_profile["maximum_bytes"]),
                 )
-                _inject_rules(record, selected_rules)
+
+                if (
+                    scenario_name == "customer_record"
+                    and format_name == "json"
+                    and size_profile_name == "small"
+                ):
+                    record = _build_realistic_customer_record(
+                        document_id,
+                        list(scenario["fields"]),
+                        selected_rules,
+                        {rule.variant for rule in rules},
+                        rng,
+                    )
+                    _expand_customer_record(record, target_size, rng)
+                else:
+                    record = _deterministic_record(
+                        document_id,
+                        scenario_name,
+                        list(scenario["fields"]),
+                        rng,
+                    )
+                    _inject_rules(record, selected_rules)
                 message = _serialize_record(
                     record=record,
                     format_name=format_name,
                     scenario_name=scenario_name,
-                )
-                target_size = rng.randint(
-                    int(size_profile["minimum_bytes"]),
-                    int(size_profile["maximum_bytes"]),
                 )
                 message = _pad_document(
                     content=message,

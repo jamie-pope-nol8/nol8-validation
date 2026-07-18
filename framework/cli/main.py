@@ -118,6 +118,8 @@ def generate_run(
     runs_directory: Path,
     *,
     scale_progress_callback: Callable[[str, int, int], None] | None = None,
+    rule_count_override: int | None = None,
+    record_count_override: int | None = None,
 ) -> tuple[str, Path]:
     run_id, run_directory, created = create_run_directory(runs_directory)
     created_at = isoformat_utc(created)
@@ -162,6 +164,15 @@ def generate_run(
         if not isinstance(loaded_config, dict):
             raise ValueError("The YAML configuration must contain a mapping.")
         if is_scale_workload(loaded_config):
+            if rule_count_override is not None:
+                loaded_config["policy"]["rule_count"] = rule_count_override
+            if record_count_override is not None:
+                loaded_config["documents"]["count"] = record_count_override
+            if rule_count_override is not None or record_count_override is not None:
+                snapshot_path.write_text(
+                    yaml.safe_dump(loaded_config, sort_keys=False),
+                    encoding="utf-8",
+                )
             manifest["run_type"] = "scale"
             manifest["stages"]["generation"]["generator"] = (
                 "framework.workload.generate_scale_artifacts"
@@ -172,6 +183,10 @@ def generate_run(
                 progress_callback=scale_progress_callback,
             )
         else:
+            if rule_count_override is not None or record_count_override is not None:
+                raise ValueError(
+                    "--rules and --records apply only to scale workload configurations."
+                )
             generate_functional_artifacts(snapshot_path, generated_directory)
         os.replace(
             generated_directory / "manifest.json",
@@ -992,6 +1007,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("artifacts/runs"),
         help="Parent directory for validation runs",
     )
+    generate_parser.add_argument(
+        "--rules",
+        type=_positive_integer,
+        help="Override the scale workload rule count",
+    )
+    generate_parser.add_argument(
+        "--records",
+        type=_positive_integer,
+        help="Override the scale workload record count",
+    )
 
     policy_parser = subparsers.add_parser(
         "policy", help="Deploy the generated policy for a validation run"
@@ -1089,6 +1114,10 @@ class _ScaleGenerationProgress:
         if event == "configuration_loaded":
             print("Generating validation workload", flush=True)
             print(flush=True)
+            print("Configuration:", flush=True)
+            print(f"  Rules requested: {completed}", flush=True)
+            print(f"  Records requested: {total}", flush=True)
+            print(flush=True)
             print("Step 1/4: Loading workload configuration", flush=True)
             print("Complete", flush=True)
             print(flush=True)
@@ -1146,6 +1175,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.config,
                 args.runs_dir,
                 scale_progress_callback=scale_progress,
+                rule_count_override=args.rules,
+                record_count_override=args.records,
             )
         except (OSError, KeyError, TypeError, ValueError) as error:
             print(f"Generation failed: {error}", file=sys.stderr)
