@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from framework.cli.main import (
     RunExecutionError,
-    _print_run_progress,
+    _LiveRunProgress,
     main,
     run_validation_corpus,
 )
@@ -270,15 +270,25 @@ class ValidateRunTests(unittest.TestCase):
             [(50, 120, 50, 0), (100, 120, 100, 0), (120, 120, 120, 0)],
         )
 
-    def test_terminal_progress_renderer_is_readable(self) -> None:
+    @patch("framework.cli.main.time.perf_counter")
+    def test_terminal_progress_renderer_updates_same_area_with_color_and_rate(
+        self, mocked_clock
+    ) -> None:
+        mocked_clock.side_effect = [100.0, 110.0, 120.0]
         output = StringIO()
+        progress = _LiveRunProgress()
         with redirect_stdout(output):
-            _print_run_progress(250, 1000, 249, 1)
+            progress(250, 1000, 250, 0)
+            progress(500, 1000, 499, 1)
 
         rendered = output.getvalue()
         self.assertIn("[██████████------------------------------]", rendered)
-        self.assertIn("250 / 1000", rendered)
-        self.assertIn("Passed: 249", rendered)
+        self.assertIn("250/1000", rendered)
+        self.assertIn("Passed: 250", rendered)
+        self.assertIn("Rate: 25.0 req/s", rendered)
+        self.assertIn("\033[32m", rendered)
+        self.assertIn("\033[31m", rendered)
+        self.assertIn("\033[2A", rendered)
         self.assertIn("Failed: 1", rendered)
 
     @patch("framework.cli.main.run_validation_corpus")

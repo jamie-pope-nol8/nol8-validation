@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -903,19 +904,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _print_run_progress(
-    processed: int,
-    total: int,
-    passed: int,
-    failed: int,
-) -> None:
-    bar_width = 40
-    filled = int(bar_width * processed / total) if total else bar_width
-    bar = "█" * filled + "-" * (bar_width - filled)
-    print(
-        f"[{bar}] {processed} / {total} "
-        f"| Passed: {passed} | Failed: {failed}"
-    )
+class _LiveRunProgress:
+    def __init__(self) -> None:
+        self.started_at = time.perf_counter()
+        self.rendered = False
+
+    def __call__(
+        self,
+        processed: int,
+        total: int,
+        passed: int,
+        failed: int,
+    ) -> None:
+        elapsed = time.perf_counter() - self.started_at
+        rate = processed / elapsed if elapsed > 0 else 0.0
+        bar_width = 40
+        filled = int(bar_width * processed / total) if total else bar_width
+        bar = "█" * filled + "-" * (bar_width - filled)
+        color = "\033[32m" if failed == 0 else "\033[31m"
+        reset = "\033[0m"
+
+        if self.rendered:
+            print("\033[2A", end="")
+        print(f"\r\033[2K{color}[{bar}] {processed}/{total}{reset}")
+        print(
+            f"\r\033[2K{color}Passed: {passed}  Failed: {failed}  "
+            f"Rate: {rate:.1f} req/s{reset}"
+        )
+        self.rendered = True
 
 
 def _cli_percentile(values: list[float], percentage: float) -> float:
@@ -999,11 +1015,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         print("Running validation corpus")
         print()
+        progress = _LiveRunProgress()
         try:
             manifest = run_validation_corpus(
                 args.run,
                 args.target,
-                progress_callback=_print_run_progress,
+                progress_callback=progress,
             )
         except RunExecutionError as error:
             print(f"Run execution failed: {error}", file=sys.stderr)
@@ -1060,6 +1077,23 @@ def main(argv: list[str] | None = None) -> int:
             if records_total
             else 0.0
         )
+        clean_records = sum(row.get("kind") == "clean" for row in comparison_rows)
+        dirty_records = sum(row.get("kind") == "dirty" for row in comparison_rows)
+        category_counts: Counter[str] = Counter()
+        for row in comparison_rows:
+            expected_matches = row.get("expected_matches")
+            if not isinstance(expected_matches, list):
+                continue
+            for expected_match in expected_matches:
+                if not isinstance(expected_match, dict):
+                    continue
+                category_id = expected_match.get("category_id")
+                if isinstance(category_id, str):
+                    category_counts[category_id] += 1
+        total_failures = (
+            comparison_stage["content_mismatches"]
+            + comparison_stage["execution_failures"]
+        )
         print("Functional Validation Summary")
         print()
         print(f"Run ID:             {manifest.get('run_id', 'unavailable')}")
@@ -1072,6 +1106,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Pass rate:          {pass_rate:.3f}%")
         print()
         print(f"Expected replacements: {expected_replacements}")
+        print()
+        print(f"Clean records: {clean_records}")
+        print(f"Dirty records: {dirty_records}")
+        print()
+        print("Expected matches by category:")
+        if category_counts:
+            for category_id, count in sorted(category_counts.items()):
+                print(f"- {category_id}: {count}")
+        else:
+            print("- none: 0")
+        print()
+        print("Failures:")
+        print(f"- total: {total_failures}")
+        print(
+            f"- CONTENT_MISMATCH: {comparison_stage['content_mismatches']}"
+        )
+        print(
+            f"- EXECUTION_FAILURE: {comparison_stage['execution_failures']}"
+        )
         print()
         print(f"Comparison: {comparison_stage['output_path']}")
         return 0

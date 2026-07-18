@@ -256,6 +256,14 @@ class ValidateCompareTests(unittest.TestCase):
             "Execution failures: 0",
             "Pass rate:          50.000%",
             "Expected replacements: 1",
+            "Clean records: 1",
+            "Dirty records: 1",
+            "Expected matches by category:",
+            "- credentials: 1",
+            "Failures:",
+            "- total: 1",
+            "- CONTENT_MISMATCH: 1",
+            "- EXECUTION_FAILURE: 0",
             "Comparison: generated/comparison.jsonl",
         ):
             self.assertIn(expected, rendered)
