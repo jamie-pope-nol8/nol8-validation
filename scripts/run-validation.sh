@@ -94,11 +94,44 @@ ELAPSED_SECONDS="${CURL_METADATA#* }"
 
 if ! jq --arg http_status "$HTTP_CODE" \
   --arg elapsed_seconds "$ELAPSED_SECONDS" \
-  '{
-    http_status: ($http_status | tonumber),
-    latency_ms: (($elapsed_seconds | tonumber) * 1000),
-    response: (.result // null)
-  }' "$RESPONSE_FILE"; then
+  '
+  def remove_sensitive_fields:
+    if type == "object" then
+      with_entries(
+        select(
+          (.key | ascii_downcase | test("token|authorization|header|environment|secret"))
+          | not
+        )
+        | .value |= remove_sensitive_fields
+      )
+    elif type == "array" then
+      map(remove_sensitive_fields)
+    else
+      .
+    end;
+
+  ($http_status | tonumber) as $status
+  | {
+      http_status: $status,
+      latency_ms: (($elapsed_seconds | tonumber) * 1000),
+      response: (
+        if $status >= 200 and $status < 300 then
+          (.result // null)
+        elif type == "object" then
+          {
+            error: .error,
+            message: .message,
+            status: .status,
+            detail: .detail
+          }
+          | with_entries(select(.value != null))
+          | remove_sensitive_fields
+        else
+          {detail: .}
+        end
+      )
+    }
+  ' "$RESPONSE_FILE"; then
   echo "Processing endpoint returned invalid JSON." >&2
   exit 6
 fi

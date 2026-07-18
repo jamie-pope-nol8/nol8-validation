@@ -110,6 +110,7 @@ class ValidateRunTests(unittest.TestCase):
         manifest = run_validation_corpus(run_directory, "themis")
         output = self.read_output(run_directory)
 
+        self.assertEqual(mocked_execute.call_count, 3)
         self.assertEqual([row["request_index"] for row in output], [1, 2, 3])
         self.assertEqual(
             [row["response"]["message"] for row in output],
@@ -298,7 +299,7 @@ class ValidateRunTests(unittest.TestCase):
         run_validation_corpus(
             run_directory,
             "themis",
-            startup_callback=lambda total: events.append(("startup", total)),
+            startup_callback=lambda total, _limit: events.append(("startup", total)),
         )
 
         self.assertEqual(events[0], ("startup", 3))
@@ -452,11 +453,38 @@ class ValidateRunTests(unittest.TestCase):
         output = StringIO()
         progress = _LiveRunProgress()
         with redirect_stdout(output):
-            progress.start(10_000)
+            progress.start(10_000, 5)
 
         rendered = output.getvalue()
         self.assertIn("Requests loaded: 10000", rendered)
+        self.assertIn("Execution limit: 5", rendered)
         self.assertIn("Starting execution...", rendered)
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_limit_executes_only_requested_records_with_compatible_output(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 1.0,
+            "success": True,
+            "response": {"message": "processed"},
+        }
+        run_directory = self.create_run()
+
+        manifest = run_validation_corpus(run_directory, "themis", limit=2)
+        output = self.read_output(run_directory)
+
+        self.assertEqual(mocked_execute.call_count, 2)
+        self.assertEqual([row["request_index"] for row in output], [1, 2])
+        self.assertEqual(
+            set(output[0]),
+            {"request_index", "http_status", "latency_ms", "success", "response"},
+        )
+        self.assertEqual(manifest["stages"]["run"]["requests_total"], 2)
+        self.assertEqual(manifest["stages"]["run"]["requests_completed"], 2)
 
     @patch("framework.cli.main.run_validation_corpus")
     def test_cli_prints_v1_functional_run_summary(self, mocked_run) -> None:

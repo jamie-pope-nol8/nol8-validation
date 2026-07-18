@@ -524,11 +524,14 @@ def run_validation_corpus(
     target: str,
     *,
     progress_callback: Callable[[int, int, int, int], None] | None = None,
-    startup_callback: Callable[[int], None] | None = None,
+    startup_callback: Callable[[int, int | None], None] | None = None,
     progress_interval: int = 50,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     if progress_interval < 1:
         raise ValueError("Progress interval must be at least 1.")
+    if limit is not None and limit < 1:
+        raise ValueError("Request limit must be at least 1.")
 
     if not run_directory.is_dir():
         raise RunExecutionError(
@@ -593,15 +596,16 @@ def run_validation_corpus(
             )
 
         lines = input_path.read_text(encoding="utf-8").splitlines()
-        run_stage["requests_total"] = len(lines)
+        execution_lines = lines if limit is None else lines[:limit]
+        run_stage["requests_total"] = len(execution_lines)
         manifest["updated_at"] = isoformat_utc(utc_now())
         write_manifest_atomic(manifest_path, manifest)
         _initialize_jsonl_atomic(output_path)
         if startup_callback is not None:
-            startup_callback(len(lines))
+            startup_callback(len(lines), limit)
         _check_run_target(target)
 
-        for request_index, line in enumerate(lines, start=1):
+        for request_index, line in enumerate(execution_lines, start=1):
             request_result: dict[str, Any]
             try:
                 request = json.loads(line)
@@ -656,11 +660,11 @@ def run_validation_corpus(
             if progress_callback is not None and (
                 request_index == 1
                 or request_index % progress_interval == 0
-                or request_index == len(lines)
+                or request_index == len(execution_lines)
             ):
                 progress_callback(
                     request_index,
-                    len(lines),
+                    len(execution_lines),
                     succeeded_so_far,
                     failed_so_far,
                 )
@@ -1020,6 +1024,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="Requests between progress updates (default: 50)",
     )
+    run_parser.add_argument(
+        "--limit",
+        type=_positive_integer,
+        help="Execute only the first N generated requests",
+    )
 
     compare_parser = subparsers.add_parser(
         "compare", help="Compare execution output with expected results"
@@ -1035,8 +1044,10 @@ class _LiveRunProgress:
         self.started_at = time.perf_counter()
         self.rendered = False
 
-    def start(self, total: int) -> None:
+    def start(self, total: int, limit: int | None) -> None:
         print(f"Requests loaded: {total}", flush=True)
+        if limit is not None:
+            print(f"Execution limit: {limit}", flush=True)
         print(flush=True)
         print("Starting execution...", flush=True)
         print(flush=True)
@@ -1204,6 +1215,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress_callback=progress,
                 startup_callback=progress.start,
                 progress_interval=args.progress_interval,
+                limit=args.limit,
             )
         except RunExecutionError as error:
             print(f"Run execution failed: {error}", file=sys.stderr)

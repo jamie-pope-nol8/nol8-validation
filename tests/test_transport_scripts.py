@@ -38,21 +38,33 @@ capture = {
 with open(os.environ["TRANSPORT_CAPTURE"], "w", encoding="utf-8") as handle:
     json.dump(capture, handle)
 
-if os.environ.get("FAKE_CURL_MODE") == "timeout":
+mode = os.environ.get("FAKE_CURL_MODE")
+if mode == "timeout":
     raise SystemExit(28)
 
 output_path = arguments[arguments.index("-o") + 1]
 is_policy = "-X" in arguments
-response = (
-    {"ok": True, "command_id": "cmd-test", "stage": "apollo", "rules": 1}
-    if is_policy
-    else {"result": {"message": "processed"}}
-)
+if mode == "service_error":
+    response = {
+        "error": "temporarily_unavailable",
+        "message": "processing service unavailable",
+        "status": 503,
+        "detail": {"retryable": True, "authorization": "must-not-persist"},
+        "token": "must-not-persist",
+        "unrelated": "must-not-persist",
+    }
+elif is_policy:
+    response = {"ok": True, "command_id": "cmd-test", "stage": "apollo", "rules": 1}
+else:
+    response = {"result": {"message": "processed"}}
 with open(output_path, "w", encoding="utf-8") as handle:
     json.dump(response, handle)
 
 write_format = arguments[arguments.index("-w") + 1]
-sys.stdout.write("200 0.0069" if "time_total" in write_format else "200")
+http_status = "503" if mode == "service_error" else "200"
+sys.stdout.write(
+    f"{http_status} 0.0069" if "time_total" in write_format else http_status
+)
 '''
 
 
@@ -118,6 +130,35 @@ class TransportScriptTests(unittest.TestCase):
         self.assertAlmostEqual(response["latency_ms"], 6.9)
         self.assertEqual(response["response"], {"message": "processed"})
         self.assertTrue(self.capture()["authorization_header"])
+
+    def test_run_transport_retains_sanitized_error_response_body(self) -> None:
+        self.environment["FAKE_CURL_MODE"] = "service_error"
+        result = subprocess.run(
+            [str(RUN_SCRIPT), "themis"],
+            cwd=REPOSITORY_ROOT,
+            env=self.environment,
+            input=json.dumps({"message": "test"}),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 6)
+        evidence = json.loads(result.stdout)
+        self.assertEqual(evidence["http_status"], 503)
+        self.assertEqual(
+            evidence["response"],
+            {
+                "error": "temporarily_unavailable",
+                "message": "processing service unavailable",
+                "status": 503,
+                "detail": {"retryable": True},
+            },
+        )
+        serialized = json.dumps(evidence).lower()
+        self.assertNotIn("must-not-persist", serialized)
+        self.assertNotIn("authorization", serialized)
+        self.assertNotIn("token", serialized)
 
     def test_both_transports_preserve_network_failure_semantics(self) -> None:
         self.environment["FAKE_CURL_MODE"] = "timeout"
