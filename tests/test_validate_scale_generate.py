@@ -63,6 +63,7 @@ class ValidateScaleGenerateTests(unittest.TestCase):
                         "size_distribution": {
                             "small": {
                                 "weight": 1,
+                                "pad_to_target": True,
                                 "minimum_bytes": 300,
                                 "maximum_bytes": 400,
                             }
@@ -187,8 +188,14 @@ class ValidateScaleGenerateTests(unittest.TestCase):
 
         filler_phrase = "Synthetic enterprise validation content."
         for row in inputs:
+            self.assertNotIn("_synthetic_padding", row["message"])
             filler_bytes = row["message"].count(filler_phrase) * len(filler_phrase)
             self.assertLess(filler_bytes, len(row["message"].encode("utf-8")) / 2)
+        self.assertEqual(manifest["padding_bytes_total"], 0)
+        self.assertEqual(manifest["padded_document_count"], 0)
+        self.assertEqual(
+            manifest["generation_mode_distribution"], {"realistic": 20}
+        )
 
     def test_generation_is_deterministic(self) -> None:
         first = self.root / "first"
@@ -225,7 +232,12 @@ class ValidateScaleGenerateTests(unittest.TestCase):
         self.assertEqual(requested["record_count"], 8)
         self.assertEqual(
             requested["size_distribution"]["small"],
-            {"weight": 1, "minimum_bytes": 300, "maximum_bytes": 400},
+            {
+                "weight": 1,
+                "pad_to_target": True,
+                "minimum_bytes": 300,
+                "maximum_bytes": 400,
+            },
         )
         self.assertEqual(realized["rule_count"], 12)
         self.assertEqual(realized["record_count"], 8)

@@ -367,6 +367,9 @@ def generate_scale_artifacts(
     payload_bytes_total = 0
     payload_bytes_min: int | None = None
     payload_bytes_max = 0
+    padding_bytes_total = 0
+    padded_document_count = 0
+    generation_mode_counts: Counter[str] = Counter()
 
     _report_progress(
         progress_callback, "documents_started", 0, realized_records
@@ -399,6 +402,11 @@ def generate_scale_artifacts(
                     int(size_profile["maximum_bytes"]),
                 )
 
+                realistic_scenario = (
+                    format_name == "json"
+                    and size_profile_name == "small"
+                    and scenario_name in {"customer_record", "support_ticket"}
+                )
                 if (
                     scenario_name == "customer_record"
                     and format_name == "json"
@@ -441,12 +449,23 @@ def generate_scale_artifacts(
                     format_name=format_name,
                     scenario_name=scenario_name,
                 )
-                message = _pad_document(
-                    content=message,
-                    target_size=target_size,
-                    format_name=format_name,
-                    random_source=rng,
-                )
+                unpadded_size = len(message.encode("utf-8"))
+                if (
+                    bool(size_profile.get("pad_to_target", False))
+                    and not realistic_scenario
+                ):
+                    message = _pad_document(
+                        content=message,
+                        target_size=target_size,
+                        format_name=format_name,
+                        random_source=rng,
+                    )
+                padding_bytes = max(0, len(message.encode("utf-8")) - unpadded_size)
+                padding_bytes_total += padding_bytes
+                padded_document_count += padding_bytes > 0
+                generation_mode_counts[
+                    "realistic" if realistic_scenario else "scale"
+                ] += 1
                 if index % progress_interval == 0 or index == realized_records:
                     _report_progress(
                         progress_callback,
@@ -537,6 +556,11 @@ def generate_scale_artifacts(
         "payload_bytes_average": round(
             payload_bytes_total / realized_records, 3
         ),
+        "padding_bytes_total": padding_bytes_total,
+        "padded_document_count": padded_document_count,
+        "generation_mode_distribution": dict(
+            sorted(generation_mode_counts.items())
+        ),
         "requested_scale": {
             "rule_count": requested_rules,
             "record_count": requested_records,
@@ -564,6 +588,11 @@ def generate_scale_artifacts(
                 "maximum": payload_bytes_max,
                 "average": round(payload_bytes_total / realized_records, 3),
             },
+            "padding_bytes_total": padding_bytes_total,
+            "padded_document_count": padded_document_count,
+            "generation_mode_distribution": dict(
+                sorted(generation_mode_counts.items())
+            ),
         },
         "expected_total_matches": expected_total,
         "rule_catalog": [

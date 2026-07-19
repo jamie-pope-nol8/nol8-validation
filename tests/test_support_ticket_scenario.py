@@ -78,9 +78,15 @@ class SupportTicketScenarioTests(unittest.TestCase):
             catalog = {item["variant"] for item in manifest["rule_catalog"]}
 
             self.assertEqual(manifest["scenario_distribution"], {"support_ticket": 10})
+            self.assertEqual(manifest["padding_bytes_total"], 0)
+            self.assertEqual(manifest["padded_document_count"], 0)
+            self.assertEqual(
+                manifest["generation_mode_distribution"], {"realistic": 10}
+            )
             for input_row, expected_row in zip(input_rows, expected_rows, strict=True):
                 record = json.loads(input_row["message"])
                 self.assertEqual(record["scenario"], "support_ticket")
+                self.assertNotIn("_synthetic_padding", record)
                 self.assertNotIn("validation_rule_", input_row["message"])
                 if input_row["kind"] == "clean":
                     self.assertFalse(any(value in input_row["message"] for value in catalog))

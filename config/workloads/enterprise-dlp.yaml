@@ -223,21 +223,25 @@ documents:
   size_distribution:
     small:
       weight: 40
+      pad_to_target: true
       minimum_bytes: 512
       maximum_bytes: 4096
 
     medium:
       weight: 35
+      pad_to_target: true
       minimum_bytes: 4097
       maximum_bytes: 65536
 
     large:
       weight: 20
+      pad_to_target: true
       minimum_bytes: 65537
       maximum_bytes: 524288
 
     near_limit:
       weight: 5
+      pad_to_target: true
       minimum_bytes: 900000
       maximum_bytes: 1000000
 
