@@ -259,7 +259,11 @@ class ValidateReportTests(unittest.TestCase):
 
     def test_pass_rate_status_classification(self) -> None:
         cases = (
-            (99, 1, "99.00%", "status-pass"),
+            # Green is reserved for runs with zero failures. A run containing
+            # any failure must not be styled as passing, however high the
+            # rate - see T0-3 in docs/CODE_REVIEW_PLAN.md.
+            (100, 0, "100.00%", "status-pass"),
+            (99, 1, "99.00%", "status-warning"),
             (97, 3, "97.00%", "status-warning"),
             (94, 6, "94.00%", "status-fail"),
         )

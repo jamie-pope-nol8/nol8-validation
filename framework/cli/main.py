@@ -464,6 +464,47 @@ def _check_run_target(target: str) -> None:
         )
 
 
+# Exit codes emitted by scripts/run-validation.sh, mapped to an evidence
+# category and whether the condition should abort the whole run.
+#
+# Configuration and network faults are environmental: they will affect every
+# remaining request, so the run is aborted. A rejected payload or an unusable
+# response is recorded against the individual request.
+_TRANSPORT_EXIT_CATEGORIES: dict[int, tuple[str, str, bool]] = {
+    2: ("configuration", "Processing endpoint configuration is invalid.", True),
+    3: ("malformed_request", "Transport rejected the request payload.", False),
+    5: ("network", "Processing endpoint request failed.", True),
+    6: ("transport", "Processing endpoint returned an unusable response.", False),
+}
+
+
+def _request_evidence(
+    *,
+    http_status: Any = None,
+    latency_ms: Any = 0.0,
+    response: Any = None,
+    category: str | None = None,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """Build one output.jsonl row.
+
+    Every unsuccessful request carries an error category so the operator can
+    distinguish a network drop from an unusable response body from an HTTP
+    error, rather than seeing an undifferentiated failure.
+    """
+    evidence: dict[str, Any] = {
+        "http_status": http_status if isinstance(http_status, int) else None,
+        "latency_ms": round(float(latency_ms), 3)
+        if isinstance(latency_ms, (int, float))
+        else 0.0,
+        "success": category is None,
+        "response": response,
+    }
+    if category is not None:
+        evidence["error"] = {"category": category, "message": message}
+    return evidence
+
+
 def execute_request(target: str, payload: dict[str, str]) -> dict[str, Any]:
     execution_script = REPOSITORY_ROOT / "scripts" / "run-validation.sh"
     result = subprocess.run(
@@ -484,27 +525,59 @@ def execute_request(target: str, payload: dict[str, str]) -> dict[str, Any]:
         if isinstance(value, dict):
             parsed = value
 
-    if result.returncode == 5:
-        raise RunExecutionError(
-            "network", "Processing endpoint request failed."
+    latency_ms = parsed.get("latency_ms", 0.0)
+    http_status = parsed.get("http_status")
+    response = parsed.get("response")
+
+    if result.returncode != 0:
+        category, message, aborts_run = _TRANSPORT_EXIT_CATEGORIES.get(
+            result.returncode,
+            (
+                "transport",
+                f"Transport exited with status {result.returncode}.",
+                False,
+            ),
+        )
+        if aborts_run:
+            raise RunExecutionError(category, message)
+        return _request_evidence(
+            http_status=http_status,
+            latency_ms=latency_ms,
+            response=response,
+            category=category,
+            message=message,
         )
 
-    http_status = parsed.get("http_status")
-    latency_ms = parsed.get("latency_ms", 0.0)
-    response = parsed.get("response")
-    success = (
-        result.returncode == 0
-        and isinstance(http_status, int)
-        and 200 <= http_status < 300
+    if not (isinstance(http_status, int) and 200 <= http_status < 300):
+        return _request_evidence(
+            http_status=http_status,
+            latency_ms=latency_ms,
+            response=response,
+            category="http_status",
+            message=f"Processing endpoint returned HTTP {http_status}.",
+        )
+
+    # A 2xx alone does not mean the record was processed. Themis can return
+    # success with no processed message - for example when no policy is
+    # loaded - and treating that as a pass would report a whole run as
+    # successful while nothing was redacted.
+    processed_message = (
+        response.get("message") if isinstance(response, dict) else None
     )
-    return {
-        "http_status": http_status if isinstance(http_status, int) else None,
-        "latency_ms": round(float(latency_ms), 3)
-        if isinstance(latency_ms, (int, float))
-        else 0.0,
-        "success": success,
-        "response": response,
-    }
+    if not isinstance(processed_message, str):
+        return _request_evidence(
+            http_status=http_status,
+            latency_ms=latency_ms,
+            response=response,
+            category="invalid_response",
+            message="Response did not contain a processed message.",
+        )
+
+    return _request_evidence(
+        http_status=http_status,
+        latency_ms=latency_ms,
+        response=response,
+    )
 
 
 def _write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -694,6 +767,11 @@ def run_validation_corpus(
         failed_count = sum(not row["success"] for row in output_rows)
         run_stage["requests_completed"] = len(output_rows)
         run_stage["requests_failed"] = failed_count
+        # A run in which every request failed is deliberately NOT raised as a
+        # stage failure. Failing the stage would block compare and report, so
+        # the operator would get an exception instead of evidence explaining
+        # what went wrong. Per-request error categories carry that signal, and
+        # the report renders FAIL rather than PASS.
         latencies = [float(row["latency_ms"]) for row in output_rows]
         run_stage["average_latency_ms"] = round(
             sum(latencies) / len(latencies), 3
