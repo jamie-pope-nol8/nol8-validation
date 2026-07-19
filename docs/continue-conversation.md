@@ -174,7 +174,44 @@ both directions.
   renders INCONCLUSIVE not a green PASS; pass rate cannot round to 100.00%
   with failures present.
 - **Tier 1 - IN PROGRESS.** Generator false positives - the framework blames
-  Themis for its own bugs. See next actions.
+  Themis for its own bugs. Foundation is built; wiring into generation is the
+  remaining work. See next actions.
+
+### Tier 1 foundation (done)
+
+`framework/policy/matching.py` - Aho-Corasick over the catalog.
+`LiteralMatcher.find_all` returns every occurrence of every literal in one pass
+per document. `overlapping_matches` finds matches sharing bytes;
+`resolve_non_overlapping` does leftmost-longest selection.
+
+`framework/policy/overlap.py` - static literal-pair analysis. **Use with
+care:** run against the 5,000 rule catalog the suffix/prefix rule reports
+1,277,627 pairs in 26 seconds, nearly all one-character joins. It is not
+actionable on its own. Document-level detection via `matching.py` is the
+precise signal.
+
+### Corpus audit (measured on run 20260719T161514709224Z)
+
+```
+10,000 documents scanned in 1.66 s against 5,000 rules
+documents containing OVERLAPPING matches: 415 (4.15%)
+documents with UNACCOUNTED literals:      415 (4.15%)  - same documents
+CLEAN documents containing literals:      0
+```
+
+The unaccounted literals in this corpus are the overlap partners themselves
+(`Elena Chen` alongside `Elena Chen 2527`), so T1-1 exposure and ISSUE-003
+exposure are the same population here.
+
+**415 documents are exposed but only 272 failed**, so overlap presence is
+necessary but not sufficient - roughly a third render correctly. Do not assume
+every overlapping document corrupts.
+
+The suffix class appears in real data: `document-000061` carries
+`'3560 Cedar Avenue, Charlotte NC'` and `'560 Cedar Avenue, Charlotte NC'`.
+
+Clean-record contamination measured 0 here, but a reviewer measured 1.5% on a
+`healthcare_claim`/`text` configuration, so that path remains a real risk.
 - Tiers 2-5 not started: security, product limitations, evidence quality,
   structure and tests.
 
