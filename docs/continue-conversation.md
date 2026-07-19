@@ -211,22 +211,36 @@ behaves as leftmost-longest, which `resolve_non_overlapping` implements. Where
 matches DO overlap Themis corrupts the output, so no expected value is correct
 and the framework records the exposure instead of guessing.
 
-### Why every scale run currently fails
+### Non-overlapping generation - RESOLVED
 
-The generator emits overlapping literals **by construction**:
+The generator previously emitted literals nested inside one another, so every
+catalog contained overlapping pairs, every scale run reproduced ISSUE-003, and
+no scale run could establish transformation correctness.
 
-- `person_name` is `"First Last"` for index <= 400 and `"First Last {index}"`
-  above, so the short form is contained in the long form.
-- `street_address` is `"{100+index} Cedar Avenue, Charlotte NC"`, so index `i`
-  and `i+3000` produce a suffix/prefix pair.
+Five generators used a variable-width index in a position allowing
+containment - `person_name`, `street_address`, `ipv4_address`, `ipv6_address`,
+`internal_product_name`. All now use fixed-width components.
 
-Every 5,000-rule catalog therefore contains overlapping pairs, every scale run
-reproduces ISSUE-003, and no scale run can currently establish transformation
-correctness. This is the gate on customer-facing evidence - not the remaining
-code review tiers.
+Generation now REFUSES to proceed if the catalog contains a nested literal
+pair, rather than producing a corpus that cannot answer the question it was
+generated for. That guard is what caught `internal_product_name`, which the
+manual sweep missed.
 
-Check `overlapping_match_documents` in the generation manifest before treating
-any run as a qualification.
+Verified at 5,000 rules / 2,000 records:
+
+```
+overlapping_match_documents      0
+intended_clean_with_literals     0
+```
+
+Containment is checked, not the wider suffix/prefix class. Containment is
+unavoidable - wherever the outer literal appears the inner one necessarily
+matches inside it. The suffix/prefix class needs the literals to abut in the
+input, never occurs on generated corpora, and reporting it produced 1.28
+million pairs on the 5,000 rule catalog.
+
+Still check `overlapping_match_documents` in the generation manifest before
+treating any run as a qualification.
 
 ### Tier 1 foundation (done)
 
