@@ -403,13 +403,21 @@ def generate_scale_artifacts(
                 )
 
                 realistic_scenario = (
-                    format_name == "json"
-                    and size_profile_name == "small"
-                    and scenario_name in {"customer_record", "support_ticket"}
+                    size_profile_name == "small"
+                    and (
+                        (
+                            scenario_name == "customer_record"
+                            and format_name in {"json", "csv"}
+                        )
+                        or (
+                            scenario_name == "support_ticket"
+                            and format_name == "json"
+                        )
+                    )
                 )
                 if (
                     scenario_name == "customer_record"
-                    and format_name == "json"
+                    and format_name in {"json", "csv"}
                     and size_profile_name == "small"
                 ):
                     record = _build_realistic_customer_record(
