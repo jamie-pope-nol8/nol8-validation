@@ -1195,6 +1195,28 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
+DEFAULT_RUNS_DIRECTORY = Path("artifacts/runs")
+
+
+def _run_directory(value: str) -> Path:
+    """Resolve --run as either a run directory path or a bare run ID.
+
+    A bare run ID is looked up under artifacts/runs, relative to the working
+    directory first and then to the repository root, so the command works from
+    anywhere. Unresolvable values are returned unchanged for the caller's
+    existing "Run directory does not exist" error.
+    """
+    candidate = Path(value)
+    if candidate.is_dir():
+        return candidate
+    if candidate.parent == Path("."):
+        for base in (DEFAULT_RUNS_DIRECTORY, REPOSITORY_ROOT / DEFAULT_RUNS_DIRECTORY):
+            resolved = base / candidate.name
+            if resolved.is_dir():
+                return resolved
+    return candidate
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="validate")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1208,7 +1230,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument(
         "--runs-dir",
         type=Path,
-        default=Path("artifacts/runs"),
+        default=DEFAULT_RUNS_DIRECTORY,
         help="Parent directory for validation runs",
     )
     generate_parser.add_argument(
@@ -1226,7 +1248,10 @@ def build_parser() -> argparse.ArgumentParser:
         "policy", help="Deploy the generated policy for a validation run"
     )
     policy_parser.add_argument(
-        "--run", type=Path, required=True, help="Existing validation Run directory"
+        "--run",
+        type=_run_directory,
+        required=True,
+        help="Existing validation run directory or run ID",
     )
     policy_parser.add_argument(
         "--target",
@@ -1239,7 +1264,10 @@ def build_parser() -> argparse.ArgumentParser:
         "run", help="Execute a generated validation corpus"
     )
     run_parser.add_argument(
-        "--run", type=Path, required=True, help="Existing validation Run directory"
+        "--run",
+        type=_run_directory,
+        required=True,
+        help="Existing validation run directory or run ID",
     )
     run_parser.add_argument(
         "--target",
@@ -1263,7 +1291,10 @@ def build_parser() -> argparse.ArgumentParser:
         "compare", help="Compare execution output with expected results"
     )
     compare_parser.add_argument(
-        "--run", type=Path, required=True, help="Existing validation Run directory"
+        "--run",
+        type=_run_directory,
+        required=True,
+        help="Existing validation run directory or run ID",
     )
     compare_parser.add_argument(
         "--replacement-max-length",
@@ -1274,7 +1305,10 @@ def build_parser() -> argparse.ArgumentParser:
         "report", help="Create a portable HTML validation report"
     )
     report_parser.add_argument(
-        "--run", type=Path, required=True, help="Existing validation Run directory"
+        "--run",
+        type=_run_directory,
+        required=True,
+        help="Existing validation run directory or run ID",
     )
     return parser
 
