@@ -1,3 +1,22 @@
+# Known Behaviors
+
+Scope
+
+This file documents accepted runtime behavior boundaries that policy authors
+and validation operators must design around.
+
+It does NOT document defects. A behavior belongs here only when it is
+understood, bounded, and safe to work within. Confirmed defects are tracked as
+issues in this directory.
+
+Current defects affecting validation:
+
+- ISSUE-003 - Themis source cursor misalignment corrupts output adjacent to
+  replacement tokens. Silent; no error signal. Not prevented by KB-001's
+  15-character guidance.
+
+---
+
 ### KB-001 - Replacement strings truncated to 15 characters
 
 Status: Confirmed runtime limitation  

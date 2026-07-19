@@ -1,23 +1,131 @@
 # Issue #003 - Scale Validation Transformation Mismatch
 
 Date: 2026-07-19  
-Status: Investigating  
-Category: Validation / Engine Behavior  
-Owner: Engineering  
-Discovered by: Scale Validation Qualification  
+Status: Confirmed defect - handover to Themis engineering  
+Category: Themis Runtime Defect / Data Correctness  
+Severity: High - silent output corruption  
+Owner: Themis engineering  
+Reported by: Scale Validation Qualification  
 
-## Summary
+---
 
-The 10,000 record / 5,000 rule validation qualification completed successfully from an execution perspective, but 272 records failed content validation due to differences between expected transformations and actual Themis output.
+# HANDOVER SUMMARY
 
-The framework generated deterministic expected results, Themis processed all requests successfully, but the returned transformations did not match the expected replacement behavior.
+## What is broken
 
-A known Themis runtime limitation has been confirmed as a contributing factor:
+The Themis runtime writes replacement tokens at a miscalculated source offset.
+Output is silently corrupted: characters adjacent to the replacement are either
+duplicated or destroyed.
 
-- Replacement strings longer than 15 characters are truncated during runtime transformation processing.
-- This behavior is documented in KNOWN_BEHAVIORS.md as KB-001.
+This is a runtime defect, not a policy authoring constraint and not a
+validation framework issue. The framework generated correct policies and
+correct expected output; Themis returned HTTP 200 for every request.
 
-Further investigation is required to determine whether any additional scale-specific transformation issues remain after accounting for the known replacement length limitation.
+## Why it matters
+
+The corruption is silent. Every request succeeded. Nothing in the response
+indicates the output is wrong. A customer running this workload would receive
+malformed redacted data with no error signal.
+
+Corruption destroys real characters. In the negative-delta cases the runtime
+consumes the delimiter preceding the token, which in CSV output merges two
+fields:
+
+```
+expected:  CUST-647637,[PII:PERSON_NAM
+actual:    CUST-647637[PII:PERSON_NAM
+```
+
+The record is now structurally invalid CSV, not merely cosmetically wrong.
+
+## Reproduction
+
+```
+Run ID:  20260719T161514709224Z
+Rules:   5,000
+Records: 10,000
+Target:  Themis
+```
+
+Result: 10,000/10,000 requests succeeded, 272 records returned corrupted
+output.
+
+Artifact: `artifacts/runs/20260719T161514709224Z/generated/comparison.jsonl`
+(field `expected_message` vs `actual_message`, `status == CONTENT_MISMATCH`)
+
+## The measured law
+
+Let `L` = byte length of the matched `person_name` literal and
+`delta` = `len(actual) - len(expected)`.
+
+```
+delta = 20 - L
+```
+
+| L     | 15  | 16  | 17  | 18  | 19  | 20 | 21  |
+|-------|-----|-----|-----|-----|-----|----|-----|
+| delta | +5  | +4  | +3  | +2  | +1  | 0  | -1  |
+| count | 38  | 53  | 59  | 45  | 35  | -  | 8   |
+
+Equivalently, the runtime consumes `2L - 20` source bytes where it should
+consume `L`. The error is zero at `L = 20`, and no length-20 literal appears
+in the failure set.
+
+This is the signature of a double-advance: the source cursor is advanced by
+the matched literal length and then corrected a second time against a fixed
+20-byte reference.
+
+## What engineering needs to determine
+
+The gating factor. Literal length determines the magnitude of the corruption
+but not whether it occurs:
+
+```
+L=17 -> 63 failed, 320 passed
+L=15 -> 38 failed, 102 passed
+L=19 -> 38 failed, 145 passed
+```
+
+1,453 of the 9,728 passing records contain a `person_name` match and are
+unaffected.
+
+Leading hypothesis: a rule-table collision in which the correct literal is
+matched but a different catalog entry's length drives the cursor advance. This
+would account for both the fixed 20-byte reference and the partial firing rate.
+
+Open questions:
+
+- What determines whether the misalignment fires?
+- Does the 20-byte reference correspond to a specific catalog entry length?
+- Is the defect specific to `person_name`, or to any multi-token literal?
+- Is a large catalog (5,000 rules) required to reproduce?
+
+## Relationship to KB-001
+
+KB-001 (replacement strings truncated to 15 characters) is a separate,
+previously documented behavior. It does NOT explain these failures.
+
+The 272 failures were measured with `--replacement-max-length 15` applied.
+Constraining replacements to 15 characters does not prevent this corruption.
+
+Both defects are length-accounting errors in the replacement writer and may
+share a root cause. That is worth checking but is not established.
+
+---
+
+# INVESTIGATION RECORD
+
+The material below is the working record, retained for provenance. It contains
+hypotheses that were subsequently disproved; the handover summary above is
+authoritative.
+
+Superseded readings, for the record:
+
+- "Truncation explains the failures" - disproved. Failures persist under
+  normalization at 15 characters.
+- "Replacement rescanning" - disproved. Rescanning would produce a well-formed
+  nested token; the observed fragments are variable-length partial prefixes,
+  and negative-delta cases consume unrelated preceding characters.
 
 ---
 
@@ -165,13 +273,16 @@ KB-001 - Replacement strings truncated to 15 characters
 
 ## Root Cause Analysis
 
-### Confirmed
+### Confirmed - replacement truncation (KB-001)
 
 Themis runtime truncates replacement literals longer than 15 characters.
 
 This behavior occurs after policy generation and during runtime transformation processing.
 
 No framework-side policy generation or serialization issue has been identified.
+
+Note: this was initially believed to explain the 272 failures. It does not.
+See "Confirmed - Source Cursor Misalignment" below.
 
 ---
 
@@ -273,35 +384,51 @@ The execution path is stable, but transformation correctness must reach 100% bef
 
 ## Recommendation
 
-Continue isolated runtime qualification using minimal deterministic tests.
+The defect is characterised well enough to hand to Themis engineering. The
+remaining validation-side work is to isolate the gating factor.
 
-Validate:
+Next experiment - hold `person_name` literal length constant:
 
-- replacement length handling
-- overlapping literal behavior
-- replacement rescanning behavior
-- rule ordering behavior
+Generate a catalog in which every `person_name` literal is exactly one length
+(17 is the largest failure bucket) and execute a modest record count.
 
-After engine behavior is confirmed, update either:
+- Failures appear -> catalog size is not required to reproduce, and a small
+  deterministic repro can be handed over.
+- Failures disappear -> the defect requires differing literal lengths in the
+  catalog, which is direct support for the rule-table collision hypothesis.
 
-- framework policy generation rules
-- validation expectations
-- Themis configuration/runtime behavior
+Either outcome eliminates a hypothesis. A further 5,000-rule run is not
+warranted until this is resolved.
+
+Do not change framework policy generation or validation expectations to
+accommodate this behavior. The framework output is correct; masking the
+corruption would hide a customer-facing data integrity defect.
 
 ---
 
 ## Resolution
 
-Pending.
+Open. Awaiting Themis engineering.
+
+Framework-side: no change required. Generation, policy deployment, execution,
+and comparison all behaved correctly and correctly identified the defect.
 
 ---
 
 ## Regression Test
 
-The final validation suite should prove:
+Once the runtime defect is resolved, the validation suite should prove:
 
 - 5,000 rules load successfully.
 - 10,000 records process successfully.
 - Expected transformations equal actual transformations.
-- CONTENT_MISMATCH count is zero after known runtime limitations are accounted for.
+- CONTENT_MISMATCH count is zero.
 - Results remain deterministic across repeated runs.
+
+Targeted guard for this defect:
+
+- For every replacement, output length equals input length minus the matched
+  literal length plus the replacement length.
+- No character adjacent to a replacement token is added or removed.
+- Verified across the full range of matched literal lengths, including
+  L = 20 where the observed error is zero.
