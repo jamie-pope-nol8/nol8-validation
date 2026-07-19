@@ -174,19 +174,20 @@ Documented in:
 
 ## Qualification runs
 
-### Clean qualification - 20260719T204836698102Z (CURRENT, PASSING)
+### Clean qualification - 20260719T230452981053Z (CURRENT, PASSING)
 
-Generated after the non-overlapping generator fix. This is the first
-trustworthy scale evidence the framework has produced.
+Generated after both the non-overlapping generator fix AND the replacement
+token distinctness fix. This is the authoritative result: no known blind spot.
 
 ```
 5,000 rules / 10,000 records / customer-record-csv
 overlapping_match_documents: 0
+replacement tokens distinct under 15-character truncation
 
 Requests succeeded: 10,000    Requests failed: 0
 PASS: 10,000                  CONTENT_MISMATCH: 0
-Latency p50/p95/p99: 12.490 / 14.194 / 16.480 ms
-Report: PASS, 100.00%, 12 KB
+Latency p50/p95/p99: 12.492 / 14.214 / 16.686 ms
+Report: PASS, 100.00%
 ```
 
 Requires `--replacement-max-length 15` for KB-001. Without it, all 7,479 dirty
@@ -200,6 +201,13 @@ size within 1%.
 also means ISSUE-003 is not a marginal edge case - it accounted for every
 failure in the original qualification.
 
+### Earlier clean qualification - 20260719T204836698102Z (superseded)
+
+Same result (10,000 PASS) but produced while three `[BUSINESS_TERMS:*]` tokens
+still collapsed to one string under truncation, so a wrong-rule application in
+that family would have scored PASS. Superseded by the run above; do not cite
+it.
+
 ### Original qualification - 20260719T161514709224Z (FAILING, retained as evidence)
 
 ```
@@ -209,10 +217,10 @@ failure in the original qualification.
 
 Caused by ISSUE-003. Cited throughout the issue documentation; preserve it.
 
-## KNOWN BLIND SPOT in the 100% result
+## Replacement token distinctness - RESOLVED
 
 `--replacement-max-length 15` truncates expected replacements, and truncation
-is not injective. Three tokens collapse to the same string:
+is not injective. Three tokens previously collapsed to one string:
 
 ```
 [BUSINESS_TERMS:CONTRACT_NUMBER]  ->  [BUSINESS_TERMS
@@ -220,12 +228,18 @@ is not injective. Three tokens collapse to the same string:
 [BUSINESS_TERMS:SUPPORT_CASE_ID]  ->  [BUSINESS_TERMS
 ```
 
-If Themis applied the wrong rule within that family, comparison still scores
-PASS. The clean qualification contained 4,755 business_terms transformations,
-so the 100% is not airtight for that family.
+A wrong-rule application within that family scored PASS, covering 4,755
+transformations in the first clean qualification.
 
-Fix: shorten those replacement tokens so they remain distinct within 15
-characters, then re-run. Do this before showing the result to a customer.
+Category and pattern names are now abbreviated so every token stays distinct
+within the 15-character budget - `[BIZ:CONTRACT_NUMBER]`, `[BIZ:CUSTOMER_ID]`,
+`[BIZ:SUPPORT_CASE_ID]`. Generation refuses a catalog whose tokens collide when
+truncated.
+
+The exhaustive test over every category and pattern combination also caught
+`internal_url` and `internal_product_name`, which both reduce to `INTERNAL_`.
+The shipped configurations avoid it by placing them in different families, so
+testing only shipped configurations would have missed it.
 
 ## Code review
 
@@ -326,18 +340,14 @@ Clean-record contamination measured 0 here, but a reviewer measured 1.5% on a
 
 # Immediate Next Actions
 
-1. **Close the business_terms blind spot** (see above). Shorten those
-   replacement tokens so they stay distinct within 15 characters, regenerate,
-   and re-run the qualification.
-
-2. **Tier 2 security** (`docs/CODE_REVIEW_PLAN.md`): `curl -k` on the policy
+1. **Tier 2 security** (`docs/CODE_REVIEW_PLAN.md`): `curl -k` on the policy
    control plane, and both transports sourcing a git-tracked `config/demo.env`.
 
-3. **Tier 4 report usability**: a failing report renders every failure as a
+2. **Tier 4 report usability**: a failing report renders every failure as a
    full expected/actual pair with no diff, grouping, or root-cause
    classification - 2.6 MB for 272 failures. Passing reports are fine (12 KB).
 
-4. **T1-6: generation depends on YAML key order**, not only the seed.
+3. **T1-6: generation depends on YAML key order**, not only the seed.
    `generate_workload.py` `_weighted_item` builds a list from `dict.keys()` and
    passes it to `random.choices`. Latent today because the config snapshot uses
    `sort_keys=False`, but any re-serialization silently invalidates
