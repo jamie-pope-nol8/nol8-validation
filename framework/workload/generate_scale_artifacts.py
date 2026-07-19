@@ -55,6 +55,66 @@ def is_scale_workload(config: Mapping[str, Any]) -> bool:
     return all(key in config for key in ("name", "seed", "policy", "documents"))
 
 
+# Themis truncates replacement strings to 15 characters at runtime (KB-001),
+# and comparison normalises expected values to match. Truncation is not
+# injective, so two replacement tokens sharing a 15-character prefix become
+# indistinguishable and the framework cannot tell whether the runtime applied
+# the right rule. Category names are abbreviated to keep tokens distinct inside
+# that budget.
+REPLACEMENT_TRUNCATION_LIMIT = 15
+
+_CATEGORY_ABBREVIATIONS = {
+    "business_terms": "BIZ",
+    "credentials": "CRED",
+    "financial": "FIN",
+    "healthcare": "HEALTH",
+    "infrastructure": "INFRA",
+}
+
+# Patterns whose names share a long prefix and would otherwise collide inside
+# the truncation budget - "internal_url" and "internal_product_name" both
+# reduce to "INTERNAL_" once a category prefix is applied.
+_PATTERN_ABBREVIATIONS = {
+    "internal_url": "URL",
+    "internal_product_name": "PRODUCT",
+}
+
+
+def _replacement_token(category_id: str, pattern_id: str) -> str:
+    category = _CATEGORY_ABBREVIATIONS.get(category_id, category_id.upper())
+    pattern = _PATTERN_ABBREVIATIONS.get(pattern_id, pattern_id.upper())
+    return f"[{category}:{pattern}]"
+
+
+def _assert_replacements_distinct_when_truncated(rules: list[ScaleRule]) -> None:
+    """Every replacement must survive KB-001 truncation distinguishably.
+
+    Without this, `compare --replacement-max-length 15` silently scores a
+    wrong-rule application as PASS. Three [BUSINESS_TERMS:*] tokens previously
+    collapsed to "[BUSINESS_TERMS", covering 4,755 transformations in a
+    qualification run that reported 100%.
+    """
+    collapsed: dict[str, set[str]] = {}
+    for rule in rules:
+        key = rule.replacement[:REPLACEMENT_TRUNCATION_LIMIT]
+        collapsed.setdefault(key, set()).add(rule.replacement)
+
+    collisions = {
+        key: sorted(values)
+        for key, values in collapsed.items()
+        if len(values) > 1
+    }
+    if collisions:
+        detail = "; ".join(
+            f"{key!r} <- {values}" for key, values in sorted(collisions.items())
+        )
+        raise ValueError(
+            f"Replacement tokens collide when truncated to "
+            f"{REPLACEMENT_TRUNCATION_LIMIT} characters, so validation cannot "
+            f"distinguish which rule the runtime applied: {detail}"
+        )
+
+
 def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
     policy = workload.get("policy")
     if not isinstance(policy, Mapping):
@@ -86,7 +146,7 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
             rule_count,
         )
         used_variants.add(variant)
-        replacement = f"[{category_id.upper()}:{pattern_id.upper()}]"
+        replacement = _replacement_token(str(category_id), pattern_id)
         rules.append(
             ScaleRule(
                 rule_id=rule_id,
@@ -96,6 +156,7 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
                 replacement=replacement,
             )
         )
+    _assert_replacements_distinct_when_truncated(rules)
     return rules
 
 
