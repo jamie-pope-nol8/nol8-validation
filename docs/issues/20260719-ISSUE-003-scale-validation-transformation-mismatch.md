@@ -115,7 +115,25 @@ literal. Removing only those rules (5,000 -> 4,969):
 Every affected literal has exactly one prefix rule in the catalog. Neither
 control literal has one.
 
-### 3. Replacement length is not a factor
+### 3. Only prefix containment triggers the defect
+
+Three containment classes were tested against Themis with curl. Only the
+prefix case corrupts output.
+
+| policy                                               | input                         | output                    |
+|------------------------------------------------------|-------------------------------|---------------------------|
+| `"Elena Chen 1327"`, `"Elena Chen"` (prefix)         | `name: Elena Chen 1327, done` | `na[NAME], done` CORRUPT  |
+| `"3104 Cedar Avenue"`, `"104 Cedar Avenue"` (suffix) | `addr: 3104 Cedar Avenue, done` | `addr: [ADDR], done` correct |
+| `"XX Elena Chen YY"`, `"Elena Chen"` (middle)        | `name: XX Elena Chen YY, done` | `name: [MID], done` correct |
+| `"Elena Chen 1327"`, `"Robert Smith 9999"` (disjoint)| `name: Elena Chen 1327, done` | `name: [NAME], done` correct |
+
+The trigger is specifically a literal that is a strict PREFIX of another
+literal. General substring containment is handled correctly.
+
+This matters for the customer-facing constraint: policies may contain literals
+that overlap in the middle or at the end without risk.
+
+### 4. Replacement length is not a factor
 
 A 7-rule policy containing no prefix overlaps was tested with replacements of
 17, 15, and 10 characters. All produced correct output for all literals,
