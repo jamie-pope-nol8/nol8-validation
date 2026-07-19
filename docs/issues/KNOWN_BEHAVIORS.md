@@ -11,9 +11,13 @@ issues in this directory.
 
 Current defects affecting validation:
 
-- ISSUE-003 - Themis source cursor misalignment corrupts output adjacent to
-  replacement tokens. Silent; no error signal. Not prevented by KB-001's
-  15-character guidance.
+- ISSUE-003 - Overlapping literal rules corrupt Themis output. When one rule's
+  literal is a strict prefix of another's, the runtime computes the wrong match
+  start offset and destroys content preceding the match. Silent; no error
+  signal. Not prevented by KB-001's 15-character guidance.
+
+  Authoring constraint until resolved: a policy must not contain a literal that
+  is a strict prefix of another literal.
 
 ---
 
@@ -68,8 +72,8 @@ Further engineering work is required to determine whether the runtime limitation
 IMPORTANT - normalization is not a general workaround
 
 Keeping replacement strings ≤15 characters does NOT guarantee correct Themis
-output. A separate defect (source cursor misalignment) corrupts output
-independently of replacement length. See ISSUE-003.
+output. A separate and unrelated defect (ISSUE-003) corrupts output when a
+policy contains overlapping literals, at any replacement length.
 
 In run `20260719T161514709224Z`, 272 records failed with normalization applied
 at 15 characters. This behavior boundary covers replacement truncation only.

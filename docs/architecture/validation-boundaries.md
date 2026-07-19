@@ -118,11 +118,16 @@ Content validation results:
 - Pass rate: 97.280%
 - Failure classification: CONTENT_MISMATCH
 
-The 272 failures are caused by a confirmed Themis runtime defect that writes
-replacement tokens at a miscalculated source offset, corrupting adjacent
-characters. The corruption is silent; every request returned HTTP 200.
+The 272 failures are caused by a confirmed Themis runtime defect: policies
+containing overlapping literals, where one rule's literal is a strict prefix of
+another's, cause the runtime to compute the wrong match start offset and
+destroy content preceding the match. The corruption is silent; every request
+returned HTTP 200.
 
-See ISSUE-003 for the defect characterisation and handover.
+The qualification catalog contained 31 such prefix literals. Removing only
+those rules eliminates the corruption entirely.
+
+See ISSUE-003 for the root cause, evidence, and handover.
 
 Execution:
 - Total duration: 416.045 seconds
@@ -165,25 +170,43 @@ Bounded and predictable. Policy authors can design around it by keeping
 replacement strings at or below 15 characters. The validation framework can
 normalize for it using `--replacement-max-length 15`.
 
-### Source cursor misalignment (ISSUE-003)
+### Overlapping literal corruption (ISSUE-003)
 
-The runtime writes the replacement at a miscalculated source offset, either
-duplicating or destroying characters adjacent to the token.
+When a policy contains two rules whose literals overlap - one a strict prefix
+of the other - the runtime computes the wrong match start offset and destroys
+content preceding the match.
 
-Not bounded and not safe to design around:
+Root cause confirmed. Reproducible with two rules and one record.
+
+Not safe to design around silently, but it is now a stateable constraint:
 
 - It is silent. Every affected request returned HTTP 200.
-- It destroys real characters, including CSV field delimiters, producing
-  structurally invalid records.
-- It is not prevented by the KB-001 15-character guidance. The 272 observed
-  failures were measured with that normalization applied.
-- The condition that triggers it is not yet known. Records with identical
-  literal lengths both pass and fail.
+- Data loss is unbounded and not limited to delimiters. Shorter replacements
+  destroy MORE preceding content, not less.
+- It is not prevented by the KB-001 15-character guidance, and is unrelated to
+  replacement truncation.
+- Either rule alone renders correctly. Only their coexistence triggers it, and
+  rule order does not matter.
+
+Authoring constraint until resolved:
+
+```
+A policy must not contain a literal that is a strict prefix of another literal.
+```
+
+This is a genuine restriction, not a synthetic-data artifact. A customer
+redacting both "Acme Corp" and "Acme Corporation" would hit it.
 
 ### Implication for validation
 
-Until ISSUE-003 is resolved, transformation correctness cannot be asserted at
-scale for any workload containing multi-token literals such as `person_name`.
+Transformation correctness cannot be asserted for any catalog containing
+overlapping literals.
+
+The scale workload generator currently produces them by construction - bare
+`"First Last"` for indices <= 400 and `"First Last {index}"` above - so the
+5,000-rule qualification catalog contained 31 prefix literals.
 
 Execution stability, latency, policy capacity, and catalog scale are
-independently established and remain valid.
+independently established and remain valid. Catalog size is not itself a
+boundary: it correlated with failures only because a larger generated catalog
+is more likely to contain an overlapping pair.

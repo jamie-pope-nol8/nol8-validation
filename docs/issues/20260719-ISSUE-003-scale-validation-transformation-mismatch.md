@@ -1,9 +1,9 @@
-# Issue #003 - Scale Validation Transformation Mismatch
+# Issue #003 - Overlapping literal rules corrupt Themis output
 
 Date: 2026-07-19  
-Status: Confirmed defect - handover to Themis engineering  
+Status: Root cause confirmed - handover to Themis engineering  
 Category: Themis Runtime Defect / Data Correctness  
-Severity: High - silent output corruption  
+Severity: High - silent, unbounded data loss  
 Owner: Themis engineering  
 Reported by: Scale Validation Qualification  
 
@@ -11,55 +11,130 @@ Reported by: Scale Validation Qualification
 
 # HANDOVER SUMMARY
 
-## What is broken
+## Root cause
 
-The Themis runtime writes replacement tokens at a miscalculated source offset.
-Output is silently corrupted: characters adjacent to the replacement are either
-duplicated or destroyed.
+When a policy contains two rules whose literals overlap - specifically, where
+one rule's literal is a strict prefix of another rule's literal - the Themis
+runtime computes the wrong start offset for the replacement.
 
-This is a runtime defect, not a policy authoring constraint and not a
-validation framework issue. The framework generated correct policies and
-correct expected output; Themis returned HTTP 200 for every request.
+The match END is correct. The match START is wrong. The runtime therefore
+overwrites content preceding the match.
+
+Either rule alone produces correct output. Only their coexistence in the same
+policy triggers the defect, and the order in which they appear does not matter.
+
+## Minimal reproduction
+
+Two rules, one record. No scale required.
+
+Policy:
+
+```
+"Elena Chen 1327" -> "[PII:PERSON_NAME]";
+"Elena Chen"      -> "[PII:PERSON_NAME]";
+```
+
+Input:
+
+```
+name: Elena Chen 1327, done
+```
+
+Observed output:
+
+```
+name: [PII:[PII:PERSON_NAM, done
+```
+
+Control cases, same input:
+
+| policy                                | output                             |
+|---------------------------------------|------------------------------------|
+| full rule only                        | `name: [PII:PERSON_NAM, done`      |
+| prefix rule only                      | `name: [PII:PERSON_NAM 1327, done` |
+| both rules, prefix listed second      | `name: [PII:[PII:PERSON_NAM, done` |
+| both rules, prefix listed first       | `name: [PII:[PII:PERSON_NAM, done` |
+| both rules, replacement `[NAME]`      | `na[NAME], done`                   |
+| both rules, replacements `[FULL]`/`[PFX]` | `n[FULL], done`                |
+
+Reproduction script: `scripts/repro-issue-003.py`
 
 ## Why it matters
 
-The corruption is silent. Every request succeeded. Nothing in the response
-indicates the output is wrong. A customer running this workload would receive
-malformed redacted data with no error signal.
+The corruption is silent. Every request returns HTTP 200. Nothing in the
+response indicates the output is wrong.
 
-Corruption destroys real characters. In the negative-delta cases the runtime
-consumes the delimiter preceding the token, which in CSV output merges two
-fields:
+The data loss is unbounded. It is not limited to a delimiter. In the
+`[NAME]` case above, four characters of legitimate preceding content
+(`me: `) were destroyed; in the `[FULL]` case, five (`ame: `). The number of
+destroyed bytes varies with the configured replacement lengths, so a policy
+with short replacements loses MORE surrounding data, not less.
+
+In CSV output this merges fields and produces structurally invalid records:
 
 ```
 expected:  CUST-647637,[PII:PERSON_NAM
 actual:    CUST-647637[PII:PERSON_NAM
 ```
 
-The record is now structurally invalid CSV, not merely cosmetically wrong.
+## Evidence
 
-## Reproduction
+### 1. Bisecting the catalog isolates a single causal rule
 
-```
-Run ID:  20260719T161514709224Z
-Rules:   5,000
-Records: 10,000
-Target:  Themis
-```
-
-Result: 10,000/10,000 requests succeeded, 272 records returned corrupted
-output.
-
-Artifact: `artifacts/runs/20260719T161514709224Z/generated/comparison.jsonl`
-(field `expected_message` vs `actual_message`, `status == CONTENT_MISMATCH`)
-
-## The measured law
-
-Let `L` = byte length of the matched `person_name` literal and
-`delta` = `len(actual) - len(expected)`.
+Policies were built as prefixes of the qualification catalog, preserving rule
+content, ordering, and position. Probe literal: `Caroline Ramirez 1291`.
 
 ```
-delta = 20 - L
+1,699 rules -> clean
+1,700 rules -> corrupt
+```
+
+Rule 1,700 is:
+
+```
+"Caroline Ramirez" -> "[PII:PERSON_NAME]";
+```
+
+a strict prefix of the probe literal.
+
+### 2. Removing prefix rules eliminates the corruption
+
+The full catalog contains 31 literals that are a strict prefix of another
+literal. Removing only those rules (5,000 -> 4,969):
+
+| literal                 | full catalog | prefix rules removed |
+|-------------------------|--------------|----------------------|
+| Caroline Ramirez 1291   | CORRUPT -1   | clean                |
+| Alicia Johnson 3763     | CORRUPT +1   | clean                |
+| Alicia Wright 1543      | CORRUPT +2   | clean                |
+| Alicia Patel 1243       | CORRUPT +3   | clean                |
+| Elena Chen 1327         | CORRUPT +5   | clean                |
+| Alicia Clark 3043 (ctl) | clean        | clean                |
+| Alicia Chen 1723 (ctl)  | clean        | clean                |
+
+Every affected literal has exactly one prefix rule in the catalog. Neither
+control literal has one.
+
+### 3. Replacement length is not a factor
+
+A 7-rule policy containing no prefix overlaps was tested with replacements of
+17, 15, and 10 characters. All produced correct output for all literals,
+including every literal that fails at full catalog.
+
+## Scale is not the trigger
+
+Catalog size correlates with the defect only because a larger generated
+catalog is more likely to contain an overlapping pair. The 5,000-rule
+qualification and the 2-rule reproduction exhibit identical behavior.
+
+## Observed offset arithmetic
+
+For the qualification workload, where the replacement rendered as a
+15-character token, the corrupted region always spanned 20 bytes regardless of
+matched literal length `L`, giving:
+
+```
+delta = len(actual) - len(expected) = 20 - L
 ```
 
 | L     | 15  | 16  | 17  | 18  | 19  | 20 | 21  |
@@ -67,49 +142,31 @@ delta = 20 - L
 | delta | +5  | +4  | +3  | +2  | +1  | 0  | -1  |
 | count | 38  | 53  | 59  | 45  | 35  | -  | 8   |
 
-Equivalently, the runtime consumes `2L - 20` source bytes where it should
-consume `L`. The error is zero at `L = 20`, and no length-20 literal appears
-in the failure set.
+This law was derived from the 272 qualification failures and subsequently
+predicted the delta for all five probe literals correctly in isolated
+single-record tests.
 
-This is the signature of a double-advance: the source cursor is advanced by
-the matched literal length and then corrected a second time against a fixed
-20-byte reference.
-
-## What engineering needs to determine
-
-The gating factor. Literal length determines the magnitude of the corruption
-but not whether it occurs:
-
-```
-L=17 -> 63 failed, 320 passed
-L=15 -> 38 failed, 102 passed
-L=19 -> 38 failed, 145 passed
-```
-
-1,453 of the 9,728 passing records contain a `person_name` match and are
-unaffected.
-
-Leading hypothesis: a rule-table collision in which the correct literal is
-matched but a different catalog entry's length drives the cursor advance. This
-would account for both the fixed 20-byte reference and the partial firing rate.
-
-Open questions:
-
-- What determines whether the misalignment fires?
-- Does the 20-byte reference correspond to a specific catalog entry length?
-- Is the defect specific to `person_name`, or to any multi-token literal?
-- Is a large catalog (5,000 rules) required to reproduce?
+The constant is not universal. It varies with the configured replacement
+lengths, as the `[NAME]` and `[FULL]`/`[PFX]` cases above demonstrate. The
+invariant is that the match end is correct and the start is displaced.
 
 ## Relationship to KB-001
 
-KB-001 (replacement strings truncated to 15 characters) is a separate,
-previously documented behavior. It does NOT explain these failures.
+KB-001 (replacement strings truncated to 15 characters) is a separate and
+unrelated behavior. It is reproducible with a single rule and no overlap; this
+defect is reproducible with a short replacement and no truncation.
 
-The 272 failures were measured with `--replacement-max-length 15` applied.
-Constraining replacements to 15 characters does not prevent this corruption.
+An earlier revision of this issue suggested the two might share a root cause.
+That is now disproved - see "Replacement length is not a factor" above.
 
-Both defects are length-accounting errors in the replacement writer and may
-share a root cause. That is worth checking but is not established.
+Constraining replacements to 15 characters does NOT prevent this corruption.
+
+## Suggested area to investigate
+
+Match start offset computation when more than one rule matches at the same
+position. The end offset is correct in every observed case, so the fault is
+likely in deriving start from end using a length belonging to the wrong
+matched rule.
 
 ---
 
@@ -126,6 +183,16 @@ Superseded readings, for the record:
 - "Replacement rescanning" - disproved. Rescanning would produce a well-formed
   nested token; the observed fragments are variable-length partial prefixes,
   and negative-delta cases consume unrelated preceding characters.
+- "Prefix collision is ruled out" - WRONG. Tested against the 395 literals
+  appearing in records rather than the full 5,000-rule catalog, which excluded
+  the prefix rules. Prefix collision is the confirmed root cause.
+- "Double-advance against a fixed 20-byte reference" - partially superseded.
+  The 20-byte constant is specific to the qualification's replacement lengths,
+  not intrinsic. The invariant is that the match end is correct and the start
+  is displaced.
+- "Catalog scale is required" - superseded. Scale correlates only because a
+  larger generated catalog is more likely to contain an overlapping pair. Two
+  rules suffice.
 
 ---
 
@@ -342,10 +409,10 @@ This is the signature of a double-advance: the source cursor is advanced by the
 matched literal length and then corrected a second time against a fixed 20-byte
 reference.
 
-#### Gating factor still unknown
+#### Gating factor - RESOLVED
 
-Literal length determines the magnitude of corruption but does not determine
-whether it occurs. Passing records span the same length range as failures:
+At the time of writing, the gating factor was unknown. Literal length appeared
+to determine the magnitude of corruption but not whether it occurred:
 
 ```
 L=17 -> 63 failed, 320 passed
@@ -353,11 +420,15 @@ L=15 -> 38 failed, 102 passed
 L=19 -> 38 failed, 145 passed
 ```
 
-1453 of 9728 passing records contain a `person_name` match and are unaffected.
+The gating factor is the presence of a second rule whose literal is a strict
+prefix of the matched literal. See the handover summary.
 
-Leading hypothesis: a rule-table collision in which the correct literal is
-matched but a different catalog entry's length is used to advance the cursor.
-This would explain both the fixed 20-byte reference and the partial firing rate.
+Note on a false negative recorded during this investigation: an earlier
+analysis tested prefix relationships among the 395 literals that appeared in
+records and found none, and prefix collision was wrongly ruled out. Prefix
+rules such as `"Caroline Ramirez"` are present in the catalog but never match
+a record, so they were absent from the reference set. The hypothesis was
+tested against the wrong population, not disproved.
 
 Evidence: run `20260719T161514709224Z`, artifact `generated/comparison.jsonl`.
 
@@ -365,12 +436,12 @@ Evidence: run `20260719T161514709224Z`, artifact `generated/comparison.jsonl`.
 
 ### Remaining Investigation
 
-- Identify the gating factor that determines whether the misalignment fires.
-- Determine whether the 20-byte reference corresponds to a specific catalog
-  entry length.
-- Determine whether the defect is specific to `person_name` or to any
-  multi-token literal.
-- Determine whether catalog size (5,000 rules) is required to reproduce.
+Closed. Root cause confirmed; see handover summary.
+
+Validation-framework follow-up is tracked separately: the scale workload
+generator emits bare `"First Last"` literals for indices <= 400 and
+`"First Last {index}"` above, so generated catalogs contain overlapping
+literals by construction.
 
 ---
 
@@ -384,34 +455,47 @@ The execution path is stable, but transformation correctness must reach 100% bef
 
 ## Recommendation
 
-The defect is characterised well enough to hand to Themis engineering. The
-remaining validation-side work is to isolate the gating factor.
+### Themis engineering
 
-Next experiment - hold `person_name` literal length constant:
+Investigate match start offset computation where more than one rule matches at
+the same position. Reproduce with `scripts/repro-issue-003.py`.
 
-Generate a catalog in which every `person_name` literal is exactly one length
-(17 is the largest failure bucket) and execute a modest record count.
+### Customer guidance, until resolved
 
-- Failures appear -> catalog size is not required to reproduce, and a small
-  deterministic repro can be handed over.
-- Failures disappear -> the defect requires differing literal lengths in the
-  catalog, which is direct support for the rule-table collision hypothesis.
+Policies must not contain a literal that is a strict prefix of another literal.
+Any such pair silently corrupts output wherever the longer literal matches.
 
-Either outcome eliminates a hypothesis. A further 5,000-rule run is not
-warranted until this is resolved.
+This is a real authoring constraint. Overlapping literals are natural in
+practice - a customer redacting both `"Acme Corp"` and `"Acme Corporation"`
+would hit this.
 
-Do not change framework policy generation or validation expectations to
-accommodate this behavior. The framework output is correct; masking the
-corruption would hide a customer-facing data integrity defect.
+### Validation framework
+
+Do not change validation expectations to accommodate this behavior. The
+framework output is correct; masking the corruption would hide a
+customer-facing data integrity defect.
+
+Two changes are warranted:
+
+- Detect literals that are a strict prefix of another literal during policy
+  generation, and report them. The framework should be able to tell an operator
+  that a catalog contains overlapping literals before execution.
+- Offer a generation mode that produces no overlapping literals, so that
+  qualification runs can isolate other behavior.
+
+The scale generator currently produces overlapping literals by construction:
+bare `"First Last"` for indices <= 400 and `"First Last {index}"` above. The
+qualification catalog contained 31 such prefix literals.
 
 ---
 
 ## Resolution
 
-Open. Awaiting Themis engineering.
+Root cause confirmed. Awaiting Themis engineering for the runtime fix.
 
-Framework-side: no change required. Generation, policy deployment, execution,
-and comparison all behaved correctly and correctly identified the defect.
+Framework-side: generation, policy deployment, execution, and comparison all
+behaved correctly and correctly identified the defect. Follow-up work is
+additive (overlap detection and reporting), not corrective.
 
 ---
 
@@ -427,8 +511,14 @@ Once the runtime defect is resolved, the validation suite should prove:
 
 Targeted guard for this defect:
 
+- A policy containing a literal and a strict prefix of that literal produces
+  correct output for both.
+- Verified with the prefix rule listed first and listed second.
+- Verified with replacements shorter than, equal to, and longer than the
+  15-character KB-001 truncation boundary.
 - For every replacement, output length equals input length minus the matched
-  literal length plus the replacement length.
-- No character adjacent to a replacement token is added or removed.
-- Verified across the full range of matched literal lengths, including
-  L = 20 where the observed error is zero.
+  literal length plus the rendered replacement length.
+- No character preceding a replacement token is added or removed.
+
+`scripts/repro-issue-003.py` covers these cases and should fail while the
+runtime defect is present.
