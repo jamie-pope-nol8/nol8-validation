@@ -41,6 +41,7 @@ class ValidateReportTests(unittest.TestCase):
                 "dirty_record_count": 2,
                 "scenario_distribution": {"customer_record": 3},
                 "format_distribution": {"json": 3},
+                "payload_bytes_total": 12345,
                 "expected_total_matches": 2,
             }
         if comparison_rows is None:
@@ -222,6 +223,39 @@ class ValidateReportTests(unittest.TestCase):
         html = (run_directory / "reports/validation-report.html").read_text()
         self.assertIn("Harness runtime</th><td>0.000 seconds", html)
         self.assertIn("Harness throughput</th><td>0.00 req/sec", html)
+
+    def test_data_path_profile_renders_context_and_observations(self) -> None:
+        run_directory = self.create_run()
+        report_run(run_directory)
+        html = (run_directory / "reports/validation-report.html").read_text()
+
+        for expected in (
+            "Data Path Profile",
+            "Architecture",
+            "Processing path</th><td>Nol8 FPGA-accelerated data path",
+            "Workload",
+            "Records evaluated</th><td>3",
+            "Rules deployed</th><td>10",
+            "Expected transformations</th><td>2",
+            "Input payload size</th><td>12345 bytes",
+            "Observed",
+            "Harness throughput</th><td>30.00 req/sec",
+            "Service latency p50</th><td>2.000 ms",
+            "Service latency p95</th><td>2.900 ms",
+            "Service latency p99</th><td>2.980 ms",
+            "Measured latency reflects observed request processing. Architecture "
+            "context describes the execution path and does not represent a benchmark "
+            "comparison.",
+        ):
+            self.assertIn(expected, html)
+
+        for unsupported_claim in (
+            "faster than",
+            "performance advantage",
+            "speedup",
+            "outperforms",
+        ):
+            self.assertNotIn(unsupported_claim, html.lower())
 
     def test_pass_rate_status_classification(self) -> None:
         cases = (

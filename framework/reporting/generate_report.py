@@ -152,6 +152,13 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
     harness_throughput = (
         completed_count / runtime_seconds if runtime_seconds > 0 else 0.0
     )
+    rules_deployed = policy_response.get("rules", realized_rules)
+    input_payload_bytes = generation.get("payload_bytes_total")
+    input_payload_size = (
+        f"{input_payload_bytes} bytes"
+        if isinstance(input_payload_bytes, (int, float))
+        else "unavailable"
+    )
 
     failures_html: list[str] = []
     for row in evidence["failures"]:
@@ -265,6 +272,14 @@ pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); pa
 <h3>Service latency from request evidence</h3>
 {_table(tuple((name, f"{value:.3f} ms") for name, value in evidence["latency"].items()))}
 <p class="muted">End-to-end throughput includes validation harness overhead. Latency reflects observed request processing time.</p>
+<h2>Data Path Profile</h2>
+<h3>Architecture</h3>
+{_table((("Processing path", "Nol8 FPGA-accelerated data path"),))}
+<h3>Workload</h3>
+{_table((("Records evaluated", evidence["total"]), ("Rules deployed", rules_deployed), ("Expected transformations", evidence["expected_replacements"]), ("Input payload size", input_payload_size)))}
+<h3>Observed</h3>
+{_table((("Harness throughput", f"{harness_throughput:.2f} req/sec"), ("Service latency p50", f"{evidence['latency']['p50']:.3f} ms"), ("Service latency p95", f"{evidence['latency']['p95']:.3f} ms"), ("Service latency p99", f"{evidence['latency']['p99']:.3f} ms")))}
+<p class="muted">Measured latency reflects observed request processing. Architecture context describes the execution path and does not represent a benchmark comparison.</p>
 <h2>Transformation evidence</h2>
 {_distribution_table("Expected matches by category", evidence["categories"])}
 {_distribution_table("Expected matches by case", evidence["cases"])}
