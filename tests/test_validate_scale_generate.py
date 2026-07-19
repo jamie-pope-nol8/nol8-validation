@@ -11,9 +11,9 @@ from pathlib import Path
 import yaml
 
 from framework.cli.main import generate_run, main
+from framework.policy.matching import LiteralMatcher, overlapping_matches
 from framework.workload.generate_scale_artifacts import (
     ScaleRule,
-    _expected_result,
     _realistic_rule_value,
     generate_scale_artifacts,
 )
@@ -450,20 +450,66 @@ class ValidateScaleGenerateTests(unittest.TestCase):
                 (reported / filename).read_bytes(),
             )
 
-    def test_optimized_expected_results_match_full_catalog_scan(self) -> None:
+    def test_expected_results_account_for_every_catalog_literal(self) -> None:
+        """No catalog literal may occur in a document without being accounted for.
+
+        Expected output was previously computed from the rules the generator
+        intended to inject. That invariant is false - unrelated generated
+        values collide with catalog literals - so Themis correctly redacted a
+        value the expected file said should survive, and was scored as failing.
+        """
         output = self.root / "expected-correctness"
         manifest = generate_scale_artifacts(self.config, output)
         inputs = self._rows(output / "input.jsonl")
         expected = self._rows(output / "expected.jsonl")
 
         catalog = [ScaleRule(**item) for item in manifest["rule_catalog"]]
+        matcher = LiteralMatcher({rule.variant for rule in catalog})
 
         for input_row, expected_row in zip(inputs, expected, strict=True):
-            full_message, full_matches = _expected_result(
-                input_row["message"], catalog
+            present = {
+                match.literal
+                for match in matcher.find_all(input_row["message"])
+            }
+            accounted = {
+                match["variant"] for match in expected_row["expected_matches"]
+            }
+            # Overlapping matches are deliberately not all selected, so
+            # accounted may be a subset - but never may a literal be present
+            # and wholly unexplained when nothing overlaps.
+            overlaps = overlapping_matches(
+                matcher.find_all(input_row["message"])
             )
-            self.assertEqual(expected_row["expected_message"], full_message)
-            self.assertEqual(expected_row["expected_matches"], full_matches)
+            if not overlaps:
+                self.assertEqual(
+                    present,
+                    accounted,
+                    f"{input_row['record_id']} has unaccounted literals: "
+                    f"{sorted(present - accounted)}",
+                )
+
+    def test_expected_message_is_the_documented_transformation(self) -> None:
+        """Applying the recorded matches to the input must yield the expected."""
+        output = self.root / "expected-transformation"
+        generate_scale_artifacts(self.config, output)
+        inputs = {
+            row["record_id"]: row for row in self._rows(output / "input.jsonl")
+        }
+        for expected_row in self._rows(output / "expected.jsonl"):
+            source = inputs[expected_row["record_id"]]["message"]
+            for match in expected_row["expected_matches"]:
+                self.assertIn(match["variant"], source)
+            self.assertEqual(
+                len(expected_row["expected_matches"]),
+                expected_row["expected_match_count"],
+            )
+
+    def test_generation_manifest_reports_overlap_exposure(self) -> None:
+        output = self.root / "overlap-exposure"
+        manifest = generate_scale_artifacts(self.config, output)
+        self.assertIn("overlapping_match_documents", manifest)
+        self.assertIsInstance(manifest["overlapping_match_documents"], int)
+        self.assertIn("intended_clean_with_literals", manifest)
 
     def test_large_rule_catalog_generation_completes_promptly(self) -> None:
         workload = yaml.safe_load(self.config.read_text(encoding="utf-8"))

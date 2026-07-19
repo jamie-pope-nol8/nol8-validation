@@ -202,6 +202,22 @@ def generated_documents_as_dicts(
     return [asdict(document) for document in documents]
 
 
+# Generated corpora must be reproducible from the seed alone, so timestamps use
+# a fixed synthetic epoch rather than wall-clock time. The year is deliberately
+# implausible so a synthetic record is never mistaken for a real one.
+FALLBACK_TIMESTAMP = "2100-01-01T00:00:00+00:00"
+
+
+def _deterministic_timestamp(random_source: random.Random) -> str:
+    """A seed-derived timestamp. Varied across records, stable across runs."""
+    return (
+        f"2100-{1 + random_source.randrange(12):02d}"
+        f"-{1 + random_source.randrange(28):02d}"
+        f"T{random_source.randrange(24):02d}"
+        f":{random_source.randrange(60):02d}:00+00:00"
+    )
+
+
 def _weighted_item(
     items: Mapping[str, Mapping[str, Any]],
     random_source: random.Random,
@@ -224,7 +240,7 @@ def _build_record(
     record: dict[str, Any] = {
         "document_id": document_id,
         "scenario": scenario_name,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": _deterministic_timestamp(random_source),
     }
 
     for field_name in fields:
@@ -448,7 +464,7 @@ def _generate_field_value(
         "system_prompt": lambda rng: (
             "Process the supplied enterprise record according to policy."
         ),
-        "timestamp": lambda rng: datetime.now(UTC).isoformat(),
+        "timestamp": lambda rng: _deterministic_timestamp(rng),
         "tool_output": lambda rng: (
             '{"status":"success","source":"synthetic-enterprise-system"}'
         ),
@@ -604,7 +620,11 @@ def _serialize_log(
     record: Mapping[str, Any],
     _: str,
 ) -> str:
-    timestamp = record.get("timestamp", datetime.now(UTC).isoformat())
+    # No seeded source is available here, so fall back to the fixed synthetic
+    # epoch rather than wall-clock time. Wall-clock made roughly 9% of
+    # enterprise-dlp documents differ between runs of the same seed, breaking
+    # the reproducibility guarantee the manifest implies.
+    timestamp = record.get("timestamp", FALLBACK_TIMESTAMP)
     level = record.get("log_level", "INFO")
     hostname = record.get("hostname", "unknown-host")
     request_id = record.get("request_id", "unknown-request")

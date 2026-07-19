@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from framework.policy.matching import (
+    LiteralMatcher,
+    overlapping_matches,
+    resolve_non_overlapping,
+)
 from framework.scenarios.support_ticket import build_support_ticket
 from framework.workload.generate_workload import (
     _generate_field_value,
@@ -379,25 +384,42 @@ def _expand_customer_record(
 
 
 def _expected_result(
-    message: str, rules: list[ScaleRule]
-) -> tuple[str, list[dict[str, str]]]:
+    message: str,
+    matcher: LiteralMatcher,
+    rules_by_variant: Mapping[str, ScaleRule],
+) -> tuple[str, list[dict[str, str]], int]:
+    """Compute expected output by scanning the FULL catalog.
+
+    Computing expected output from only the rules the generator intended to
+    inject is wrong: unrelated generated values collide with catalog literals
+    in practice, so Themis correctly redacts a value the expected file says
+    should survive and is scored as a failure.
+
+    Returns the expected message, the match evidence, and the number of
+    overlapping match pairs. A document with overlapping matches triggers
+    ISSUE-003, so no expected value for it is correct; the count is surfaced
+    rather than silently folded into the result.
+    """
+    found = matcher.find_all(message)
+    overlap_count = len(overlapping_matches(found))
+    selected = resolve_non_overlapping(found)
+
+    # Apply replacements right to left so earlier offsets stay valid.
     expected = message
-    matches: list[dict[str, str]] = []
-    for rule in sorted(rules, key=lambda item: (-len(item.variant), item.variant)):
-        count = expected.count(rule.variant)
-        if not count:
-            continue
-        expected = expected.replace(rule.variant, rule.replacement)
-        for _ in range(count):
-            matches.append(
-                {
-                    "category_id": rule.category_id,
-                    "case_id": rule.pattern_id,
-                    "variant": rule.variant,
-                    "replacement": rule.replacement,
-                }
-            )
-    return expected, matches
+    for match in sorted(selected, key=lambda item: item.start, reverse=True):
+        rule = rules_by_variant[match.literal]
+        expected = expected[:match.start] + rule.replacement + expected[match.end:]
+
+    matches = [
+        {
+            "category_id": rules_by_variant[match.literal].category_id,
+            "case_id": rules_by_variant[match.literal].pattern_id,
+            "variant": match.literal,
+            "replacement": rules_by_variant[match.literal].replacement,
+        }
+        for match in sorted(selected, key=lambda item: item.start)
+    ]
+    return expected, matches, overlap_count
 
 
 def generate_scale_artifacts(
@@ -459,6 +481,15 @@ def generate_scale_artifacts(
     padding_bytes_total = 0
     padded_document_count = 0
     generation_mode_counts: Counter[str] = Counter()
+    documents_with_overlaps = 0
+    overlap_examples: list[str] = []
+    intended_clean_with_literals = 0
+
+    # Built once, scanned per document. A per-rule scan would be
+    # rules x documents substring searches - 50 million for the 5,000 rule
+    # by 10,000 document qualification.
+    rules_by_variant = {rule.variant: rule for rule in rules}
+    literal_matcher = LiteralMatcher(rules_by_variant)
 
     _report_progress(
         progress_callback, "documents_started", 0, realized_records
@@ -571,13 +602,23 @@ def generate_scale_artifacts(
                         realized_records,
                     )
 
-                # Only selected rules can occur as generated scale markers. Using
-                # that exact injection evidence preserves the full transformation
-                # contract without rescanning the message for every policy rule.
-                expected_message, expected_matches = _expected_result(
-                    message, selected_rules
+                # Scan the full catalog, not just the injected rules. Values
+                # generated for unrelated fields collide with catalog literals
+                # in practice, and attributing those to the product produces
+                # false failures.
+                expected_message, expected_matches, overlap_count = _expected_result(
+                    message, literal_matcher, rules_by_variant
                 )
                 kind = "dirty" if expected_matches else "clean"
+
+                if overlap_count:
+                    documents_with_overlaps += 1
+                    if len(overlap_examples) < 5:
+                        overlap_examples.append(document_id)
+                if not selected_rules and expected_matches:
+                    # Intended to be a clean record but carries catalog
+                    # literals anyway. Surfaced rather than silently rewritten.
+                    intended_clean_with_literals += 1
 
                 input_handle.write(
                     json.dumps(
@@ -658,6 +699,12 @@ def generate_scale_artifacts(
         "generation_mode_distribution": dict(
             sorted(generation_mode_counts.items())
         ),
+        # ISSUE-003 exposure. Documents whose matches overlap cannot produce a
+        # correct expected value, because the runtime corrupts them. Recorded
+        # so a qualification run cannot silently include them.
+        "overlapping_match_documents": documents_with_overlaps,
+        "overlapping_match_examples": overlap_examples,
+        "intended_clean_with_literals": intended_clean_with_literals,
         "requested_scale": {
             "rule_count": requested_rules,
             "record_count": requested_records,
