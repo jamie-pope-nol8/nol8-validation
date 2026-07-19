@@ -14,6 +14,7 @@ scale-test/reports/
 # are large, and tracking them made the development and execution hosts
 # diverge. Anything that must survive cleanup belongs in artifacts/evidence/.
 artifacts/runs/
+artifacts/policy-deployments.jsonl
 artifacts/test-documents/
 artifacts/repro-issue-003.nol
 

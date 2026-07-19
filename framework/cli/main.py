@@ -312,6 +312,95 @@ def _sanitize_themis_response(response: Any) -> dict[str, Any]:
     return sanitized
 
 
+POLICY_DEPLOYMENT_LEDGER = Path("artifacts/policy-deployments.jsonl")
+
+
+def _policy_ledger_path() -> Path:
+    return REPOSITORY_ROOT / POLICY_DEPLOYMENT_LEDGER
+
+
+def record_policy_deployment(
+    *,
+    target: str,
+    policy_path: Path,
+    policy_sha256: str,
+    rule_count: Any,
+    source: str,
+    run_id: str | None = None,
+) -> None:
+    """Append a deployment to the local ledger.
+
+    Themis cannot report which policy is currently loaded - there is no
+    identifier, summary, or read-back endpoint - and deployment replaces the
+    entire ruleset. Without a local record an operator has no way to know what
+    is deployed. This ledger is that record; it is local state, so it reflects
+    deployments made from this checkout only.
+    """
+    entry = {
+        "deployed_at": isoformat_utc(utc_now()),
+        "target": target,
+        "source": source,
+        "run_id": run_id,
+        "policy_path": str(policy_path),
+        "policy_sha256": policy_sha256,
+        "rule_count": rule_count,
+    }
+    ledger = _policy_ledger_path()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def read_policy_deployments(limit: int = 10) -> list[dict[str, Any]]:
+    """Most recent deployments first."""
+    ledger = _policy_ledger_path()
+    if not ledger.is_file():
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in ledger.read_text(encoding="utf-8").split("\n"):
+        if not line.strip():
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            entries.append(parsed)
+    return list(reversed(entries))[:limit]
+
+
+def apply_policy_file(policy_path: Path, target: str) -> dict[str, Any]:
+    """Deploy a policy file directly, outside the run lifecycle.
+
+    Used to restore a known policy or to deploy a hand-authored one. The run
+    stages remain the normal path; this exists so that operating the tool never
+    requires dropping below the CLI into scripts/.
+    """
+    if not policy_path.is_file():
+        raise PolicyDeploymentError(
+            "prerequisite", f"Policy file does not exist: {policy_path}"
+        )
+
+    policy_sha256 = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    http_status, response = deploy_policy(policy_path, target)
+    record_policy_deployment(
+        target=target,
+        policy_path=policy_path,
+        policy_sha256=policy_sha256,
+        rule_count=response.get("rules"),
+        source="file",
+    )
+    return {
+        "target": target,
+        "policy_path": str(policy_path),
+        "policy_sha256": policy_sha256,
+        "http_status": http_status,
+        "response": response,
+    }
+
+
 def deploy_policy(policy_path: Path, target: str) -> tuple[int, dict[str, Any]]:
     deployment_script = REPOSITORY_ROOT / "scripts" / "load-policy.sh"
     result = subprocess.run(
@@ -412,6 +501,14 @@ def apply_policy_to_run(run_directory: Path, target: str) -> dict[str, Any]:
             }
         )
         http_status, response = deploy_policy(policy_path, target)
+        record_policy_deployment(
+            target=target,
+            policy_path=policy_path,
+            policy_sha256=policy_sha256,
+            rule_count=response.get("rules"),
+            source="run",
+            run_id=str(manifest.get("run_id")),
+        )
 
         completed_at = isoformat_utc(utc_now())
         policy_stage.update(
@@ -1323,13 +1420,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     policy_parser = subparsers.add_parser(
-        "policy", help="Deploy the generated policy for a validation run"
+        "policy",
+        help="Deploy a policy, or show recent deployments",
+        description=(
+            "Deploy a validation run's generated policy, deploy a policy file "
+            "directly, or show what this checkout has deployed. Deployment "
+            "REPLACES the entire active policy on the target."
+        ),
     )
-    policy_parser.add_argument(
+    policy_source = policy_parser.add_mutually_exclusive_group(required=True)
+    policy_source.add_argument(
         "--run",
         type=_run_directory,
-        required=True,
-        help="Existing validation run directory or run ID",
+        help="Deploy the generated policy of an existing run (directory or ID)",
+    )
+    policy_source.add_argument(
+        "--file",
+        type=Path,
+        help=(
+            "Deploy a policy file directly, for example to restore a known "
+            "policy without creating a run"
+        ),
+    )
+    policy_source.add_argument(
+        "--status",
+        action="store_true",
+        help=(
+            "Show recent policy deployments recorded by this checkout. Themis "
+            "cannot report which policy is loaded, so this is a local record"
+        ),
     )
     policy_parser.add_argument(
         "--target",
@@ -1518,6 +1637,43 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "policy":
+        if args.status:
+            deployments = read_policy_deployments()
+            print("Recent policy deployments")
+            print()
+            if not deployments:
+                print("No deployments recorded by this checkout.")
+                return 0
+            for entry in deployments:
+                origin = entry.get("run_id") or entry.get("policy_path")
+                print(f"{entry.get('deployed_at')}  {entry.get('target')}")
+                print(f"  source:  {entry.get('source')} ({origin})")
+                print(f"  rules:   {entry.get('rule_count')}")
+                print(f"  sha256:  {entry.get('policy_sha256')}")
+                print()
+            print(
+                "This is a local record. Themis cannot report which policy is "
+                "currently loaded, so deployments made elsewhere are not shown."
+            )
+            return 0
+
+        if args.file is not None:
+            try:
+                deployment = apply_policy_file(args.file, args.target)
+            except PolicyDeploymentError as error:
+                print(f"Policy deployment failed: {error}", file=sys.stderr)
+                return 1
+            response = deployment["response"]
+            print("Policy deployed")
+            print()
+            print(f"Target:        {deployment['target']}")
+            print(f"Policy file:   {deployment['policy_path']}")
+            print(f"Policy SHA256: {deployment['policy_sha256']}")
+            print(f"HTTP status:   {deployment['http_status']}")
+            print(f"Rules:         {response.get('rules', 'unavailable')}")
+            print(f"Message:       {response.get('message', 'unavailable')}")
+            return 0
+
         try:
             manifest = apply_policy_to_run(args.run, args.target)
         except PolicyDeploymentError as error:

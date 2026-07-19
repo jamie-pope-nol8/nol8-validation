@@ -10,14 +10,12 @@ comparison produce durable artifacts in a timestamped Run directory.
 The implemented lifecycle is:
 
 ```text
-generate
-   |
-policy deploy
-   |
-run
-   |
-compare
+generate  ->  policy  ->  run  ->  compare  ->  report
 ```
+
+All five stages run through the `validate` command. The scripts under
+`scripts/` are the HTTP transport layer and are not intended to be called
+directly.
 
 Each stage validates its prerequisites and records status, timestamps, counters,
 errors, and artifact metadata in `manifest.json`. Generated and execution
@@ -188,86 +186,173 @@ CLI or artifact schema.
 
 - Python 3.12 or newer.
 - `bash`, `curl`, and `jq` for policy and execution transports.
-- PyYAML (`pip install -r requirements.txt`) or an editable project install.
 - `config/demo.env` containing non-secret endpoint configuration.
 - A local `.env` containing the required non-production bearer token, such as
   `THEMIS_TOKEN`. Do not commit secrets.
-- Network access to the configured non-production services. See
-  `KNOWN_BEHAVIORS.md` for the current sandbox-access limitation.
+- Network access to the configured non-production services.
 
 Install the project in a virtual environment:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -e .
+source .venv/bin/activate
+pip install -e .
 ```
 
-The examples below use the module entry point and therefore also work without
-installing the `validate` console script when dependencies are available.
+That installs the `validate` console script, which is the complete interface to
+this framework. Everything below runs through it. The scripts under `scripts/`
+are the HTTP transport layer and are not intended to be called directly.
 
-### 1. Generate a Run
+Activate the environment in every new shell:
 
 ```bash
-python -m framework.cli generate \
-  --config config/workloads/customer-record-json.yaml
+source .venv/bin/activate
 ```
 
-Generation prints a Run directory such as:
-
-```text
-artifacts/runs/20260719T120000000000Z
-```
-
-For a small scale-oriented workload smoke corpus:
+### End-to-end validation in five commands
 
 ```bash
-python -m framework.cli generate \
-  --config config/workloads/enterprise-dlp.yaml \
-  --rules 100 \
-  --records 10
+validate generate --config config/workloads/customer-record-csv.yaml \
+  --rules 100 --records 50
 ```
 
-### 2. Deploy its policy
+Generation prints a Run ID. Every later stage takes it:
 
 ```bash
-python -m framework.cli policy \
-  --run artifacts/runs/<run-id> \
-  --target themis
+export RID=<run-id-from-generate>
+
+validate policy  --run $RID --target themis
+validate run     --run $RID --target themis
+validate compare --run $RID --replacement-max-length 15
+validate report  --run $RID
 ```
 
-The stage requires completed generation and a generated policy. A successful
-HTTP response must contain valid JSON with `ok` exactly equal to `true`.
+Expected result: 50 of 50 requests succeed, `PASS: 50`,
+`CONTENT_MISMATCH: 0`, and a report whose banner reads `PASS`.
 
-### 3. Execute the corpus
+`--replacement-max-length 15` normalises for KB-001, a documented Themis
+behaviour where replacement strings are truncated to 15 characters at runtime.
+Without it every record containing a longer replacement is reported as a
+content mismatch. See `docs/issues/KNOWN_BEHAVIORS.md`.
+
+**`validate policy` replaces the entire active policy on the target.** Restore
+a known policy when you are finished:
 
 ```bash
-python -m framework.cli run \
-  --run artifacts/runs/<run-id> \
-  --target themis
+validate policy --file artifacts/evidence/tenant-restore-policy.nol
 ```
 
-For a smoke test:
+## Commands
+
+### `validate generate`
+
+Creates a run directory and produces the policy, input corpus, expected
+results, and generation manifest.
 
 ```bash
-python -m framework.cli run \
-  --run artifacts/runs/<run-id> \
-  --target themis \
-  --limit 5
+validate generate --config <workload.yaml> [--rules N] [--records M] \
+  [--runs-dir DIR]
 ```
 
-The Run stage requires successful generation and policy stages. Progress is
-shown in the terminal while evidence is persisted incrementally.
+| option | meaning |
+|---|---|
+| `--config` | workload YAML, required |
+| `--rules` | override the configured rule count |
+| `--records` | override the configured record count |
+| `--runs-dir` | parent directory for runs (default `artifacts/runs`) |
 
-### 4. Compare actual and expected behavior
+Generation refuses to proceed if the rule catalog contains literals nested
+inside one another, or replacement tokens that collide when truncated to 15
+characters. Both conditions make validation results meaningless rather than
+merely imperfect - see "Catalog constraints" below.
+
+`config/workloads/enterprise-dlp.yaml` defaults to 5,000 rules and 10,000
+records, and produces documents up to 64 KB. Pass `--rules`/`--records` for
+anything smaller.
+
+### `validate policy`
+
+Deploys a policy, or reports what this checkout has deployed.
 
 ```bash
-python -m framework.cli compare \
-  --run artifacts/runs/<run-id>
+validate policy --run <RUN_ID> [--target themis]     # a run's generated policy
+validate policy --file <path.nol> [--target themis]  # any policy file
+validate policy --status                             # recent deployments
 ```
 
-The Compare stage requires completed generation, policy, and execution stages.
-It writes `generated/comparison.jsonl` and prints transformation, outcome, and
-latency summaries.
+Deployment **replaces the entire active policy** on the target. There is no
+namespacing, no versioning, and no partial update.
+
+Themis cannot report which policy is currently loaded - there is no identifier,
+summary, or read-back endpoint. `--status` is a local record of deployments
+made from this checkout, which is the closest available substitute. Deployments
+made from elsewhere will not appear.
+
+### `validate run`
+
+Executes the generated corpus against the target and records a response for
+every record.
+
+```bash
+validate run --run <RUN_ID> [--target themis] [--limit N] \
+  [--progress-interval N]
+```
+
+Execution is sequential at roughly 24 requests/second, so 10,000 records takes
+about seven minutes. Evidence is written incrementally, so an interrupted run
+retains everything completed so far.
+
+`--limit N` executes only the first N records. Note that `validate compare`
+currently requires a complete corpus, so a limited run cannot be compared.
+
+### `validate compare`
+
+Compares recorded output against expected results and writes
+`generated/comparison.jsonl`.
+
+```bash
+validate compare --run <RUN_ID> [--replacement-max-length 15]
+```
+
+Reads captured output from disk and makes no network requests, so it can be
+re-run freely against a completed run.
+
+### `validate report`
+
+Renders a self-contained HTML report from the comparison evidence.
+
+```bash
+validate report --run <RUN_ID>
+```
+
+Writes `reports/validation-report.html`. The report is a single portable file
+with no external assets.
+
+## Catalog constraints
+
+Two properties of a rule catalog make validation results meaningless. Both are
+enforced at generation time rather than discovered after a run.
+
+**No literal may be nested inside another.** Two rules matching overlapping
+regions of the input cause the Themis runtime to write the replacement at the
+wrong offset and destroy adjacent content, silently, returning HTTP 200. This
+is ISSUE-003. A nested literal guarantees the overlap wherever the outer
+literal appears.
+
+**Replacement tokens must stay distinct when truncated to 15 characters.**
+Themis truncates replacements at runtime and comparison normalises to match.
+Truncation is not injective, so two tokens sharing a 15-character prefix become
+indistinguishable and the framework cannot tell whether the runtime applied the
+correct rule.
+
+Generation reports overlap exposure in the generation manifest:
+
+```
+overlapping_match_documents      0
+intended_clean_with_literals     0
+```
+
+Check `overlapping_match_documents` before treating any run as a qualification.
 
 ## Workload generation
 
@@ -298,18 +383,16 @@ By default, Compare validates the full replacement strings stored in
 `expected.jsonl`:
 
 ```bash
-python -m framework.cli compare --run artifacts/runs/<run-id>
+validate compare --run <RUN_ID>
 ```
 
 The current Themis implementation has an observed limitation that truncates
-replacement strings to 15 characters (Issue #001 in `KNOWN_BEHAVIORS.md`). To
+replacement strings to 15 characters (KB-001 in `docs/issues/KNOWN_BEHAVIORS.md`). To
 validate current behavior explicitly, normalize expected replacement literals at
 comparison time:
 
 ```bash
-python -m framework.cli compare \
-  --run artifacts/runs/<run-id> \
-  --replacement-max-length 15
+validate compare --run <RUN_ID> --replacement-max-length 15
 ```
 
 This option changes only comparison-time normalization. It does not modify the
