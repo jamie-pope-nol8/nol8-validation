@@ -1,81 +1,68 @@
-## Open Issues
+### KB-001 - Replacement strings truncated to 15 characters
 
-### Issue #001 - Replacement strings truncated to 15 characters
-
-Status: Reported
-Disposition: Confirmed implementation bug
-Owner: Engineering
-Discovered: 2026-07-16
-Discovered by: Functional validation suite
+Status: Confirmed runtime limitation  
+Disposition: Documented Themis behavior boundary  
+Owner: Engineering  
+Discovered: 2026-07-16  
+Discovered by: Functional validation suite  
 
 Description
 
-Replacement strings longer than 15 characters are truncated by the FPGA.
+Themis runtime truncates replacement strings longer than 15 characters during transformation processing.
+
+The validation framework generates complete replacement values correctly and policy deployment succeeds. The truncation occurs during runtime transformation execution.
+
+Example:
+
+Configured replacement:
+
+```
+[FINANCIAL:CREDIT_CARD_NUMBER]
+```
+
+Observed runtime output:
+
+```
+[FINANCIAL:CRED
+```
 
 Impact
 
-Policy authors must currently keep replacement strings ≤15 characters.
+Policy authors must currently keep replacement strings ≤15 characters when targeting Themis runtime behavior.
+
+Longer replacement strings result in functional validation failures classified as:
+
+```
+CONTENT_MISMATCH
+```
 
 Resolution
 
-Engineering has confirmed this is a defect and is implementing a fix.
+The validation framework supports comparison normalization using:
+
+```
+--replacement-max-length 15
+```
+
+Further engineering work is required to determine whether the runtime limitation is configurable or can be removed.
+
+IMPORTANT - normalization is not a general workaround
+
+Keeping replacement strings ≤15 characters does NOT guarantee correct Themis
+output. A separate defect (source cursor misalignment) corrupts output
+independently of replacement length. See ISSUE-003.
+
+In run `20260719T161514709224Z`, 272 records failed with normalization applied
+at 15 characters. This behavior boundary covers replacement truncation only.
 
 Regression Test
 
-After the fix is deployed, rerun the functional validation suite with long replacement strings enabled.
+The functional validation suite should verify:
 
-# KB-002: Sandbox service accessibility requires execution host
+- Replacement strings ≤15 characters pass validation.
+- Replacement strings >15 characters are identified as runtime limitations.
+- Validation reports clearly identify replacement length limitations.
 
-Date: 2026-07-18
-Status: Open
-Category: Environment / Developer Experience
+Related Investigation:
 
-## Summary
-
-Developer environments cannot directly access sandbox Nol8 services even when connected through the approved VPN tunnel.
-
-## Observed Behavior
-
-- Local development environment resolves:
-  - themis.sales.nol8.cloud
-  - 10.10.1.254
-
-- HTTPS connectivity attempts from the developer workstation to:
-  - :443
-  - :8443
-
-  do not complete.
-
-- Validation execution from the local Codex environment cannot reach Themis because it is not running inside the sandbox network.
-
-## Expected Behavior
-
-A developer connected through the approved VPN should be able to access sandbox services required for:
-
-- agent development
-- inference testing
-- functional validation
-- demonstrations
-- performance testing
-
-The sandbox should support development workflows without requiring all interaction to originate from a dedicated EC2 execution host.
-
-## Impact
-
-Current architecture creates friction for:
-- demos
-- troubleshooting
-- iterative development
-- customer-facing validation workflows
-
-Developers must move workflows onto infrastructure hosts rather than using their normal development environment.
-
-## Recommendation
-
-Evaluate sandbox network access controls to allow authenticated VPN users appropriate access to non-production sandbox services.
-
-Security controls should remain appropriate for production environments, but sandbox environments should optimize for developer productivity and validation workflows.
-
-## Notes
-
-Data used in this environment is synthetic/non-production.
+- 20260719-ISSUE-003-scale-validation-transformation-mismatch.md

@@ -59,3 +59,69 @@ Qualification:
 - 5000 unique rules.
 - 10000 deterministic records.
 - Zero clean collisions.
+
+---
+## Execution Model Boundary
+
+### Sequential Validation Driver
+
+Status:
+Known limitation / planned evolution
+
+Observed:
+- 1,000 records / 500 rules sustained ~24 req/sec
+- 10,000 records / 5,000 rules sustained ~24 req/sec
+
+Conclusion:
+The current validation driver scales in workload size but does not model a production streaming data path.
+
+Current behavior:
+- Sequential request execution
+- One request in flight
+- Harness throughput includes client-side overhead
+
+Impact:
+Reported throughput represents validation harness capacity, not Nol8 data-plane capacity.
+
+Future evolution:
+Introduce streaming execution mode:
+- concurrent workers
+- producer/consumer model
+- configurable concurrency
+- records/sec and bytes/sec measurement
+- latency distribution under load
+
+---
+## 10,000 Record / 5,000 Rule Scale Qualification
+
+Status:
+Passed
+
+Configuration:
+- Workload: customer_record + CSV
+- Records: 10,000
+- Rules: 5,000
+
+Results:
+- Records processed: 10,000
+- Requests succeeded: 10,000
+- Requests failed: 0
+
+Execution:
+- Total duration: 416.045 seconds
+- Sustained harness throughput: ~24 req/sec
+
+Observed service latency:
+- Average: 12.576 ms
+- p50: 12.498 ms
+- p95: 14.207 ms
+- p99: 16.462 ms
+
+Conclusion:
+The current validation driver successfully executes and validates large workloads. Throughput is limited by the sequential execution model of the harness rather than workload size, policy size, or execution stability.
+
+Future evolution:
+Introduce streaming/concurrent validation execution to measure sustained data-path throughput.
+
+----
+## Replacement Interaction Boundary
