@@ -1,14 +1,29 @@
 # Continue Conversation
 
-# Session Operating Rules
+Last Updated: 2026-07-19
 
-These rules are part of the project workflow.
+This document is the durable memory of the project. It exists so a new session
+can continue without reconstructing context from chat history.
+
+## Maintaining this file
+
+When the user says **"update the project"**, rewrite this file to reflect
+current state. Also refresh it at the end of meaningful work sessions and
+before any risk of context loss.
+
+Rewrite it. Do not append to it and do not preserve stale sections because
+they are already here - a previous revision claimed `compare` and `report` were
+NOT STARTED long after both had shipped, which would have sent a new session
+to redo finished work. Accuracy matters more than history.
+
+---
+
+# Session Operating Rules
 
 ## Execution Style
 
 - Work one action at a time.
 - Do not provide batches of commands unless they are inseparable.
-- Wait for confirmation before moving to the next action.
 - End responses with a clear next action.
 
 ## Context Preservation
@@ -22,17 +37,6 @@ Do not:
 - introduce unnecessary frameworks
 - assume only one development environment exists
 
-Use the continuation document as the source of truth.
-
-## Development Environments
-
-The project intentionally uses two environments:
-
-- Mac: development and commits
-- EC2: execution and Nol8 validation
-
-Both are required.
-
 ## Decision Discipline
 
 Before proposing changes:
@@ -40,526 +44,202 @@ Before proposing changes:
 - verify whether the issue is real
 - prefer incremental fixes over redesign
 
-The objective is productive engineering progress, not exploration of alternatives.
-
-## Nol8 Validation Framework
-
-Last Updated: 2026-07-18
-
 ---
 
-# Purpose of This Document
+# Environments
 
-This document exists so future sessions can continue work on this project without reconstructing context from chat history.
+Two environments, both required.
 
-This is not a meeting summary.
+| | Mac | EC2 |
+|---|---|---|
+| purpose | development, commits | execution against Themis |
+| path | `~/Code/nol8/nol8-validation` | `/opt/nol8/nol8-validation` |
+| python | 3.12 | 3.14.4 |
+| host alias | - | `nol8-demo` (in `~/.ssh/config`) |
 
-This is the durable memory of:
+Workflow: edit and commit on Mac, push, `git pull` on EC2, execute there.
 
-- what we are building
-- why we are building it
-- architectural decisions already made
-- decisions that should not be reopened
-- current implementation state
-- immediate next actions
+SSH from Mac to EC2 works non-interactively. Assistants can run read-only
+analysis directly rather than round-tripping commands through the user.
 
-Update this document at the end of meaningful work sessions.
+On EC2 the `validate` console script requires the venv:
 
----
-
-# Project Overview
-
-## What This Project Is
-
-Nol8 Validation Framework is a validation system designed to prove and measure Nol8 behavior through repeatable functional validation runs.
-
-The framework creates deterministic validation scenarios, generates expected outcomes, deploys policies, executes workloads, compares results, and produces reports.
-
-The goal is not simply testing.
-
-The goal is creating a repeatable evidence system for Nol8 capabilities.
-
----
-
-# Relationship To Larger Work
-
-This framework is a component of the broader AI Chief Engineer effort.
-
-The larger vision is to create systems that improve engineering decision quality by:
-
-- capturing intent
-- executing repeatable validation
-- producing evidence
-- preserving decisions
-- reducing ambiguity
-
-The Validation Framework is one concrete implementation of that philosophy.
-
----
-
-# Core Design Principles
-
-## 1. Small, Explicit Stages
-
-The validation lifecycle is intentionally staged.
-
-Current lifecycle:
-
+```bash
+cd /opt/nol8/nol8-validation && source .venv/bin/activate
 ```
-generate
-    |
-    v
-policy
-    |
-    v
-run
-    |
-    v
-compare
-    |
-    v
-report
-    |
-    v
-clean
-```
-
-Each stage has one responsibility.
-
-Do not collapse stages together.
-
----
-
-## 2. Artifacts Are First Class
-
-Validation runs produce durable artifacts.
-
-Example:
-
-```
-artifacts/
-└── runs/
-    └── <run-id>/
-        ├── manifest.json
-        ├── config/
-        └── generated/
-            ├── input.jsonl
-            ├── expected.jsonl
-            ├── scale-policy.nol
-            ├── generation-manifest.json
-            └── output.jsonl
-```
-
-The run directory is the source of truth for a validation execution.
-
----
-
-## 3. Manifest Driven State
-
-The manifest records lifecycle state.
-
-Stages should update the manifest atomically.
-
-Do not create hidden state outside the run artifacts.
-
----
-
-## 4. Transport Boundaries
-
-Python owns:
-
-- orchestration
-- validation logic
-- stage lifecycle
-- artifact management
-
-Shell transport owns:
-
-- endpoint selection
-- authentication
-- curl execution
-- HTTP transport details
-
-Python should not:
-
-- know tokens
-- build Authorization headers
-- call curl directly
-
----
-
-# Repository
-
-GitHub:
-
-```
-https://github.com/jamie-pope-nol8/nol8-validation
-```
-
-Primary working environments:
-
-## Mac
-
-Purpose:
-
-- development
-- editing
-- Codex work
-- commits
-
-Python:
-
-```
-3.12
-```
-
-Path:
-
-```
-~/Code/nol8/nol8-validation
-```
-
----
-
-## EC2
-
-Purpose:
-
-- execution against Nol8 infrastructure
-- FPGA/backend validation
-- live environment testing
-
-Path:
-
-```
-/opt/nol8/nol8-validation
-```
-
-Python:
-
-```
-3.14.4
-```
-
-Note:
-
-Python versions differ between environments.
-
-Do not assume they match.
-
----
-
-# Python Environment
-
-The project uses:
-
-```
-.venv
-```
-
-on both environments.
-
-Standard workflow:
-
-```
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-The project is installed as an editable package.
 
 ---
 
 # CLI
 
-The intended interface is:
-
 ```
-validate
-```
-
-Not:
-
-```
-python -m framework.cli
+validate generate --config <yaml> [--rules N] [--records M]
+validate policy   --run <RUN_ID> --target themis
+validate run      --run <RUN_ID> --target themis [--limit N]
+validate compare  --run <RUN_ID> [--replacement-max-length 15]
+validate report   --run <RUN_ID>
 ```
 
-The console entry point is:
+`--run` accepts a bare run ID or a path. All five stages are implemented.
 
-```toml
-[project.scripts]
-validate = "framework.cli.main:main"
-```
-
-Important:
-
-The previous entry:
-
-```
-framework.cli:main
-```
-
-was incorrect because it resolved to the module rather than the callable function.
+`config/workloads/enterprise-dlp.yaml` defaults to 5,000 rules and 10,000
+records - roughly a 7 minute run. Pass `--rules`/`--records` for a smoke test.
 
 ---
 
-# Packaging
+# CRITICAL OPERATIONAL WARNING
 
-The project contains:
+`validate policy` and `scripts/load-policy.sh` **replace the entire active
+policy** on the target tenant. There is no namespacing, no versioning, and no
+way to read back what is currently deployed.
 
-```
-pyproject.toml
-```
+The target is a shared sales demo tenant (`tenant001-v1demo`).
 
-Dependencies currently include:
+Always restore afterwards:
 
-- requests
-- PyYAML
-
-Editable install creates generated metadata:
-
-```
-nol8_validation.egg-info
+```bash
+./scripts/load-policy.sh themis \
+  artifacts/runs/20260719T161514709224Z/generated/scale-policy.nol
 ```
 
-This is generated content.
-
-It must not be committed.
-
-Required cleanup:
-
-```
-*.egg-info/
-```
-
-should exist in `.gitignore`.
+That file is the only copy of the qualification policy. If it is lost, the
+tenant's policy is unrecoverable.
 
 ---
 
-# Completed Features
+# Current State - 2026-07-19
 
-## validate generate
+## ISSUE-003: confirmed Themis defect, ready for handover
 
-Status:
+**Overlapping matches corrupt Themis output.** When two rules match overlapping
+regions of the input, the runtime computes the wrong match start offset and
+destroys content preceding the match. Silent - every request returns HTTP 200.
 
-COMPLETE
+Proven with plain curl against Themis's own response payload. No framework code
+in the path, so the finding does not depend on this repository.
 
-Purpose:
+```
+rules   "ABCD" -> "[P]"  and  "DEFG" -> "[Q]"
+input    x ABCDEFG y
+correct  x [P]EFG y
+actual   x [P[Q] y
+```
 
-Creates a validation run.
+Key facts, all empirically established:
 
-Responsibilities:
+- Either rule alone renders correctly. Only coexistence triggers it.
+- Rule order in the policy does not matter.
+- Adjacent, non-overlapping matches are correct. Disjoint matches are correct.
+- Replacement length is irrelevant. Shorter replacements destroy MORE
+  preceding content.
+- Replacement output is NOT re-scanned (single pass, confirmed).
+- Unrelated to KB-001 replacement truncation.
 
-- create run directory
-- generate input corpus
-- generate expected results
-- generate policy artifact
-- create manifest
+Static condition: two literals can produce overlapping matches when either
+contains the other, OR when a non-empty proper suffix of one equals a proper
+prefix of the other.
+
+Reproductions:
+- `scripts/repro-issue-003-curl.sh` - plain curl, no framework. **Lead with
+  this for engineering, who have never seen this repository.**
+- `scripts/repro-issue-003.py` - 11 cases including controls, 5 corrupt.
+
+Documented in:
+- `docs/issues/20260719-ISSUE-003-scale-validation-transformation-mismatch.md`
+- `docs/issues/KNOWN_BEHAVIORS.md` (KB-001 is separate and unrelated)
+- `docs/architecture/validation-boundaries.md`
+
+## Qualification run
+
+```
+Run ID: 20260719T161514709224Z
+5,000 rules / 10,000 records
+10,000/10,000 requests succeeded
+9,728 passed, 272 CONTENT_MISMATCH (97.28%)
+```
+
+The 272 are caused by ISSUE-003. **272 is a floor, not an exact count** -
+`--replacement-max-length 15` collapses three `[BUSINESS_TERMS:*]` tokens to
+one string, so wrong-rule application within that family scores as PASS.
+
+## Code review
+
+Full review of ~7,800 lines recorded in `docs/CODE_REVIEW_PLAN.md`, tiered by
+risk. Central finding: the framework can report a result that is not true in
+both directions.
+
+- **Tier 0 - COMPLETE.** The framework could report success it had not
+  verified. Fixed: a 2xx no longer implies success without a processed
+  message; every failed request carries an error category; an empty comparison
+  renders INCONCLUSIVE not a green PASS; pass rate cannot round to 100.00%
+  with failures present.
+- **Tier 1 - IN PROGRESS.** Generator false positives - the framework blames
+  Themis for its own bugs. See next actions.
+- Tiers 2-5 not started: security, product limitations, evidence quality,
+  structure and tests.
 
 ---
 
-## validate policy
+# Immediate Next Actions
 
-Status:
+Tier 1, in order:
 
-COMPLETE
-
-Purpose:
-
-Deploy generated policy to Nol8 Themis.
-
-Target:
-
-```
-themis
-```
-
-Responsibilities:
-
-- verify run state
-- verify generated policy exists
-- verify policy hash
-- deploy policy
-- record sanitized response
-
-Confirmed Themis response:
-
-```json
-{
-  "ok": true,
-  "command_id": "cmd-367",
-  "stage": "apollo",
-  "message": "loaded 60 rule(s) into native apollo via reload_rules (persisted, REPLACE)",
-  "error_code": null,
-  "apollo_response": "OK reload_rules dispatched",
-  "rules": 60
-}
-```
-
-A real deployment was successfully executed from EC2.
+1. **Overlap detection.** Detect literal pairs that can produce overlapping
+   matches during generation and report them before execution. Must cover BOTH
+   containment and suffix/prefix classes - a containment-only check misses the
+   `"ACCT-1234"` / `"1234-5678"` case.
+2. **T1-1: expected output is computed from selected rules only**, and that
+   invariant is false. Measured: 34 of 300 documents contained catalog literals
+   absent from `expected_matches`. Causes: `date_of_birth` collides with
+   catalog values (~1.3%); `support_ticket` emits `DEMO-CASE-{index}` which
+   contains the `CASE-{index}` literal.
+3. **T1-2: clean records can contain policy literals.**
+   `generate_scale_artifacts.py:190-236` performs no collision check. Measured
+   12 of 800 clean records affected. Correct redaction scored as failure.
+4. **T1-4: support ticket generation aborts** at realistic rule counts
+   (`support_ticket.py:130-133` raises rather than repairs). Passes today only
+   because the fixture uses 12 rules.
+5. **T1-5: generation is not deterministic** for log-formatted documents -
+   `generate_workload.py:607` falls back to `datetime.now()`, affecting ~9% of
+   `enterprise-dlp.yaml` documents.
+6. **T1-6: generation depends on YAML key order**, not only the seed.
 
 ---
 
-## validate run
+# Decisions Made - Do Not Reopen
 
-Status:
-
-COMPLETE
-
-Purpose:
-
-Execute generated validation corpus.
-
-Responsibilities:
-
-- read generated input
-- send requests sequentially
-- record output
-- update manifest
-
-Output:
-
-```
-generated/output.jsonl
-```
-
-Transport:
-
-- bounded curl timeout
-- bearer authentication
-- no secrets persisted
+- Five-stage lifecycle. Do not collapse stages.
+- Artifacts are first class; the run directory is the source of truth.
+- Manifest-driven state, written atomically.
+- Transport boundary: Python owns orchestration, shell owns curl and
+  authentication. Python does not handle tokens.
+- Do NOT adjust validation expectations to make ISSUE-003 pass. The framework
+  output is correct; masking corruption would hide a customer-facing defect.
+- A run where every request fails is deliberately NOT raised as a stage
+  failure. Failing the stage blocks compare and report, leaving the operator
+  with an exception instead of evidence.
 
 ---
 
-# Remaining Features
+# Product Limitations Surfaced
 
-## validate compare
+These are Themis characteristics, not framework bugs. They affect what can be
+sold, not just what can be tested.
 
-Status:
-
-NOT STARTED
-
-Purpose:
-
-Compare expected results against actual execution output.
-
-Important design question:
-
-Expected:
-
-```
-generated/expected.jsonl
-```
-
-uses:
-
-```
-record_id
-```
-
-Output:
-
-```
-generated/output.jsonl
-```
-
-uses:
-
-```
-request_index
-```
-
-Comparison should establish deterministic alignment.
-
-Likely approach:
-
-1. verify corpus lengths match
-2. align by original execution order
-3. validate record identity
-4. compare expected vs actual
-5. produce comparison artifact
-
-Do not implement until schemas are reviewed.
+- **Wholesale policy replacement.** No namespace, version, partial update,
+  rollback, or read-back. Two teams sharing a credential silently clobber each
+  other. Recovery depends on a human retaining the previous file.
+- **Fire-and-forget deployment.** The response carries `command_id` and
+  `stage: apollo`, suggesting async distribution, but nothing polls for
+  convergence. Records sent immediately after deployment may be evaluated
+  against the previous policy.
+- **Reported latency is not a product measurement.** Every request opens a
+  fresh TCP+TLS connection; failed requests contribute 0.0 ms to the average.
 
 ---
 
-## validate report
+# Open Cleanup
 
-Status:
-
-NOT STARTED
-
-Purpose:
-
-Generate human-readable validation results.
-
-Depends on:
-
-```
-validate compare
-```
-
----
-
-## validate clean
-
-Status:
-
-NOT STARTED
-
-Purpose:
-
-Remove temporary artifacts.
-
----
-
-# Working Style
-
-Required:
-
-- one action at a time
-- confirm before proceeding
-- do not create speculative work
-- preserve completed decisions
-
-The project is intentionally built incrementally.
-
----
-
-# Current Checkpoint
-
-Date:
-
-2026-07-18
-
-Current state:
-
-COMPLETE:
-
-- repository migrated to packaged Python project
-- venv workflow established
-- validate CLI working on Mac
-- validate CLI working on EC2
-- generate complete
-- policy complete
-- run complete
-
-Remaining immediate work:
-
-1. Ensure egg-info cleanup is complete.
-2. Commit any remaining repository hygiene fixes.
-3. Begin validate compare.
-
----
-
-# Next Session Starting Point
-
-Start by reviewing:
-
-- generated/expected.jsonl
-- generated/output.jsonl
-- manifest.json
-
-Then design validate compare.
-
-Do not start coding until the comparison contract is clear.
+`docs/CLEANUP_PLAN.md` - phased, not executed. Key structural issue:
+`artifacts/` is tracked in git, so validation runs dirty the tree and the two
+hosts diverge. EC2 holds ~169 MB. Preserve cited evidence before untracking.
