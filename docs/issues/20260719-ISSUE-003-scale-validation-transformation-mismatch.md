@@ -1,4 +1,4 @@
-# Issue #003 - Overlapping literal rules corrupt Themis output
+# Issue #003 - Overlapping matches corrupt Themis output
 
 Date: 2026-07-19  
 Status: Root cause confirmed - handover to Themis engineering  
@@ -13,15 +13,48 @@ Reported by: Scale Validation Qualification
 
 ## Root cause
 
-When a policy contains two rules whose literals overlap - specifically, where
-one rule's literal is a strict prefix of another rule's literal - the Themis
-runtime computes the wrong start offset for the replacement.
-
-The match END is correct. The match START is wrong. The runtime therefore
+When two rules in a policy match **overlapping regions of the input**, the
+Themis runtime computes the wrong start offset for the replacement and
 overwrites content preceding the match.
 
-Either rule alone produces correct output. Only their coexistence in the same
-policy triggers the defect, and the order in which they appear does not matter.
+Either rule alone produces correct output. Only their coexistence triggers the
+defect, and the order in which they appear in the policy does not matter.
+
+Overlap is the trigger. Adjacency is safe.
+
+| case                                  | input          | correct   | actual      |
+|---------------------------------------|----------------|-----------|-------------|
+| disjoint matches                      | `a X b Y c`    | `a [P] b [Q] c` | correct |
+| adjacent, touching but not overlapping| `x AAAABBBB y` | `x [P][Q] y`    | correct |
+| overlap by 1 character                | `x ABCDEFG y`  | `x [P]EFG y`    | `x [P[Q] y` |
+| overlap by 3 characters               | `x ABCDEFGHI y`| `x [P]GHI y`    | `x [Q] y`   |
+
+Rules: `"ABCD" -> "[P]"`, `"DEFG" -> "[Q]"` and
+`"ABCDEF" -> "[P]"`, `"DEFGHI" -> "[Q]"`.
+
+In the 3-character overlap case the runtime destroyed `AB` - legitimate input
+that neither rule matched.
+
+## Note on an earlier, narrower framing
+
+This issue previously described the trigger as "one rule's literal is a strict
+prefix of another rule's literal". That is a real trigger but only a special
+case: a prefix literal always produces a totally overlapping match.
+
+The general condition is overlapping matches. Two literals can produce
+overlapping matches without either containing the other - `"ABCD"` and
+`"DEFG"` share no containment relationship, yet corrupt output.
+
+Statically, two literals A and B can produce overlapping matches when either
+contains the other, or when some non-empty proper suffix of A equals a proper
+prefix of B. This is checkable without knowing the input.
+
+## Matching semantics (established while characterising this)
+
+- Replacement output is NOT re-scanned. Rules `"SEED" -> "GROWN"` and
+  `"GROWN" -> "[RESCANNED]"` applied to `value SEED here` yield
+  `value GROWN here`. Single pass, confirmed.
+- Where matches do not overlap, results are correct and order-independent.
 
 ## Minimal reproduction
 
@@ -475,17 +508,28 @@ The execution path is stable, but transformation correctness must reach 100% bef
 
 ### Themis engineering
 
-Investigate match start offset computation where more than one rule matches at
-the same position. Reproduce with `scripts/repro-issue-003.py`.
+Investigate match start offset computation where two matches overlap.
+Reproduce with `scripts/repro-issue-003.py`, which covers both the containment
+case and the partial-overlap case.
+
+The end offset is correct in every observed case; the start is displaced. Note
+that adjacent non-overlapping matches are handled correctly, so the fault is
+specific to resolving two candidate matches that share input bytes.
 
 ### Customer guidance, until resolved
 
-Policies must not contain a literal that is a strict prefix of another literal.
-Any such pair silently corrupts output wherever the longer literal matches.
+No two literals in a policy may produce overlapping matches. Statically:
 
-This is a real authoring constraint. Overlapping literals are natural in
-practice - a customer redacting both `"Acme Corp"` and `"Acme Corporation"`
-would hit this.
+- Neither literal may contain the other.
+- No non-empty proper suffix of one may equal a proper prefix of the other.
+
+Adjacent matches that do not share bytes are safe.
+
+This is a real and awkward authoring constraint. Both classes occur naturally:
+
+- Containment: redacting `"Acme Corp"` and `"Acme Corporation"`.
+- Suffix/prefix: redacting `"ACCT-1234"` and `"1234-5678"`, where neither
+  literal contains the other.
 
 ### Validation framework
 
@@ -495,15 +539,15 @@ customer-facing data integrity defect.
 
 Two changes are warranted:
 
-- Detect literals that are a strict prefix of another literal during policy
-  generation, and report them. The framework should be able to tell an operator
-  that a catalog contains overlapping literals before execution.
-- Offer a generation mode that produces no overlapping literals, so that
-  qualification runs can isolate other behavior.
+- Detect literal pairs that can produce overlapping matches during policy
+  generation, and report them before execution.
+- Offer a generation mode that produces no such pairs, so qualification runs
+  can isolate other behavior.
 
 The scale generator currently produces overlapping literals by construction:
 bare `"First Last"` for indices <= 400 and `"First Last {index}"` above. The
-qualification catalog contained 31 such prefix literals.
+qualification catalog contained 31 containment pairs; suffix/prefix pairs were
+not counted and may add more.
 
 ---
 

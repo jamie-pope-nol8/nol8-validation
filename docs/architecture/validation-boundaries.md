@@ -170,32 +170,35 @@ Bounded and predictable. Policy authors can design around it by keeping
 replacement strings at or below 15 characters. The validation framework can
 normalize for it using `--replacement-max-length 15`.
 
-### Overlapping literal corruption (ISSUE-003)
+### Overlapping match corruption (ISSUE-003)
 
-When a policy contains two rules whose literals overlap - one a strict prefix
-of the other - the runtime computes the wrong match start offset and destroys
-content preceding the match.
+When two rules match overlapping regions of the input, the runtime computes the
+wrong match start offset and destroys content preceding the match.
 
 Root cause confirmed. Reproducible with two rules and one record.
 
-Not safe to design around silently, but it is now a stateable constraint:
-
 - It is silent. Every affected request returned HTTP 200.
-- Data loss is unbounded and not limited to delimiters. Shorter replacements
-  destroy MORE preceding content, not less.
+- Data loss is unbounded and not limited to delimiters. An overlap of three
+  characters destroyed two characters of input that neither rule matched.
 - It is not prevented by the KB-001 15-character guidance, and is unrelated to
   replacement truncation.
 - Either rule alone renders correctly. Only their coexistence triggers it, and
   rule order does not matter.
+- Adjacent, non-overlapping matches are correct.
 
 Authoring constraint until resolved:
 
 ```
-A policy must not contain a literal that is a strict prefix of another literal.
+No two literals in a policy may produce overlapping matches.
+
+Statically: neither literal may contain the other, and no non-empty proper
+suffix of one may equal a proper prefix of the other.
 ```
 
-This is a genuine restriction, not a synthetic-data artifact. A customer
-redacting both "Acme Corp" and "Acme Corporation" would hit it.
+This is a genuine and awkward restriction, not a synthetic-data artifact. A
+customer redacting both "Acme Corp" and "Acme Corporation" hits the containment
+case. A customer redacting "ACCT-1234" and "1234-5678" hits the suffix/prefix
+case without either literal containing the other.
 
 ### Implication for validation
 

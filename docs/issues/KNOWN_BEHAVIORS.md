@@ -11,13 +11,15 @@ issues in this directory.
 
 Current defects affecting validation:
 
-- ISSUE-003 - Overlapping literal rules corrupt Themis output. When one rule's
-  literal is a strict prefix of another's, the runtime computes the wrong match
-  start offset and destroys content preceding the match. Silent; no error
-  signal. Not prevented by KB-001's 15-character guidance.
+- ISSUE-003 - Overlapping matches corrupt Themis output. When two rules match
+  overlapping regions of the input, the runtime computes the wrong match start
+  offset and destroys content preceding the match. Silent; no error signal.
+  Not prevented by KB-001's 15-character guidance.
 
-  Authoring constraint until resolved: a policy must not contain a literal that
-  is a strict prefix of another literal.
+  Authoring constraint until resolved: no two literals in a policy may produce
+  overlapping matches. Statically, that means neither literal may contain the
+  other, and no non-empty proper suffix of one may equal a proper prefix of the
+  other. Adjacent, non-overlapping matches are safe.
 
 ---
 
