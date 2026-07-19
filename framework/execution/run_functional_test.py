@@ -20,7 +20,7 @@ DEFAULT_ENDPOINT = "https://tenant001-v1demo.nol8.net/v1/process"
 
 
 @dataclass
-class TestResult:
+class FunctionalTestResult:
     record_id: str
     kind: str
     passed: bool
@@ -186,7 +186,7 @@ def process_record(
     expected_row: dict[str, Any],
     timeout: float,
     ssl_context: ssl.SSLContext,
-) -> TestResult:
+) -> FunctionalTestResult:
     record_id = input_row["record_id"]
     kind = input_row.get("kind", "unknown")
     message = input_row.get("message")
@@ -196,7 +196,7 @@ def process_record(
     )
 
     if not isinstance(message, str):
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -209,7 +209,7 @@ def process_record(
         )
 
     if not isinstance(expected_message, str):
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -251,7 +251,7 @@ def process_record(
         elapsed_ms = (time.perf_counter() - started) * 1000
         error_body = exc.read().decode("utf-8", errors="replace")
 
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -266,7 +266,7 @@ def process_record(
     except urllib.error.URLError as exc:
         elapsed_ms = (time.perf_counter() - started) * 1000
 
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -281,7 +281,7 @@ def process_record(
     except TimeoutError:
         elapsed_ms = (time.perf_counter() - started) * 1000
 
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -298,7 +298,7 @@ def process_record(
     try:
         response_json = json.loads(response_body)
     except json.JSONDecodeError as exc:
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -317,7 +317,7 @@ def process_record(
     )
 
     if not isinstance(actual_message, str):
-        return TestResult(
+        return FunctionalTestResult(
             record_id=record_id,
             kind=kind,
             passed=False,
@@ -331,7 +331,7 @@ def process_record(
 
     passed = actual_message == expected_message
 
-    return TestResult(
+    return FunctionalTestResult(
         record_id=record_id,
         kind=kind,
         passed=passed,
@@ -361,7 +361,7 @@ def percentile(values: list[float], percentage: float) -> float:
     )
 
 
-def result_to_dict(result: TestResult) -> dict[str, Any]:
+def result_to_dict(result: FunctionalTestResult) -> dict[str, Any]:
     return {
         "record_id": result.record_id,
         "kind": result.kind,
@@ -412,7 +412,7 @@ def main() -> int:
         started_at = datetime.now(timezone.utc)
         suite_started = time.perf_counter()
 
-        results: list[TestResult] = []
+        results: list[FunctionalTestResult] = []
 
         total_records = len(ordered_record_ids)
 
