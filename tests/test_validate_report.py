@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from framework.cli.main import ReportingError, main, report_run
+from framework.reporting.generate_report import aggregate_evidence, render_report_html
 
 
 class ValidateReportTests(unittest.TestCase):
@@ -192,9 +193,41 @@ class ValidateReportTests(unittest.TestCase):
         self.assertIn("credentials", html)
         self.assertIn("1</strong>Passed", html)
         self.assertIn("2</strong>Failed", html)
+        self.assertIn("33.33%</strong>Pass rate", html)
+        self.assertIn('class="metric metric-passed"', html)
+        self.assertIn('class="metric metric-failed"', html)
+        self.assertIn('class="metric status-fail"', html)
         self.assertIn("&lt;script&gt;alert(&#x27;bad&#x27;)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert('bad')</script>", html)
         self.assertNotIn("must-never-appear", html)
+
+    def test_pass_rate_status_classification(self) -> None:
+        cases = (
+            (99, 1, "99.00%", "status-pass"),
+            (97, 3, "97.00%", "status-warning"),
+            (94, 6, "94.00%", "status-fail"),
+        )
+        for passed, failed, formatted, status_class in cases:
+            with self.subTest(status_class=status_class):
+                rows = [
+                    {
+                        "status": "PASS" if index < passed else "CONTENT_MISMATCH",
+                        "kind": "dirty",
+                        "expected_match_count": 0,
+                        "expected_matches": [],
+                    }
+                    for index in range(passed + failed)
+                ]
+                evidence = aggregate_evidence(
+                    {"run_id": "classification-run", "stages": {}, "artifacts": {}},
+                    {},
+                    rows,
+                )
+                html = render_report_html(evidence)
+                self.assertIn(
+                    f'class="metric {status_class}"><strong>{formatted}</strong>',
+                    html,
+                )
 
     def test_functional_and_scale_generation_manifests_render(self) -> None:
         generation_manifests = (

@@ -199,6 +199,14 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
             )
 
     overall = "PASS" if evidence["failed"] == 0 else "FAIL"
+    pass_rate = float(evidence["pass_rate"])
+    pass_rate_class = (
+        "status-pass"
+        if pass_rate >= 99.0
+        else "status-warning"
+        if pass_rate >= 95.0
+        else "status-fail"
+    )
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -206,12 +214,15 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nol8 Validation Report — {escape(_text(manifest.get('run_id')))}</title>
 <style>
-:root {{ color-scheme: light; --ink:#17202a; --muted:#59636e; --line:#d8dee4; --ok:#176b3a; --bad:#a12622; --panel:#f6f8fa; }}
+:root {{ color-scheme: light; --ink:#17202a; --muted:#59636e; --line:#d8dee4; --ok:#176b3a; --ok-bg:#e7f5ec; --bad:#a12622; --bad-bg:#fbe9e7; --warning:#8a5a00; --warning-bg:#fff4ce; --panel:#f6f8fa; }}
 body {{ font: 15px/1.5 system-ui, sans-serif; color:var(--ink); max-width:1100px; margin:0 auto; padding:32px; }}
 h1,h2,h3 {{ line-height:1.2; }} h2 {{ margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }}
 .status {{ display:inline-block; padding:5px 10px; border-radius:4px; color:white; background:{'var(--ok)' if overall == 'PASS' else 'var(--bad)'}; font-weight:700; }}
 .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }}
 .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px; }} .metric strong {{ display:block; font-size:24px; }}
+.metric-passed, .status-pass {{ color:var(--ok); background:var(--ok-bg); border-color:var(--ok); }}
+.metric-failed, .status-fail {{ color:var(--bad); background:var(--bad-bg); border-color:var(--bad); }}
+.status-warning {{ color:var(--warning); background:var(--warning-bg); border-color:var(--warning); }}
 table {{ border-collapse:collapse; width:100%; margin:10px 0 20px; }} th,td {{ border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }} th {{ background:var(--panel); }}
 pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); padding:12px; border:1px solid var(--line); }} code {{ overflow-wrap:anywhere; }}
 .failure {{ border-left:4px solid var(--bad); padding:1px 16px; margin:20px 0; }} .muted {{ color:var(--muted); }}
@@ -223,7 +234,7 @@ pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); pa
 <h2>Run identity</h2>
 {_table((("Run ID", manifest.get("run_id")), ("Run type", manifest.get("run_type")), ("Workload", workload_name), ("Configuration snapshot", configuration.get("snapshot") if isinstance(configuration, Mapping) else None), ("Created at", manifest.get("created_at")), ("Updated at", manifest.get("updated_at")), ("Deployment target", policy.get("target")), ("Replacement maximum length", comparison.get("replacement_max_length"))))}
 <h2>Validation outcome</h2>
-<div class="grid"><div class="metric"><strong>{evidence['total']}</strong>Evaluated</div><div class="metric"><strong>{evidence['passed']}</strong>Passed</div><div class="metric"><strong>{evidence['failed']}</strong>Failed</div><div class="metric"><strong>{evidence['pass_rate']:.3f}%</strong>Pass rate</div></div>
+<div class="grid"><div class="metric"><strong>{evidence['total']}</strong>Evaluated</div><div class="metric metric-passed"><strong>{evidence['passed']}</strong>Passed</div><div class="metric metric-failed"><strong>{evidence['failed']}</strong>Failed</div><div class="metric {pass_rate_class}"><strong>{pass_rate:.2f}%</strong>Pass rate</div></div>
 {_distribution_table("Outcome breakdown", evidence["outcomes"])}
 {_distribution_table("Record kinds", evidence["kinds"])}
 <h2>Workload composition</h2>
