@@ -173,9 +173,20 @@ both directions.
   message; every failed request carries an error category; an empty comparison
   renders INCONCLUSIVE not a green PASS; pass rate cannot round to 100.00%
   with failures present.
-- **Tier 1 - IN PROGRESS.** Generator false positives - the framework blames
-  Themis for its own bugs. Foundation is built; wiring into generation is the
-  remaining work. See next actions.
+- **Tier 1 - MOSTLY COMPLETE.** Generator false positives - the framework
+  blamed Themis for its own bugs.
+  - T1-1 expected output from full catalog - **DONE, verified at scale**
+  - T1-2 clean records containing literals - **SURFACED** in the generation
+    manifest, not prevented
+  - T1-3 expected-value algorithm - **RESOLVED**, see below
+  - T1-4 support ticket abort - **DONE**
+  - T1-5 generation determinism - **DONE**
+  - T1-6 YAML key order dependence - **NOT STARTED**
+
+T1-3 resolution: Themis was tested directly. Where matches do not overlap it
+behaves as leftmost-longest, which `resolve_non_overlapping` implements. Where
+matches DO overlap Themis corrupts the output, so no expected value is correct
+and the framework records the exposure instead of guessing.
 
 ### Tier 1 foundation (done)
 
@@ -219,27 +230,28 @@ Clean-record contamination measured 0 here, but a reviewer measured 1.5% on a
 
 # Immediate Next Actions
 
-Tier 1, in order:
+1. **T1-6: generation depends on YAML key order**, not only the seed.
+   `generate_workload.py` `_weighted_item` builds a list from `dict.keys()` and
+   passes it to `random.choices`. Latent today because the config snapshot uses
+   `sort_keys=False`, but any re-serialization silently invalidates
+   reproducibility. Fix by sorting names before weighting, then assert a
+   round-tripped config produces an identical corpus.
 
-1. **Overlap detection.** Detect literal pairs that can produce overlapping
-   matches during generation and report them before execution. Must cover BOTH
-   containment and suffix/prefix classes - a containment-only check misses the
-   `"ACCT-1234"` / `"1234-5678"` case.
-2. **T1-1: expected output is computed from selected rules only**, and that
-   invariant is false. Measured: 34 of 300 documents contained catalog literals
-   absent from `expected_matches`. Causes: `date_of_birth` collides with
-   catalog values (~1.3%); `support_ticket` emits `DEMO-CASE-{index}` which
-   contains the `CASE-{index}` literal.
-3. **T1-2: clean records can contain policy literals.**
-   `generate_scale_artifacts.py:190-236` performs no collision check. Measured
-   12 of 800 clean records affected. Correct redaction scored as failure.
-4. **T1-4: support ticket generation aborts** at realistic rule counts
-   (`support_ticket.py:130-133` raises rather than repairs). Passes today only
-   because the fixture uses 12 rules.
-5. **T1-5: generation is not deterministic** for log-formatted documents -
-   `generate_workload.py:607` falls back to `datetime.now()`, affecting ~9% of
-   `enterprise-dlp.yaml` documents.
-6. **T1-6: generation depends on YAML key order**, not only the seed.
+2. **A clean qualification run.** The generator still emits overlapping
+   literals by construction (`"First Last"` for index <= 400 and
+   `"First Last {index}"` above; `street_address` produces suffix pairs). Until
+   a non-overlapping generation mode exists, every scale run reproduces
+   ISSUE-003 and cannot establish transformation correctness.
+
+   Check `overlapping_match_documents` in the generation manifest before
+   treating any run as a qualification.
+
+3. **Tier 2 security** (`docs/CODE_REVIEW_PLAN.md`): `curl -k` on the policy
+   control plane, and both transports sourcing a git-tracked `config/demo.env`.
+
+4. **Tier 4 report usability**: 272 failures render as 272 near-identical
+   blocks with no diff, grouping, or root-cause classification. The report is
+   honest now but not usable as customer evidence at 2.6 MB.
 
 ---
 
