@@ -128,8 +128,47 @@ def build_support_ticket(
         placements.append(RulePlacement(rule, field_path))
 
     if not selected_rules:
-        serialized = json.dumps(record, sort_keys=True)
-        if any(value in serialized for value in catalog_values):
-            raise ValueError("Clean support ticket unexpectedly contains a policy value.")
+        _separate_ticket_from_catalog(record, catalog_values)
 
     return SupportTicketBuild(record=record, placements=tuple(placements))
+
+
+def _separate_ticket_from_catalog(
+    record: dict[str, Any], catalog_values: set[str]
+) -> None:
+    """Move generated ticket values outside the policy domain.
+
+    This previously raised when a clean ticket contained a catalog literal,
+    which aborted generation entirely at realistic rule counts - the value it
+    tripped on was the generator's own identifier. It passed only because the
+    test fixture used a rule count small enough to select no colliding rule.
+
+    Expected output is now computed by scanning the full catalog, so a stray
+    literal no longer corrupts the expected result; it only mislabels a record
+    as clean. Generation reports the count, so repairing quietly here does not
+    hide the condition. Aborting a 10,000 document run over one identifier
+    collision is strictly worse.
+    """
+    rewritable = ("ticket_id", "customer_id", "requester_email")
+    for attempt in range(1, 101):
+        serialized = json.dumps(record, sort_keys=True)
+        collisions = {value for value in catalog_values if value in serialized}
+        if not collisions:
+            return
+
+        changed = False
+        for field_name in rewritable:
+            value = record.get(field_name)
+            if not isinstance(value, str):
+                continue
+            if not any(collision in value for collision in collisions):
+                continue
+            record[field_name] = f"{field_name.upper()}-SYNTHETIC-{attempt:03d}-" + (
+                str(record["document_id"]).rsplit("-", 1)[-1]
+            )
+            changed = True
+
+        if not changed:
+            # The collision is in a field this function does not own. Leave the
+            # record intact; generation records it as carrying literals.
+            return

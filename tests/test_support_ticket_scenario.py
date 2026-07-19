@@ -98,3 +98,41 @@ class SupportTicketScenarioTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SupportTicketCatalogCollisionTests(unittest.TestCase):
+    """Regression: generation must not abort on an identifier collision.
+
+    build_support_ticket previously raised when a clean ticket contained a
+    catalog literal. The value it tripped on was its own DEMO-CASE identifier,
+    which contains the support_case_id literal, so generation aborted at
+    realistic rule counts and passed only because the fixture used 12 rules.
+    """
+
+    def build_clean(self, catalog_values: set[str]):
+        return build_support_ticket(
+            "document-000123",
+            {"fields": []},
+            random.Random(42),
+            (),
+            catalog_values,
+        )
+
+    def test_colliding_identifier_is_repaired_not_raised(self) -> None:
+        build = self.build_clean({"CASE-000123"})
+        serialized = json.dumps(build.record, sort_keys=True)
+        self.assertNotIn("CASE-000123", serialized)
+
+    def test_clean_ticket_without_collision_is_unchanged(self) -> None:
+        build = self.build_clean(set())
+        self.assertEqual(build.record["ticket_id"], "DEMO-CASE-000123")
+
+    def test_repair_is_deterministic(self) -> None:
+        first = self.build_clean({"CASE-000123"})
+        second = self.build_clean({"CASE-000123"})
+        self.assertEqual(first.record, second.record)
+
+    def test_unrepairable_collision_does_not_abort(self) -> None:
+        # A collision in a field this repair does not own must not crash.
+        build = self.build_clean({"support_ticket"})
+        self.assertIsNotNone(build.record)
