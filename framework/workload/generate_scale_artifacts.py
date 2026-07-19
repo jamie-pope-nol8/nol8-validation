@@ -16,6 +16,7 @@ from framework.policy.matching import (
     overlapping_matches,
     resolve_non_overlapping,
 )
+from framework.policy.overlap import find_contained_literals
 from framework.scenarios.support_ticket import build_support_ticket
 from framework.workload.generate_workload import (
     _generate_field_value,
@@ -134,14 +135,19 @@ def _realistic_rule_value(pattern_id: str, index: int) -> str:
     last = last_names[((index - 1) // len(first_names)) % len(last_names)]
     suffix = f"{index:06d}"
     generators: dict[str, Callable[[], str]] = {
-        "person_name": lambda: (
-            f"{first} {last}" if index <= 400 else f"{first} {last} {index}"
-        ),
+        # Every variable component below is fixed width. A variable-width index
+        # lets one literal sit inside another - "Elena Chen" inside "Elena Chen
+        # 1327" - and overlapping matches silently corrupt Themis output
+        # (ISSUE-003), so a catalog containing them cannot validate anything
+        # else.
+        "person_name": lambda: f"{first} {last} {index:05d}",
         "email_address": lambda: (
             f"{first}.{last}{index}@{domains[index % len(domains)]}"
         ),
         "phone_number": lambda: f"+1-704-{200 + index % 800:03d}-{index % 10000:04d}",
-        "street_address": lambda: f"{100 + index} Cedar Avenue, Charlotte NC",
+        "street_address": lambda: (
+            f"{100000 + index} Cedar Avenue, Charlotte NC"
+        ),
         "social_security_number": lambda: (
             f"{100 + index % 800:03d}-{10 + index % 90:02d}-{index % 10000:04d}"
         ),
@@ -157,8 +163,11 @@ def _realistic_rule_value(pattern_id: str, index: int) -> str:
         "routing_number": lambda: f"{100000000 + index % 899999999:09d}",
         "iban": lambda: f"GB{10 + index % 90:02d}DEMO{index:014d}",
         "invoice_number": lambda: f"INV-{20260000 + index}",
-        "ipv4_address": lambda: f"10.{index % 250}.{(index // 250) % 250}.{1 + index % 249}",
-        "ipv6_address": lambda: f"2001:db8::{index:x}",
+        "ipv4_address": lambda: (
+            f"10.{index % 250:03d}.{(index // 250) % 250:03d}"
+            f".{1 + index % 249:03d}"
+        ),
+        "ipv6_address": lambda: f"2001:db8::{index:04x}",
         "hostname": lambda: f"customer-app-{index:04d}.internal.example",
         "internal_url": lambda: f"https://portal.internal.example/customers/{suffix}",
         "cloud_resource_id": lambda: f"arn:aws:s3:::synthetic-customer-{suffix}",
@@ -445,6 +454,22 @@ def generate_scale_artifacts(
     requested_rules = int(workload["policy"]["rule_count"])
     _report_progress(progress_callback, "rules_started", 0, requested_rules)
     rules = _rule_catalog(workload)
+    # A catalog containing literals that sit inside one another cannot validate
+    # transformation correctness: every document carrying the outer literal
+    # also matches the inner one, and overlapping matches corrupt Themis output
+    # silently. Fail here rather than produce a corpus that cannot answer the
+    # question it was generated to answer.
+    contained_literals = find_contained_literals(rule.variant for rule in rules)
+    if contained_literals:
+        examples = "; ".join(
+            f"{inner!r} inside {outer!r}"
+            for inner, outer in contained_literals[:3]
+        )
+        raise ValueError(
+            f"Rule catalog contains {len(contained_literals)} literal pair(s) "
+            f"where one literal occurs inside another, which triggers ISSUE-003 "
+            f"and makes transformation results meaningless. Examples: {examples}"
+        )
     _report_progress(
         progress_callback, "rules_completed", len(rules), requested_rules
     )

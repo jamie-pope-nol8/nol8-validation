@@ -80,6 +80,32 @@ def find_overlapping_pairs(literals: Iterable[str]) -> list[OverlapPair]:
     return pairs
 
 
+def find_contained_literals(literals: Iterable[str]) -> list[tuple[str, str]]:
+    """Literal pairs where one occurs inside the other, as (inner, outer).
+
+    Containment is the class that actually bites: wherever the outer literal
+    appears the inner one necessarily matches inside it, so the overlap is
+    unavoidable rather than dependent on a particular document.
+
+    The suffix/prefix class in `find_overlapping_pairs` is theoretically real
+    but requires the two literals to abut in the input. On generated corpora it
+    never occurs, and reporting it drowns the signal - it produced 1.28 million
+    pairs on the 5,000 rule catalog.
+
+    Uses one Aho-Corasick pass rather than comparing every pair.
+    """
+    from framework.policy.matching import LiteralMatcher
+
+    unique = sorted({literal for literal in literals if literal})
+    matcher = LiteralMatcher(unique)
+    contained: list[tuple[str, str]] = []
+    for literal in unique:
+        for match in matcher.find_all(literal):
+            if match.literal != literal:
+                contained.append((match.literal, literal))
+    return contained
+
+
 def summarize_overlaps(pairs: Sequence[OverlapPair], limit: int = 10) -> str:
     """Human-readable summary for generation output and reports."""
     if not pairs:

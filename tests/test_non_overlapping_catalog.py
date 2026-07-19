@@ -1,0 +1,146 @@
+"""The generated rule catalog must not contain nested literals.
+
+A literal occurring inside another literal guarantees overlapping matches
+wherever the outer one appears, and overlapping matches silently corrupt
+Themis output (ISSUE-003). A catalog containing them cannot validate
+transformation correctness, so generation refuses to produce one.
+"""
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+from framework.policy.matching import LiteralMatcher, overlapping_matches
+from framework.policy.overlap import find_contained_literals
+from framework.workload.generate_scale_artifacts import (
+    _realistic_rule_value,
+    generate_scale_artifacts,
+)
+
+
+class ContainmentDetectionTests(unittest.TestCase):
+    def test_detects_nested_literal(self) -> None:
+        found = find_contained_literals(["Elena Chen", "Elena Chen 1327"])
+        self.assertEqual(found, [("Elena Chen", "Elena Chen 1327")])
+
+    def test_ignores_disjoint_literals(self) -> None:
+        self.assertEqual(find_contained_literals(["ABCD", "WXYZ"]), [])
+
+    def test_ignores_suffix_prefix_join(self) -> None:
+        # Theoretically overlappable but requires the literals to abut in the
+        # input; never observed on generated corpora.
+        self.assertEqual(find_contained_literals(["ABCD", "DEFG"]), [])
+
+    def test_detects_interior_containment(self) -> None:
+        found = find_contained_literals(["mid", "XmidY"])
+        self.assertEqual(found, [("mid", "XmidY")])
+
+
+class RuleValueShapeTests(unittest.TestCase):
+    """The generators that previously produced nested literals."""
+
+    def values(self, pattern: str, count: int = 600) -> list[str]:
+        return [_realistic_rule_value(pattern, index) for index in range(1, count)]
+
+    def test_person_names_are_not_nested(self) -> None:
+        self.assertEqual(find_contained_literals(self.values("person_name")), [])
+
+    def test_street_addresses_are_not_nested(self) -> None:
+        self.assertEqual(find_contained_literals(self.values("street_address")), [])
+
+    def test_ipv4_addresses_are_not_nested(self) -> None:
+        self.assertEqual(find_contained_literals(self.values("ipv4_address")), [])
+
+    def test_ipv6_addresses_are_not_nested(self) -> None:
+        self.assertEqual(find_contained_literals(self.values("ipv6_address")), [])
+
+    def test_person_name_values_remain_unique(self) -> None:
+        values = self.values("person_name")
+        self.assertEqual(len(values), len(set(values)))
+
+
+class GenerationRefusesNestedCatalogTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+
+    def workload(self) -> dict:
+        return {
+            "schema": "enterprise-dlp-scale",
+            "name": "overlap-free",
+            "seed": 42,
+            "policy": {
+                "rule_count": 500,
+                "families": {
+                    "pii": {
+                        "weight": 100,
+                        "patterns": ["person_name", "street_address"],
+                    }
+                },
+            },
+            "documents": {
+                "count": 60,
+                "progress_interval_records": 100,
+                "scenarios": {
+                    "customer_record": {
+                        "weight": 100,
+                        "fields": ["customer_id", "person_name", "street_address"],
+                    }
+                },
+                "formats": {"json": {"weight": 100}},
+                "match_distribution": {
+                    "clean": {
+                        "weight": 30,
+                        "matches_per_document": {"minimum": 0, "maximum": 0},
+                    },
+                    "dirty": {
+                        "weight": 70,
+                        "matches_per_document": {"minimum": 1, "maximum": 3},
+                    },
+                },
+                "size_distribution": {
+                    "small": {
+                        "weight": 100,
+                        "minimum_bytes": 200,
+                        "maximum_bytes": 400,
+                    }
+                },
+                "generate_clean_control_records": True,
+            },
+        }
+
+    def generate(self, workload: dict, name: str):
+        config = self.root / f"{name}.yaml"
+        config.write_text(yaml.safe_dump(workload, sort_keys=False), encoding="utf-8")
+        return generate_scale_artifacts(config, self.root / name)
+
+    def test_catalog_at_scale_has_no_nested_literals(self) -> None:
+        manifest = self.generate(self.workload(), "clean-catalog")
+        variants = [rule["variant"] for rule in manifest["rule_catalog"]]
+        self.assertEqual(find_contained_literals(variants), [])
+
+    def test_generated_corpus_has_no_overlapping_matches(self) -> None:
+        """The property that actually matters: no document contains overlaps."""
+        import json
+
+        manifest = self.generate(self.workload(), "clean-corpus")
+        self.assertEqual(manifest["overlapping_match_documents"], 0)
+
+        variants = [rule["variant"] for rule in manifest["rule_catalog"]]
+        matcher = LiteralMatcher(variants)
+        corpus = (self.root / "clean-corpus" / "input.jsonl").read_text()
+        for line in corpus.splitlines():
+            row = json.loads(line)
+            self.assertEqual(
+                overlapping_matches(matcher.find_all(row["message"])),
+                [],
+                f"{row['record_id']} contains overlapping matches",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
