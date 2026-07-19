@@ -42,7 +42,11 @@ Separate:
 - Remaining work before POC
 
 ---
-## 5000 Rule / 10000 Record Qualification
+## 5000 Rule / 10000 Record Qualification - Clean Record Collision
+
+Scope:
+Rule uniqueness and clean-record collision avoidance only. This section does
+not assert transformation correctness; see the scale qualification below.
 
 Status:
 Passed
@@ -95,17 +99,30 @@ Introduce streaming execution mode:
 ## 10,000 Record / 5,000 Rule Scale Qualification
 
 Status:
-Passed
+Execution passed. Content validation FAILED.
 
 Configuration:
 - Workload: customer_record + CSV
 - Records: 10,000
 - Rules: 5,000
 
-Results:
+Execution results:
 - Records processed: 10,000
 - Requests succeeded: 10,000
 - Requests failed: 0
+
+Content validation results:
+- Records evaluated: 10,000
+- Records passed: 9,728
+- Records failed: 272
+- Pass rate: 97.280%
+- Failure classification: CONTENT_MISMATCH
+
+The 272 failures are caused by a confirmed Themis runtime defect that writes
+replacement tokens at a miscalculated source offset, corrupting adjacent
+characters. The corruption is silent; every request returned HTTP 200.
+
+See ISSUE-003 for the defect characterisation and handover.
 
 Execution:
 - Total duration: 416.045 seconds
@@ -118,10 +135,55 @@ Observed service latency:
 - p99: 16.462 ms
 
 Conclusion:
-The current validation driver successfully executes and validates large workloads. Throughput is limited by the sequential execution model of the harness rather than workload size, policy size, or execution stability.
+The validation driver executes large workloads reliably and correctly detected
+a runtime data-correctness defect at scale. Harness throughput is limited by
+the sequential execution model rather than workload size, policy size, or
+execution stability.
+
+This qualification does NOT establish transformation correctness at scale, and
+must not be presented as customer-facing evidence of correct redaction until
+ISSUE-003 is resolved.
 
 Future evolution:
 Introduce streaming/concurrent validation execution to measure sustained data-path throughput.
 
 ----
 ## Replacement Interaction Boundary
+
+Status:
+Not established. Blocked by ISSUE-003.
+
+Two runtime behaviors currently affect replacement output. Both are
+length-accounting errors in the Themis replacement writer and they are
+independent of each other.
+
+### Replacement value truncation (KB-001)
+
+Replacement strings longer than 15 characters are truncated at runtime.
+
+Bounded and predictable. Policy authors can design around it by keeping
+replacement strings at or below 15 characters. The validation framework can
+normalize for it using `--replacement-max-length 15`.
+
+### Source cursor misalignment (ISSUE-003)
+
+The runtime writes the replacement at a miscalculated source offset, either
+duplicating or destroying characters adjacent to the token.
+
+Not bounded and not safe to design around:
+
+- It is silent. Every affected request returned HTTP 200.
+- It destroys real characters, including CSV field delimiters, producing
+  structurally invalid records.
+- It is not prevented by the KB-001 15-character guidance. The 272 observed
+  failures were measured with that normalization applied.
+- The condition that triggers it is not yet known. Records with identical
+  literal lengths both pass and fail.
+
+### Implication for validation
+
+Until ISSUE-003 is resolved, transformation correctness cannot be asserted at
+scale for any workload containing multi-token literals such as `person_name`.
+
+Execution stability, latency, policy capacity, and catalog scale are
+independently established and remain valid.
