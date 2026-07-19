@@ -16,6 +16,7 @@ from typing import Any, Callable
 import yaml
 
 from framework.policy.generate_functional_test import generate_functional_artifacts
+from framework.reporting.generate_report import aggregate_evidence, render_report_html
 from framework.workload.generate_scale_artifacts import (
     generate_scale_artifacts,
     is_scale_workload,
@@ -47,6 +48,12 @@ class RunExecutionError(Exception):
 
 
 class ComparisonError(Exception):
+    def __init__(self, category: str, message: str):
+        super().__init__(message)
+        self.category = category
+
+
+class ReportingError(Exception):
     def __init__(self, category: str, message: str):
         super().__init__(message)
         self.category = category
@@ -1027,6 +1034,160 @@ def compare_run(
         raise
 
 
+def report_run(run_directory: Path) -> dict[str, Any]:
+    if not run_directory.is_dir():
+        raise ReportingError(
+            "prerequisite", f"Run directory does not exist: {run_directory}"
+        )
+
+    manifest_path = run_directory / "manifest.json"
+    if not manifest_path.is_file():
+        raise ReportingError(
+            "prerequisite", f"Run manifest does not exist: {manifest_path}"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ReportingError(
+            "prerequisite", f"Run manifest is not valid JSON: {error}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise ReportingError("prerequisite", "Run manifest must contain a JSON object.")
+
+    started_at = isoformat_utc(utc_now())
+    reporting_stage: dict[str, Any] = {
+        "status": "in_progress",
+        "started_at": started_at,
+        "output_path": "reports/validation-report.html",
+    }
+    manifest.setdefault("stages", {})["reporting"] = reporting_stage
+    manifest["updated_at"] = started_at
+    write_manifest_atomic(manifest_path, manifest)
+
+    try:
+        comparison_stage = manifest.get("stages", {}).get("comparison", {})
+        if comparison_stage.get("status") != "completed":
+            raise ReportingError(
+                "prerequisite", "Run comparison has not completed successfully."
+            )
+        artifacts = manifest.get("artifacts", {})
+        comparison_metadata = artifacts.get("comparison", {})
+        generation_metadata = artifacts.get("generation_manifest", {})
+        comparison_relative = comparison_metadata.get("path")
+        generation_relative = generation_metadata.get("path")
+        if not isinstance(comparison_relative, str):
+            raise ReportingError("prerequisite", "Comparison artifact is not registered.")
+        if not isinstance(generation_relative, str):
+            raise ReportingError(
+                "prerequisite", "Generation manifest artifact is not registered."
+            )
+        comparison_path = run_directory / comparison_relative
+        generation_path = run_directory / generation_relative
+        if not comparison_path.is_file():
+            raise ReportingError(
+                "artifact", f"Comparison artifact does not exist: {comparison_relative}"
+            )
+        if not generation_path.is_file():
+            raise ReportingError(
+                "artifact", f"Generation manifest does not exist: {generation_relative}"
+            )
+        comparison_rows = _read_comparison_jsonl(
+            comparison_path, "comparison.jsonl"
+        )
+        try:
+            generation = json.loads(generation_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise ReportingError(
+                "artifact", f"Generation manifest is not valid JSON: {error}"
+            ) from error
+        if not isinstance(generation, dict):
+            raise ReportingError(
+                "artifact", "Generation manifest must contain a JSON object."
+            )
+
+        evidence = aggregate_evidence(manifest, generation, comparison_rows)
+        rendered = render_report_html(evidence)
+        report_relative = Path(reporting_stage["output_path"])
+        report_path = run_directory / report_relative
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = report_path.with_name(f".{report_path.name}.tmp")
+        temporary_path.write_text(rendered, encoding="utf-8")
+        os.replace(temporary_path, report_path)
+        manifest.setdefault("artifacts", {})["report"] = artifact_metadata(
+            run_directory, report_relative
+        )
+
+        completed_at = isoformat_utc(utc_now())
+        reporting_stage.update(
+            {
+                "status": "completed",
+                "completed_at": completed_at,
+                "records_total": evidence["total"],
+                "records_passed": evidence["passed"],
+                "records_failed": evidence["failed"],
+            }
+        )
+        manifest["status"] = "report_completed"
+        manifest["updated_at"] = completed_at
+        write_manifest_atomic(manifest_path, manifest)
+        return manifest
+    except (ReportingError, ComparisonError) as error:
+        reporting_error = (
+            error
+            if isinstance(error, ReportingError)
+            else ReportingError("artifact", str(error))
+        )
+        failed_at = isoformat_utc(utc_now())
+        reporting_stage.update(
+            {
+                "status": "failed",
+                "completed_at": failed_at,
+                "error": {
+                    "category": reporting_error.category,
+                    "message": str(reporting_error),
+                },
+            }
+        )
+        manifest["status"] = "report_failed"
+        manifest["updated_at"] = failed_at
+        write_manifest_atomic(manifest_path, manifest)
+        raise reporting_error
+    except OSError as error:
+        failed_at = isoformat_utc(utc_now())
+        reporting_error = ReportingError("artifact", str(error))
+        reporting_stage.update(
+            {
+                "status": "failed",
+                "completed_at": failed_at,
+                "error": {
+                    "category": reporting_error.category,
+                    "message": str(reporting_error),
+                },
+            }
+        )
+        manifest["status"] = "report_failed"
+        manifest["updated_at"] = failed_at
+        write_manifest_atomic(manifest_path, manifest)
+        raise reporting_error from error
+    except Exception as error:
+        failed_at = isoformat_utc(utc_now())
+        reporting_error = ReportingError("rendering", str(error))
+        reporting_stage.update(
+            {
+                "status": "failed",
+                "completed_at": failed_at,
+                "error": {
+                    "category": reporting_error.category,
+                    "message": str(reporting_error),
+                },
+            }
+        )
+        manifest["status"] = "report_failed"
+        manifest["updated_at"] = failed_at
+        write_manifest_atomic(manifest_path, manifest)
+        raise reporting_error from error
+
+
 def _positive_integer(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
@@ -1108,6 +1269,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--replacement-max-length",
         type=_positive_integer,
         help="Normalize expected replacement literals to at most N characters",
+    )
+    report_parser = subparsers.add_parser(
+        "report", help="Create a portable HTML validation report"
+    )
+    report_parser.add_argument(
+        "--run", type=Path, required=True, help="Existing validation Run directory"
     )
     return parser
 
@@ -1431,6 +1598,20 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("Comparison artifact:")
         print(comparison_stage["output_path"])
+        return 0
+
+    if args.command == "report":
+        try:
+            manifest = report_run(args.run)
+        except ReportingError as error:
+            print(f"Report generation failed: {error}", file=sys.stderr)
+            return 1
+        stage = manifest["stages"]["reporting"]
+        print("Validation report generated")
+        print()
+        print(f"Run ID:        {manifest.get('run_id', 'unavailable')}")
+        print(f"Run directory: {args.run}")
+        print(f"Report:        {stage['output_path']}")
         return 0
 
     return 2

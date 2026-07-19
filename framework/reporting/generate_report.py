@@ -1,0 +1,251 @@
+"""Aggregate validation evidence and render a portable HTML report."""
+
+from __future__ import annotations
+
+from collections import Counter
+from html import escape
+from typing import Any, Mapping, Sequence
+
+
+def _text(value: Any, default: str = "unavailable") -> str:
+    if value is None:
+        return default
+    return str(value)
+
+
+def _percentile(values: list[float], percentage: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentage
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
+def _table(rows: Sequence[tuple[str, Any]]) -> str:
+    body = "".join(
+        "<tr><th>" + escape(label) + "</th><td>" + escape(_text(value)) + "</td></tr>"
+        for label, value in rows
+    )
+    return f"<table><tbody>{body}</tbody></table>"
+
+
+def _distribution_table(title: str, values: Mapping[str, Any]) -> str:
+    if not values:
+        return f"<h3>{escape(title)}</h3><p>Unavailable</p>"
+    rows = "".join(
+        f"<tr><td>{escape(str(key))}</td><td>{escape(str(value))}</td></tr>"
+        for key, value in sorted(values.items())
+    )
+    return (
+        f"<h3>{escape(title)}</h3>"
+        "<table><thead><tr><th>Name</th><th>Count</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
+
+
+def aggregate_evidence(
+    manifest: Mapping[str, Any],
+    generation: Mapping[str, Any],
+    comparison_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Produce report metrics without changing validation outcomes."""
+
+    outcomes = Counter(str(row.get("status", "unknown")) for row in comparison_rows)
+    kinds = Counter(str(row.get("kind", "unknown")) for row in comparison_rows)
+    categories: Counter[str] = Counter()
+    cases: Counter[str] = Counter()
+    expected_replacements = 0
+    latencies: list[float] = []
+    failures: list[Mapping[str, Any]] = []
+
+    for row in comparison_rows:
+        if row.get("status") != "PASS":
+            failures.append(row)
+        latency = row.get("latency_ms")
+        if isinstance(latency, (int, float)):
+            latencies.append(float(latency))
+        count = row.get("expected_match_count")
+        if isinstance(count, int):
+            expected_replacements += count
+        matches = row.get("expected_matches")
+        if not isinstance(matches, list):
+            continue
+        for match in matches:
+            if not isinstance(match, Mapping):
+                continue
+            category = match.get("category_id")
+            case = match.get("case_id")
+            if isinstance(category, str):
+                categories[category] += 1
+            if isinstance(case, str):
+                cases[case] += 1
+
+    total = len(comparison_rows)
+    passed = outcomes["PASS"]
+    return {
+        "total": total,
+        "passed": passed,
+        "failed": total - passed,
+        "pass_rate": passed / total * 100 if total else 0.0,
+        "outcomes": outcomes,
+        "kinds": kinds,
+        "categories": categories,
+        "cases": cases,
+        "expected_replacements": expected_replacements,
+        "failures": failures,
+        "latency": {
+            "minimum": min(latencies) if latencies else 0.0,
+            "average": sum(latencies) / len(latencies) if latencies else 0.0,
+            "p50": _percentile(latencies, 0.50),
+            "p95": _percentile(latencies, 0.95),
+            "p99": _percentile(latencies, 0.99),
+            "maximum": max(latencies) if latencies else 0.0,
+        },
+        "generation": generation,
+        "manifest": manifest,
+    }
+
+
+def render_report_html(evidence: Mapping[str, Any]) -> str:
+    """Render self-contained, escaped HTML from aggregated evidence."""
+
+    manifest = evidence["manifest"]
+    generation = evidence["generation"]
+    stages = manifest.get("stages", {}) if isinstance(manifest, Mapping) else {}
+    policy = stages.get("policy", {}) if isinstance(stages, Mapping) else {}
+    run = stages.get("run", {}) if isinstance(stages, Mapping) else {}
+    comparison = stages.get("comparison", {}) if isinstance(stages, Mapping) else {}
+    configuration = manifest.get("configuration", {})
+
+    workload_name = generation.get("workload_name", generation.get("test_name"))
+    requested_records = generation.get(
+        "requested_records", generation.get("record_count")
+    )
+    realized_records = generation.get(
+        "realized_records", generation.get("record_count")
+    )
+    requested_rules = generation.get(
+        "requested_rules", generation.get("policy_rule_count")
+    )
+    realized_rules = generation.get(
+        "realized_rules", generation.get("policy_rule_count")
+    )
+
+    policy_response = policy.get("response", {})
+    if not isinstance(policy_response, Mapping):
+        policy_response = {}
+
+    failures_html: list[str] = []
+    for row in evidence["failures"]:
+        match_rows = []
+        matches = row.get("expected_matches")
+        if isinstance(matches, list):
+            for match in matches:
+                if not isinstance(match, Mapping):
+                    continue
+                match_rows.append(
+                    "<tr>"
+                    f"<td>{escape(_text(match.get('category_id')))}</td>"
+                    f"<td>{escape(_text(match.get('case_id')))}</td>"
+                    f"<td><code>{escape(_text(match.get('variant')))}</code></td>"
+                    f"<td><code>{escape(_text(match.get('replacement')))}</code></td>"
+                    "</tr>"
+                )
+        matches_html = (
+            "<table><thead><tr><th>Category</th><th>Case</th><th>Variant</th>"
+            "<th>Replacement</th></tr></thead><tbody>"
+            + "".join(match_rows)
+            + "</tbody></table>"
+            if match_rows
+            else "<p>No expected matches.</p>"
+        )
+        failures_html.append(
+            "<article class='failure'>"
+            f"<h3>{escape(_text(row.get('status')))} — "
+            f"{escape(_text(row.get('record_id')))}</h3>"
+            + _table(
+                (
+                    ("Request index", row.get("request_index")),
+                    ("Record kind", row.get("kind")),
+                    ("HTTP status", row.get("http_status")),
+                    ("Latency (ms)", row.get("latency_ms")),
+                    ("Error", row.get("error")),
+                )
+            )
+            + "<details><summary>Expected and actual messages</summary>"
+            f"<h4>Expected</h4><pre>{escape(_text(row.get('expected_message')))}</pre>"
+            f"<h4>Actual</h4><pre>{escape(_text(row.get('actual_message')))}</pre>"
+            "</details><h4>Expected match evidence</h4>"
+            + matches_html
+            + "</article>"
+        )
+
+    artifacts = manifest.get("artifacts", {})
+    artifact_rows = []
+    if isinstance(artifacts, Mapping):
+        for name, metadata in sorted(artifacts.items()):
+            if not isinstance(metadata, Mapping):
+                continue
+            artifact_rows.append(
+                "<tr>"
+                f"<td>{escape(str(name))}</td>"
+                f"<td>{escape(_text(metadata.get('path')))}</td>"
+                f"<td><code>{escape(_text(metadata.get('sha256')))}</code></td>"
+                f"<td>{escape(_text(metadata.get('size_bytes')))}</td>"
+                "</tr>"
+            )
+
+    overall = "PASS" if evidence["failed"] == 0 else "FAIL"
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nol8 Validation Report — {escape(_text(manifest.get('run_id')))}</title>
+<style>
+:root {{ color-scheme: light; --ink:#17202a; --muted:#59636e; --line:#d8dee4; --ok:#176b3a; --bad:#a12622; --panel:#f6f8fa; }}
+body {{ font: 15px/1.5 system-ui, sans-serif; color:var(--ink); max-width:1100px; margin:0 auto; padding:32px; }}
+h1,h2,h3 {{ line-height:1.2; }} h2 {{ margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }}
+.status {{ display:inline-block; padding:5px 10px; border-radius:4px; color:white; background:{'var(--ok)' if overall == 'PASS' else 'var(--bad)'}; font-weight:700; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }}
+.metric {{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px; }} .metric strong {{ display:block; font-size:24px; }}
+table {{ border-collapse:collapse; width:100%; margin:10px 0 20px; }} th,td {{ border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }} th {{ background:var(--panel); }}
+pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); padding:12px; border:1px solid var(--line); }} code {{ overflow-wrap:anywhere; }}
+.failure {{ border-left:4px solid var(--bad); padding:1px 16px; margin:20px 0; }} .muted {{ color:var(--muted); }}
+@media print {{ body {{ max-width:none; padding:0; }} details {{ display:block; }} }}
+</style>
+</head>
+<body>
+<header><h1>Nol8 Validation Report</h1><p><span class="status">{overall}</span></p></header>
+<h2>Run identity</h2>
+{_table((("Run ID", manifest.get("run_id")), ("Run type", manifest.get("run_type")), ("Workload", workload_name), ("Configuration snapshot", configuration.get("snapshot") if isinstance(configuration, Mapping) else None), ("Created at", manifest.get("created_at")), ("Updated at", manifest.get("updated_at")), ("Deployment target", policy.get("target")), ("Replacement maximum length", comparison.get("replacement_max_length"))))}
+<h2>Validation outcome</h2>
+<div class="grid"><div class="metric"><strong>{evidence['total']}</strong>Evaluated</div><div class="metric"><strong>{evidence['passed']}</strong>Passed</div><div class="metric"><strong>{evidence['failed']}</strong>Failed</div><div class="metric"><strong>{evidence['pass_rate']:.3f}%</strong>Pass rate</div></div>
+{_distribution_table("Outcome breakdown", evidence["outcomes"])}
+{_distribution_table("Record kinds", evidence["kinds"])}
+<h2>Workload composition</h2>
+{_table((("Seed", generation.get("seed")), ("Requested records", requested_records), ("Realized records", realized_records), ("Requested rules", requested_rules), ("Realized rules", realized_rules), ("Clean records", generation.get("clean_record_count")), ("Dirty records", generation.get("dirty_record_count")), ("Expected replacements", evidence["expected_replacements"]), ("Payload bytes average", generation.get("payload_bytes_average")), ("Padding bytes", generation.get("padding_bytes_total"))))}
+{_distribution_table("Scenarios", generation.get("scenario_distribution", {}))}
+{_distribution_table("Formats", generation.get("format_distribution", {}))}
+{_distribution_table("Match profiles", generation.get("match_profile_distribution", {}))}
+{_distribution_table("Size profiles", generation.get("size_profile_distribution", {}))}
+<h2>Policy deployment</h2>
+{_table((("Status", policy.get("status")), ("Policy path", policy.get("policy_path")), ("Policy SHA-256", policy.get("policy_sha256")), ("HTTP status", policy.get("http_status")), ("Command ID", policy_response.get("command_id")), ("Stage", policy_response.get("stage")), ("Message", policy_response.get("message")), ("Rules", policy_response.get("rules"))))}
+<h2>Execution</h2>
+{_table((("Status", run.get("status")), ("Requests total", run.get("requests_total")), ("Requests completed", run.get("requests_completed")), ("Requests failed", run.get("requests_failed")), ("Total runtime (seconds)", run.get("total_runtime_seconds")), ("Average latency (ms)", run.get("average_latency_ms"))))}
+<h3>Latency from comparison evidence</h3>
+{_table(tuple((name, f"{value:.3f} ms") for name, value in evidence["latency"].items()))}
+<h2>Transformation evidence</h2>
+{_distribution_table("Expected matches by category", evidence["categories"])}
+{_distribution_table("Expected matches by case", evidence["cases"])}
+<h2>Failure details</h2>
+{''.join(failures_html) if failures_html else '<p>No comparison failures.</p>'}
+<h2>Artifact provenance</h2>
+<table><thead><tr><th>Artifact</th><th>Path</th><th>SHA-256</th><th>Bytes</th></tr></thead><tbody>{''.join(artifact_rows)}</tbody></table>
+<p class="muted">Generated from durable Run artifacts. Validation stages were not rerun.</p>
+</body></html>
+"""
+    return html
