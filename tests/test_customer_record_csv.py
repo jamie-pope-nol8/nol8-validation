@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import random
 import tempfile
 import unittest
 from io import StringIO
@@ -12,6 +13,11 @@ import yaml
 
 from framework.workload import generate_scale_artifacts as scale_generator
 from framework.workload.generate_scale_artifacts import generate_scale_artifacts
+from framework.workload.generate_scale_artifacts import (
+    _build_realistic_customer_record,
+    _rule_catalog,
+)
+from framework.workload.generate_workload import load_workload
 
 
 class CustomerRecordCsvTests(unittest.TestCase):
@@ -137,6 +143,66 @@ class CustomerRecordCsvTests(unittest.TestCase):
                 self.assertEqual(record["scenario"], "customer_record")
                 self.assertNotIn("_synthetic_padding", record)
                 self.assertNotIn("validation_rule_", input_row["message"])
+
+    def test_5000_rule_catalog_is_unique_and_deterministic(self) -> None:
+        workload = load_workload(self.config)
+        workload["policy"]["rule_count"] = 5000
+
+        first = _rule_catalog(workload)
+        second = _rule_catalog(workload)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 5000)
+        self.assertEqual(len({rule.variant for rule in first}), 5000)
+
+    def test_clean_customer_records_do_not_collide_with_5000_rules(self) -> None:
+        workload = load_workload(self.config)
+        workload["policy"]["rule_count"] = 5000
+        catalog = _rule_catalog(workload)
+        catalog_values = {rule.variant for rule in catalog}
+        fields = list(
+            workload["documents"]["scenarios"]["customer_record"]["fields"]
+        )
+        rng = random.Random(int(workload["seed"]))
+
+        for index in range(1, 101):
+            record = _build_realistic_customer_record(
+                f"document-{index:06d}",
+                fields,
+                [],
+                catalog_values,
+                rng,
+            )
+            serialized = json.dumps(record, sort_keys=True)
+            self.assertFalse(
+                any(value in serialized for value in catalog_values),
+                msg=f"Clean record {index} contains a policy literal.",
+            )
+
+    def test_fixed_metadata_is_separated_from_policy_dates(self) -> None:
+        workload = load_workload(self.config)
+        workload["policy"]["rule_count"] = 5000
+        catalog = _rule_catalog(workload)
+        catalog_values = {rule.variant for rule in catalog}
+        date_values = {
+            rule.variant for rule in catalog if rule.pattern_id == "date_of_birth"
+        }
+        self.assertIn("2000-01-01", date_values)
+
+        record = _build_realistic_customer_record(
+            "document-000001",
+            list(
+                workload["documents"]["scenarios"]["customer_record"]["fields"]
+            ),
+            [],
+            catalog_values,
+            random.Random(int(workload["seed"])),
+        )
+
+        self.assertNotEqual(record["generated_at"], "2000-01-01T00:00:00Z")
+        self.assertFalse(
+            any(value in record["generated_at"] for value in catalog_values)
+        )
 
 
 if __name__ == "__main__":

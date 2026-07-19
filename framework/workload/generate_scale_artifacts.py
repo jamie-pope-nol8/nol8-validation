@@ -63,6 +63,7 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
 
     rng = random.Random(int(workload["seed"]))
     rules: list[ScaleRule] = []
+    used_variants: set[str] = set()
     for index in range(1, rule_count + 1):
         category_id, family = _weighted_item(families, rng)
         patterns = family.get("patterns")
@@ -72,7 +73,13 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
             )
         pattern_id = str(patterns[(index - 1) % len(patterns)])
         rule_id = f"rule-{index:06d}"
-        variant = _realistic_rule_value(pattern_id, index)
+        variant = _unique_rule_value(
+            pattern_id,
+            index,
+            used_variants,
+            rule_count,
+        )
+        used_variants.add(variant)
         replacement = f"[{category_id.upper()}:{pattern_id.upper()}]"
         rules.append(
             ScaleRule(
@@ -84,6 +91,23 @@ def _rule_catalog(workload: Mapping[str, Any]) -> list[ScaleRule]:
             )
         )
     return rules
+
+
+def _unique_rule_value(
+    pattern_id: str,
+    index: int,
+    used_variants: set[str],
+    rule_count: int,
+) -> str:
+    """Return the first deterministic, unused literal for a catalog rule."""
+
+    for offset in range(rule_count + 1):
+        variant = _realistic_rule_value(pattern_id, index + offset)
+        if variant not in used_variants:
+            return variant
+    raise ValueError(
+        f"Unable to generate a unique policy value for pattern '{pattern_id}'."
+    )
 
 
 def _realistic_rule_value(pattern_id: str, index: int) -> str:
@@ -220,6 +244,7 @@ def _build_realistic_customer_record(
     rng: random.Random,
 ) -> dict[str, Any]:
     record = _deterministic_record(document_id, "customer_record", fields, rng)
+    _separate_customer_record_from_catalog(record, catalog_values)
     direct_fields = {
         "customer_id": "customer_id",
         "person_name": "person_name",
@@ -261,6 +286,70 @@ def _build_realistic_customer_record(
         if collisions:
             raise ValueError("Clean customer record unexpectedly contains a policy value.")
     return record
+
+
+def _separate_customer_record_from_catalog(
+    record: dict[str, Any], catalog_values: set[str]
+) -> None:
+    """Move naturally generated customer values outside the policy domain.
+
+    Values are left unchanged unless they collide with a configured detection
+    literal. This keeps existing small deterministic artifacts stable while
+    ensuring large catalogs cannot introduce untracked matches.
+    """
+
+    protected_fields = {"document_id", "scenario"}
+    for attempt in range(1, 101):
+        serialized = json.dumps(record, sort_keys=True)
+        collisions = {value for value in catalog_values if value in serialized}
+        if not collisions:
+            return
+
+        changed = False
+        for field_name, field_value in tuple(record.items()):
+            if field_name in protected_fields:
+                continue
+            serialized_value = json.dumps(field_value, sort_keys=True)
+            if not any(value in serialized_value for value in collisions):
+                continue
+            record[field_name] = _disjoint_customer_value(
+                field_name,
+                str(record["document_id"]),
+                attempt,
+            )
+            changed = True
+
+        if not changed:
+            break
+
+    raise ValueError(
+        "Customer record baseline could not be separated from policy values."
+    )
+
+
+def _disjoint_customer_value(
+    field_name: str, document_id: str, attempt: int
+) -> str:
+    """Build a deterministic customer value in a non-policy namespace."""
+
+    suffix = document_id.removeprefix("document-")
+    values = {
+        "generated_at": f"2100-01-{1 + (attempt - 1) % 28:02d}T00:00:00Z",
+        "timestamp": f"2100-02-{1 + (attempt - 1) % 28:02d}T12:00:00Z",
+        "customer_id": f"ACCOUNT-{suffix}-{attempt:02d}",
+        "person_name": f"Quinn Okafor {suffix} {attempt}",
+        "email_address": f"customer-{suffix}-{attempt}@example.invalid",
+        "phone_number": f"+1-980-555-{(int(suffix) + attempt) % 10000:04d}",
+        "street_address": f"{50000 + int(suffix)} Juniper Boulevard, Raleigh NC",
+        "date_of_birth": f"2100-03-{1 + (attempt - 1) % 28:02d}",
+        "internal_notes": (
+            f"Customer service review {suffix}-{attempt} completed normally."
+        ),
+    }
+    return values.get(
+        field_name,
+        f"Customer record {suffix} {field_name} value {attempt}",
+    )
 
 
 def _expand_customer_record(
