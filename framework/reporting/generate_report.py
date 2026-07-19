@@ -137,6 +137,21 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
     policy_response = policy.get("response", {})
     if not isinstance(policy_response, Mapping):
         policy_response = {}
+    requests_completed = run.get("requests_completed")
+    harness_runtime = run.get("total_runtime_seconds")
+    completed_count = (
+        float(requests_completed)
+        if isinstance(requests_completed, (int, float))
+        else 0.0
+    )
+    runtime_seconds = (
+        float(harness_runtime)
+        if isinstance(harness_runtime, (int, float))
+        else 0.0
+    )
+    harness_throughput = (
+        completed_count / runtime_seconds if runtime_seconds > 0 else 0.0
+    )
 
     failures_html: list[str] = []
     for row in evidence["failures"]:
@@ -246,9 +261,10 @@ pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); pa
 <h2>Policy deployment</h2>
 {_table((("Status", policy.get("status")), ("Policy path", policy.get("policy_path")), ("Policy SHA-256", policy.get("policy_sha256")), ("HTTP status", policy.get("http_status")), ("Command ID", policy_response.get("command_id")), ("Stage", policy_response.get("stage")), ("Message", policy_response.get("message")), ("Rules", policy_response.get("rules"))))}
 <h2>Execution</h2>
-{_table((("Status", run.get("status")), ("Requests total", run.get("requests_total")), ("Requests completed", run.get("requests_completed")), ("Requests failed", run.get("requests_failed")), ("Total runtime (seconds)", run.get("total_runtime_seconds")), ("Average latency (ms)", run.get("average_latency_ms"))))}
-<h3>Latency from comparison evidence</h3>
+{_table((("Status", run.get("status")), ("Requests total", run.get("requests_total")), ("Requests completed", run.get("requests_completed")), ("Requests failed", run.get("requests_failed")), ("Harness runtime", f"{runtime_seconds:.3f} seconds"), ("Harness throughput", f"{harness_throughput:.2f} req/sec")))}
+<h3>Service latency from request evidence</h3>
 {_table(tuple((name, f"{value:.3f} ms") for name, value in evidence["latency"].items()))}
+<p class="muted">End-to-end throughput includes validation harness overhead. Latency reflects observed request processing time.</p>
 <h2>Transformation evidence</h2>
 {_distribution_table("Expected matches by category", evidence["categories"])}
 {_distribution_table("Expected matches by case", evidence["cases"])}

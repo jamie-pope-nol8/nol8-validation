@@ -197,9 +197,31 @@ class ValidateReportTests(unittest.TestCase):
         self.assertIn('class="metric metric-passed"', html)
         self.assertIn('class="metric metric-failed"', html)
         self.assertIn('class="metric status-fail"', html)
+        self.assertIn("Harness runtime</th><td>0.100 seconds", html)
+        self.assertIn("Harness throughput</th><td>30.00 req/sec", html)
+        self.assertIn("Service latency from request evidence", html)
+        self.assertIn("average</th><td>2.000 ms", html)
+        self.assertIn("p50</th><td>2.000 ms", html)
+        self.assertIn(
+            "End-to-end throughput includes validation harness overhead. "
+            "Latency reflects observed request processing time.",
+            html,
+        )
         self.assertIn("&lt;script&gt;alert(&#x27;bad&#x27;)&lt;/script&gt;", html)
         self.assertNotIn("<script>alert('bad')</script>", html)
         self.assertNotIn("must-never-appear", html)
+
+    def test_zero_runtime_renders_safe_throughput(self) -> None:
+        run_directory = self.create_run()
+        manifest_path = run_directory / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["stages"]["run"]["total_runtime_seconds"] = 0
+        manifest_path.write_text(json.dumps(manifest))
+
+        report_run(run_directory)
+        html = (run_directory / "reports/validation-report.html").read_text()
+        self.assertIn("Harness runtime</th><td>0.000 seconds", html)
+        self.assertIn("Harness throughput</th><td>0.00 req/sec", html)
 
     def test_pass_rate_status_classification(self) -> None:
         cases = (
