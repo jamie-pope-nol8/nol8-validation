@@ -172,18 +172,60 @@ Documented in:
 - `docs/issues/KNOWN_BEHAVIORS.md` (KB-001 is separate and unrelated)
 - `docs/architecture/validation-boundaries.md`
 
-## Qualification run
+## Qualification runs
+
+### Clean qualification - 20260719T204836698102Z (CURRENT, PASSING)
+
+Generated after the non-overlapping generator fix. This is the first
+trustworthy scale evidence the framework has produced.
 
 ```
-Run ID: 20260719T161514709224Z
+5,000 rules / 10,000 records / customer-record-csv
+overlapping_match_documents: 0
+
+Requests succeeded: 10,000    Requests failed: 0
+PASS: 10,000                  CONTENT_MISMATCH: 0
+Latency p50/p95/p99: 12.490 / 14.194 / 16.480 ms
+Report: PASS, 100.00%, 12 KB
+```
+
+Requires `--replacement-max-length 15` for KB-001. Without it, all 7,479 dirty
+records fail on replacement truncation alone and only the 2,521 clean records
+pass. That is expected and documented behaviour, not a defect in this run.
+
+Like-for-like with the original: same workload, clean/dirty split and payload
+size within 1%.
+
+**This proves ISSUE-003 was the SOLE cause of the original 272 failures.** It
+also means ISSUE-003 is not a marginal edge case - it accounted for every
+failure in the original qualification.
+
+### Original qualification - 20260719T161514709224Z (FAILING, retained as evidence)
+
+```
 5,000 rules / 10,000 records
-10,000/10,000 requests succeeded
 9,728 passed, 272 CONTENT_MISMATCH (97.28%)
 ```
 
-The 272 are caused by ISSUE-003. **272 is a floor, not an exact count** -
-`--replacement-max-length 15` collapses three `[BUSINESS_TERMS:*]` tokens to
-one string, so wrong-rule application within that family scores as PASS.
+Caused by ISSUE-003. Cited throughout the issue documentation; preserve it.
+
+## KNOWN BLIND SPOT in the 100% result
+
+`--replacement-max-length 15` truncates expected replacements, and truncation
+is not injective. Three tokens collapse to the same string:
+
+```
+[BUSINESS_TERMS:CONTRACT_NUMBER]  ->  [BUSINESS_TERMS
+[BUSINESS_TERMS:CUSTOMER_ID]      ->  [BUSINESS_TERMS
+[BUSINESS_TERMS:SUPPORT_CASE_ID]  ->  [BUSINESS_TERMS
+```
+
+If Themis applied the wrong rule within that family, comparison still scores
+PASS. The clean qualification contained 4,755 business_terms transformations,
+so the 100% is not airtight for that family.
+
+Fix: shorten those replacement tokens so they remain distinct within 15
+characters, then re-run. Do this before showing the result to a customer.
 
 ## Code review
 
@@ -284,28 +326,22 @@ Clean-record contamination measured 0 here, but a reviewer measured 1.5% on a
 
 # Immediate Next Actions
 
-1. **T1-6: generation depends on YAML key order**, not only the seed.
+1. **Close the business_terms blind spot** (see above). Shorten those
+   replacement tokens so they stay distinct within 15 characters, regenerate,
+   and re-run the qualification.
+
+2. **Tier 2 security** (`docs/CODE_REVIEW_PLAN.md`): `curl -k` on the policy
+   control plane, and both transports sourcing a git-tracked `config/demo.env`.
+
+3. **Tier 4 report usability**: a failing report renders every failure as a
+   full expected/actual pair with no diff, grouping, or root-cause
+   classification - 2.6 MB for 272 failures. Passing reports are fine (12 KB).
+
+4. **T1-6: generation depends on YAML key order**, not only the seed.
    `generate_workload.py` `_weighted_item` builds a list from `dict.keys()` and
    passes it to `random.choices`. Latent today because the config snapshot uses
    `sort_keys=False`, but any re-serialization silently invalidates
-   reproducibility. Fix by sorting names before weighting, then assert a
-   round-tripped config produces an identical corpus.
-
-2. **A clean qualification run.** The generator still emits overlapping
-   literals by construction (`"First Last"` for index <= 400 and
-   `"First Last {index}"` above; `street_address` produces suffix pairs). Until
-   a non-overlapping generation mode exists, every scale run reproduces
-   ISSUE-003 and cannot establish transformation correctness.
-
-   Check `overlapping_match_documents` in the generation manifest before
-   treating any run as a qualification.
-
-3. **Tier 2 security** (`docs/CODE_REVIEW_PLAN.md`): `curl -k` on the policy
-   control plane, and both transports sourcing a git-tracked `config/demo.env`.
-
-4. **Tier 4 report usability**: 272 failures render as 272 near-identical
-   blocks with no diff, grouping, or root-cause classification. The report is
-   honest now but not usable as customer evidence at 2.6 MB.
+   reproducibility.
 
 ---
 
