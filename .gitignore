@@ -10,6 +10,13 @@ output/
 scale-test/generated/
 scale-test/reports/
 
+# Validation run artifacts. Runs are reproducible from configuration and seed,
+# are large, and tracking them made the development and execution hosts
+# diverge. Anything that must survive cleanup belongs in artifacts/evidence/.
+artifacts/runs/
+artifacts/test-documents/
+artifacts/repro-issue-003.nol
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,3 +26,4 @@ venv/
 # Editors and OS
 .vscode/
 .DS_Store
+**/.DS_Store

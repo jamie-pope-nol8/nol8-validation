@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nol8 Validation Report — 20260719T230452981053Z</title>
+<style>
+:root { color-scheme: light; --ink:#17202a; --muted:#59636e; --line:#d8dee4; --ok:#176b3a; --ok-bg:#e7f5ec; --bad:#a12622; --bad-bg:#fbe9e7; --warning:#8a5a00; --warning-bg:#fff4ce; --panel:#f6f8fa; }
+body { font: 15px/1.5 system-ui, sans-serif; color:var(--ink); max-width:1100px; margin:0 auto; padding:32px; }
+h1,h2,h3 { line-height:1.2; } h2 { margin-top:36px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+.status { display:inline-block; padding:5px 10px; border-radius:4px; color:white; background:var(--ok); font-weight:700; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.metric { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px; } .metric strong { display:block; font-size:24px; }
+.metric-passed, .status-pass { color:var(--ok); background:var(--ok-bg); border-color:var(--ok); }
+.metric-failed, .status-fail { color:var(--bad); background:var(--bad-bg); border-color:var(--bad); }
+.status-warning { color:var(--warning); background:var(--warning-bg); border-color:var(--warning); }
+table { border-collapse:collapse; width:100%; margin:10px 0 20px; } th,td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; } th { background:var(--panel); }
+pre { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); padding:12px; border:1px solid var(--line); } code { overflow-wrap:anywhere; }
+.failure { border-left:4px solid var(--bad); padding:1px 16px; margin:20px 0; } .muted { color:var(--muted); }
+@media print { body { max-width:none; padding:0; } details { display:block; } }
+</style>
+</head>
+<body>
+<header><h1>Nol8 Validation Report</h1><p><span class="status">PASS</span></p></header>
+<h2>Run identity</h2>
+<table><tbody><tr><th>Run ID</th><td>20260719T230452981053Z</td></tr><tr><th>Run type</th><td>scale</td></tr><tr><th>Workload</th><td>customer-record-csv</td></tr><tr><th>Configuration snapshot</th><td>config/customer-record-csv.yaml</td></tr><tr><th>Created at</th><td>2026-07-19T23:04:52.981053Z</td></tr><tr><th>Updated at</th><td>2026-07-19T23:12:42.115244Z</td></tr><tr><th>Deployment target</th><td>themis</td></tr><tr><th>Replacement maximum length</th><td>15</td></tr></tbody></table>
+<h2>Validation outcome</h2>
+<div class="grid"><div class="metric"><strong>10000</strong>Evaluated</div><div class="metric metric-passed"><strong>10000</strong>Passed</div><div class="metric metric-failed"><strong>0</strong>Failed</div><div class="metric status-pass"><strong>100.00%</strong>Pass rate</div></div>
+
+<h3>Outcome breakdown</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>PASS</td><td>10000</td></tr></tbody></table>
+<h3>Record kinds</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>clean</td><td>2521</td></tr><tr><td>dirty</td><td>7479</td></tr></tbody></table>
+<h2>Workload composition</h2>
+<table><tbody><tr><th>Seed</th><td>42</td></tr><tr><th>Requested records</th><td>10000</td></tr><tr><th>Realized records</th><td>10000</td></tr><tr><th>Requested rules</th><td>5000</td></tr><tr><th>Realized rules</th><td>5000</td></tr><tr><th>Clean records</th><td>2521</td></tr><tr><th>Dirty records</th><td>7479</td></tr><tr><th>Expected replacements</th><td>24782</td></tr><tr><th>Payload bytes average</th><td>2353.111</td></tr><tr><th>Padding bytes</th><td>0</td></tr></tbody></table>
+<h3>Scenarios</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>customer_record</td><td>10000</td></tr></tbody></table>
+<h3>Formats</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>csv</td><td>10000</td></tr></tbody></table>
+<h3>Match profiles</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>clean</td><td>2521</td></tr><tr><td>light</td><td>5008</td></tr><tr><td>moderate</td><td>2471</td></tr></tbody></table>
+<h3>Size profiles</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>small</td><td>10000</td></tr></tbody></table>
+<h2>Policy deployment</h2>
+<table><tbody><tr><th>Status</th><td>completed</td></tr><tr><th>Policy path</th><td>generated/scale-policy.nol</td></tr><tr><th>Policy SHA-256</th><td>c3b763aa38b33e270557a7ec2921978bfc4765ba3b64e1f1adc5b5ffc8b72ca2</td></tr><tr><th>HTTP status</th><td>200</td></tr><tr><th>Command ID</th><td>cmd-455</td></tr><tr><th>Stage</th><td>apollo</td></tr><tr><th>Message</th><td>loaded 5000 rule(s) into native apollo via reload_rules (persisted, REPLACE)</td></tr><tr><th>Rules</th><td>5000</td></tr></tbody></table>
+<h2>Execution</h2>
+<table><tbody><tr><th>Status</th><td>completed</td></tr><tr><th>Requests total</th><td>10000</td></tr><tr><th>Requests completed</th><td>10000</td></tr><tr><th>Requests failed</th><td>0</td></tr><tr><th>Harness runtime</th><td>413.978 seconds</td></tr><tr><th>Harness throughput</th><td>24.16 req/sec</td></tr></tbody></table>
+<h3>Service latency from request evidence</h3>
+<table><tbody><tr><th>minimum</th><td>9.889 ms</td></tr><tr><th>average</th><td>12.581 ms</td></tr><tr><th>p50</th><td>12.492 ms</td></tr><tr><th>p95</th><td>14.214 ms</td></tr><tr><th>p99</th><td>16.686 ms</td></tr><tr><th>maximum</th><td>155.487 ms</td></tr></tbody></table>
+<p class="muted">End-to-end throughput includes validation harness overhead. Latency reflects observed request processing time.</p>
+<h2>Data Path Profile</h2>
+<h3>Architecture</h3>
+<table><tbody><tr><th>Processing path</th><td>Nol8 FPGA-accelerated data path</td></tr></tbody></table>
+<h3>Workload</h3>
+<table><tbody><tr><th>Records evaluated</th><td>10000</td></tr><tr><th>Rules deployed</th><td>5000</td></tr><tr><th>Expected transformations</th><td>24782</td></tr><tr><th>Input payload size</th><td>23531107 bytes</td></tr></tbody></table>
+<h3>Observed</h3>
+<table><tbody><tr><th>Harness throughput</th><td>24.16 req/sec</td></tr><tr><th>Service latency p50</th><td>12.492 ms</td></tr><tr><th>Service latency p95</th><td>14.214 ms</td></tr><tr><th>Service latency p99</th><td>16.686 ms</td></tr></tbody></table>
+<p class="muted">Measured latency reflects observed request processing. Architecture context describes the execution path and does not represent a benchmark comparison.</p>
+<h2>Transformation evidence</h2>
+<h3>Expected matches by category</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>business_terms</td><td>4755</td></tr><tr><td>credentials</td><td>2518</td></tr><tr><td>financial</td><td>5219</td></tr><tr><td>pii</td><td>12290</td></tr></tbody></table>
+<h3>Expected matches by case</h3><table><thead><tr><th>Name</th><th>Count</th></tr></thead><tbody><tr><td>access_token</td><td>647</td></tr><tr><td>api_key</td><td>641</td></tr><tr><td>bank_account_number</td><td>1180</td></tr><tr><td>bearer_token</td><td>590</td></tr><tr><td>contract_number</td><td>1485</td></tr><tr><td>credit_card_number</td><td>1329</td></tr><tr><td>customer_id</td><td>1764</td></tr><tr><td>date_of_birth</td><td>2027</td></tr><tr><td>email_address</td><td>2188</td></tr><tr><td>invoice_number</td><td>1428</td></tr><tr><td>password</td><td>640</td></tr><tr><td>person_name</td><td>1973</td></tr><tr><td>phone_number</td><td>2148</td></tr><tr><td>routing_number</td><td>1282</td></tr><tr><td>social_security_number</td><td>1977</td></tr><tr><td>street_address</td><td>1977</td></tr><tr><td>support_case_id</td><td>1506</td></tr></tbody></table>
+<h2>Failure details</h2>
+<p>No comparison failures.</p>
+<h2>Artifact provenance</h2>
+<table><thead><tr><th>Artifact</th><th>Path</th><th>SHA-256</th><th>Bytes</th></tr></thead><tbody><tr><td>comparison</td><td>generated/comparison.jsonl</td><td><code>19171b3288534d848bdf3f7a3a3481f37108f2cf054f0170c74f2a7b82e1ee52</code></td><td>61621064</td></tr><tr><td>configuration</td><td>config/customer-record-csv.yaml</td><td><code>6335d682a5036e19a6ff00b366870759291576ff342248560f1ad99ea30f2640</code></td><td>2105</td></tr><tr><td>expected</td><td>generated/expected.jsonl</td><td><code>4fdef3f3948d52c926d20f6e894cc619c0b89df77d0437ee33729ff847184be6</code></td><td>32545690</td></tr><tr><td>generation_manifest</td><td>generated/generation-manifest.json</td><td><code>ce04c722d1327c16df1ee5f7545ec94b87807a3f3139f88a83812dca31f6c058</code></td><td>990636</td></tr><tr><td>input</td><td>generated/input.jsonl</td><td><code>a50ac469c57c6025ecbf6c02611eea98264aaa44e66db03dd0483c971b224518</code></td><td>28706035</td></tr><tr><td>policy</td><td>generated/scale-policy.nol</td><td><code>c3b763aa38b33e270557a7ec2921978bfc4765ba3b64e1f1adc5b5ffc8b72ca2</code></td><td>235560</td></tr></tbody></table>
+<p class="muted">Generated from durable Run artifacts. Validation stages were not rerun.</p>
+</body></html>

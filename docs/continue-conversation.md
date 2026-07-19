@@ -121,12 +121,14 @@ The target is a shared sales demo tenant (`tenant001-v1demo`).
 Always restore afterwards:
 
 ```bash
-./scripts/load-policy.sh themis \
-  artifacts/runs/20260719T161514709224Z/generated/scale-policy.nol
+./scripts/load-policy.sh themis artifacts/evidence/tenant-restore-policy.nol
 ```
 
-That file is the only copy of the qualification policy. If it is lost, the
-tenant's policy is unrecoverable.
+That file is the only copy of the deployed policy and is tracked in git for
+exactly that reason. If it is lost, the tenant's policy is unrecoverable.
+
+Run artifacts under `artifacts/runs/` are NOT tracked and are deleted during
+cleanup - never make tenant recovery depend on them.
 
 ---
 
