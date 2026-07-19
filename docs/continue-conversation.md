@@ -18,6 +18,29 @@ to redo finished work. Accuracy matters more than history.
 
 ---
 
+# The Short Version
+
+There are TWO separate problems. Do not conflate them.
+
+**1. Themis has a real defect (ISSUE-003).** Two rules matching overlapping
+text cause the runtime to write the replacement at the wrong offset and destroy
+adjacent data. Silent - HTTP 200 every time. Proven with plain curl, no
+framework code involved, so the finding does not depend on this repository.
+This is the escalation-worthy finding.
+
+**2. The framework had its own defects**, now largely fixed. It generated test
+data that happens to trip the Themis bug; it computed expected output from an
+invariant that was false, so it blamed Themis for correct behaviour; and it had
+ordinary bugs (non-reproducible generation, an outright crash at realistic rule
+counts).
+
+The 272 qualification failures are genuine Themis corruption - independently
+confirmed. But the framework's own measurement bugs would have added false
+failures on top, which is why they had to be fixed before any claim is made
+using its output.
+
+---
+
 # Session Operating Rules
 
 ## Execution Style
@@ -187,6 +210,23 @@ T1-3 resolution: Themis was tested directly. Where matches do not overlap it
 behaves as leftmost-longest, which `resolve_non_overlapping` implements. Where
 matches DO overlap Themis corrupts the output, so no expected value is correct
 and the framework records the exposure instead of guessing.
+
+### Why every scale run currently fails
+
+The generator emits overlapping literals **by construction**:
+
+- `person_name` is `"First Last"` for index <= 400 and `"First Last {index}"`
+  above, so the short form is contained in the long form.
+- `street_address` is `"{100+index} Cedar Avenue, Charlotte NC"`, so index `i`
+  and `i+3000` produce a suffix/prefix pair.
+
+Every 5,000-rule catalog therefore contains overlapping pairs, every scale run
+reproduces ISSUE-003, and no scale run can currently establish transformation
+correctness. This is the gate on customer-facing evidence - not the remaining
+code review tiers.
+
+Check `overlapping_match_documents` in the generation manifest before treating
+any run as a qualification.
 
 ### Tier 1 foundation (done)
 
