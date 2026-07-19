@@ -178,15 +178,36 @@ def _realistic_rule_value(pattern_id: str, index: int) -> str:
         "medical_record_number": lambda: f"MRN-{suffix}",
         "customer_id": lambda: f"CUST-{suffix}",
         "employee_id": lambda: f"EMP-{suffix}",
-        "project_codename": lambda: f"Project Cedar-{index}",
-        "internal_product_name": lambda: f"Northstar Suite {index}",
+        "project_codename": lambda: f"Project Cedar-{index:05d}",
+        "internal_product_name": lambda: f"Northstar Suite {index:05d}",
         "support_case_id": lambda: f"CASE-{suffix}",
         "contract_number": lambda: f"CTR-{suffix}",
     }
+    if _SUPPORTED_PATTERNS is None:
+        _remember_supported_patterns(tuple(sorted(generators)))
     try:
         return generators[pattern_id]()
     except KeyError as error:
         raise ValueError(f"Unsupported policy pattern: {pattern_id}") from error
+
+
+_SUPPORTED_PATTERNS: tuple[str, ...] | None = None
+
+
+def _remember_supported_patterns(patterns: tuple[str, ...]) -> None:
+    global _SUPPORTED_PATTERNS
+    _SUPPORTED_PATTERNS = patterns
+
+
+def supported_patterns() -> tuple[str, ...]:
+    """Every pattern id `_realistic_rule_value` can generate.
+
+    Derived from the generator table itself so a new pattern cannot be added
+    without the overlap tests covering it.
+    """
+    if _SUPPORTED_PATTERNS is None:
+        _realistic_rule_value("person_name", 1)
+    return _SUPPORTED_PATTERNS or ()
 
 
 def _write_policy(path: Path, rules: list[ScaleRule]) -> None:

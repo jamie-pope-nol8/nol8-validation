@@ -18,7 +18,10 @@ from framework.policy.overlap import find_contained_literals
 from framework.workload.generate_scale_artifacts import (
     _realistic_rule_value,
     generate_scale_artifacts,
+    supported_patterns,
 )
+
+ALL_PATTERNS = supported_patterns()
 
 
 class ContainmentDetectionTests(unittest.TestCase):
@@ -60,6 +63,31 @@ class RuleValueShapeTests(unittest.TestCase):
     def test_person_name_values_remain_unique(self) -> None:
         values = self.values("person_name")
         self.assertEqual(len(values), len(set(values)))
+
+    def test_no_pattern_generator_produces_nested_literals(self) -> None:
+        """Every supported pattern, not only the ones known to have failed.
+
+        Checking generators individually is whack-a-mole: the fixed-width fix
+        was applied to four generators and a fifth, internal_product_name, was
+        only caught when generation refused a real catalog.
+        """
+        every_value: list[str] = []
+        for pattern in ALL_PATTERNS:
+            values = [
+                _realistic_rule_value(pattern, index)
+                for index in range(1, 400)
+            ]
+            with self.subTest(pattern=pattern):
+                self.assertEqual(
+                    find_contained_literals(values),
+                    [],
+                    f"{pattern} produces nested literals",
+                )
+            every_value.extend(values)
+
+        # Also across families - a literal from one pattern must not sit
+        # inside a literal from another.
+        self.assertEqual(find_contained_literals(every_value), [])
 
 
 class GenerationRefusesNestedCatalogTests(unittest.TestCase):
