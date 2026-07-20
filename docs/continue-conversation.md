@@ -151,8 +151,12 @@ Reproduced with plain curl from EC2 - **not caused by our code**. The control
 plane is healthy throughout, answering in under 10 ms. The edge (`argus`) and
 transport (`iris`) are up; the rules engine (`apollo`) is not answering.
 
-First observed failing in 3-4s per request, later failing in ~12ms, which
-suggests it stopped waiting on apollo entirely rather than recovering.
+Failure timing is highly consistent: 12 consecutive probes returned in
+4.130s +/- 3ms. That is close to 2 x the 2-second apollo timeout plus
+overhead - one retry, both legs timing out. One probe returned in 12ms; a
+follow-up series did not reproduce it, so treat that as a brief circuit-break
+window rather than a change of state. (An earlier revision of this file read
+that single sample as apollo being dropped entirely. It did not support that.)
 
 Nothing to fix on our side. **Re-probe before attempting any run:**
 
