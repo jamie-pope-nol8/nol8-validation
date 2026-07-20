@@ -9,7 +9,9 @@ framework. They were found while building a repeatable validation capability,
 and they affect what can be sold and supported rather than only what can be
 tested.
 
-Framework issues are tracked separately in `docs/issues/`.
+Engineering-facing, self-contained reports for each of these live in
+`docs/issues/` (the `ISSUE-NNN-*.md` register). Internal investigations and
+framework-specific material are under `docs/issues/internal/`.
 
 ---
 
@@ -20,7 +22,7 @@ Framework issues are tracked separately in `docs/issues/`.
 | 1 | A deployed policy has no identity | High | Cannot answer "what is enforcing right now?" |
 | 2 | Deployment replaces the entire ruleset | High | No multi-tenant, staged rollout, or partial update |
 | 3 | Deployment is fire and forget | Medium | Traffic may be evaluated against the previous policy |
-| 4 | Overlapping matches corrupt output | High | Silent data destruction (ISSUE-003) |
+| 4 | Overlapping matches corrupt output | High | Silent data destruction (ISSUE-004) |
 | 5 | Replacements truncate at 15 characters | Medium | Constrains redaction token design (KB-001) |
 | 6 | Evaluation environment is unreachable externally | High | Agent integrations cannot be demonstrated |
 | 7 | No way to check whether the runtime is healthy | Medium | Work is started against a dead backend |
@@ -119,7 +121,7 @@ and no dry run.
   detect it afterwards, because of limitation 1.
 - **Every change is a full redeploy.** Adding one rule means re-uploading the
   entire ruleset. That is also precisely the operation most likely to introduce
-  an overlapping literal pair and therefore trigger ISSUE-003.
+  an overlapping literal pair and therefore trigger ISSUE-004.
 - **No rollback.** A bad policy is either a DLP outage or, worse, silent
   under-redaction until someone notices.
 - **No dry run.** A syntactically valid but semantically wrong policy goes
@@ -159,8 +161,8 @@ once active, or a status endpoint that can be polled against `command_id`.
 
 ## 4. Overlapping matches corrupt output
 
-Full detail in
-`docs/issues/20260719-ISSUE-003-scale-validation-transformation-mismatch.md`.
+Engineering-facing report: `docs/issues/ISSUE-004-overlapping-matches-corrupt-output.md`.
+Full internal investigation: `docs/issues/internal/ISSUE-004-corruption-investigation.md`.
 
 When two rules match overlapping regions of the input, the runtime computes the
 wrong match start offset and destroys content preceding the match. Silent -
@@ -182,13 +184,14 @@ produce overlapping matches. That constraint is awkward to satisfy and
 impossible to verify without tooling.
 
 Reproduces with curl alone against any tenant - two rules and one record, no
-tooling required. Commands are in the ISSUE-003 write-up.
+tooling required. Commands are in the ISSUE-004 write-up.
 
 ---
 
 ## 5. Replacements truncate at 15 characters
 
-Full detail in `docs/issues/KNOWN_BEHAVIORS.md` (KB-001).
+Engineering-facing report: `docs/issues/ISSUE-005-replacements-truncate-at-15-characters.md`.
+Internal detail in `docs/issues/internal/KNOWN_BEHAVIORS.md` (KB-001).
 
 Replacement strings longer than 15 characters are truncated at runtime.
 `[FINANCIAL:CREDIT_CARD_NUMBER]` is emitted as `[FINANCIAL:CRED`.

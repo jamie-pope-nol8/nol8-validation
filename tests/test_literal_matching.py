@@ -46,7 +46,7 @@ class FindAllTests(unittest.TestCase):
         )
 
     def test_overlapping_literals_both_found(self) -> None:
-        # The ISSUE-003 partial-overlap case.
+        # The ISSUE-004 partial-overlap case.
         self.assertEqual(
             found(["ABCD", "DEFG"], "x ABCDEFG y"),
             [(2, 6, "ABCD"), (5, 9, "DEFG")],

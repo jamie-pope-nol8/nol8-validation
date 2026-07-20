@@ -127,7 +127,7 @@ returned HTTP 200.
 The qualification catalog contained 31 such prefix literals. Removing only
 those rules eliminates the corruption entirely.
 
-See ISSUE-003 for the root cause, evidence, and handover.
+See ISSUE-004 for the root cause, evidence, and handover.
 
 Execution:
 - Total duration: 416.045 seconds
@@ -147,7 +147,7 @@ execution stability.
 
 This qualification does NOT establish transformation correctness at scale, and
 must not be presented as customer-facing evidence of correct redaction until
-ISSUE-003 is resolved.
+ISSUE-004 is resolved.
 
 Future evolution:
 Introduce streaming/concurrent validation execution to measure sustained data-path throughput.
@@ -156,7 +156,7 @@ Introduce streaming/concurrent validation execution to measure sustained data-pa
 ## Replacement Interaction Boundary
 
 Status:
-Not established. Blocked by ISSUE-003.
+Not established. Blocked by ISSUE-004.
 
 Two runtime behaviors currently affect replacement output. Both are
 length-accounting errors in the Themis replacement writer and they are
@@ -170,7 +170,7 @@ Bounded and predictable. Policy authors can design around it by keeping
 replacement strings at or below 15 characters. The validation framework can
 normalize for it using `--replacement-max-length 15`.
 
-### Overlapping match corruption (ISSUE-003)
+### Overlapping match corruption (ISSUE-004)
 
 When two rules match overlapping regions of the input, the runtime computes the
 wrong match start offset and destroys content preceding the match.

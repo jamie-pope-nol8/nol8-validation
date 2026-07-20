@@ -173,7 +173,7 @@ limitation. It is not a bug in either system.
 
 If a minority of records fail with corrupted output - replacement text
 appearing at the wrong offset, preceding content destroyed - that is **THM-4
-(ISSUE-003)**, the overlapping-match defect.
+(ISSUE-004)**, the overlapping-match defect.
 
 Check whether the workload contains overlapping literals:
 
@@ -186,7 +186,7 @@ known product defect. Regenerate; current generation refuses to produce
 overlapping catalogs.
 
 Detail and reproduction:
-[issues/20260719-ISSUE-003-scale-validation-transformation-mismatch.md](issues/20260719-ISSUE-003-scale-validation-transformation-mismatch.md)
+[issues/internal/ISSUE-004-corruption-investigation.md](issues/internal/ISSUE-004-corruption-investigation.md)
 
 ---
 

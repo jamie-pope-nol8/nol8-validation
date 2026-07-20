@@ -199,7 +199,7 @@ def _realistic_rule_value(pattern_id: str, index: int) -> str:
         # Every variable component below is fixed width. A variable-width index
         # lets one literal sit inside another - "Elena Chen" inside "Elena Chen
         # 1327" - and overlapping matches silently corrupt Themis output
-        # (ISSUE-003), so a catalog containing them cannot validate anything
+        # (ISSUE-004), so a catalog containing them cannot validate anything
         # else.
         "person_name": lambda: f"{first} {last} {index:05d}",
         "email_address": lambda: (
@@ -488,7 +488,7 @@ def _expected_result(
 
     Returns the expected message, the match evidence, and the number of
     overlapping match pairs. A document with overlapping matches triggers
-    ISSUE-003, so no expected value for it is correct; the count is surfaced
+    ISSUE-004, so no expected value for it is correct; the count is surfaced
     rather than silently folded into the result.
     """
     found = matcher.find_all(message)
@@ -549,7 +549,7 @@ def generate_scale_artifacts(
         )
         raise ValueError(
             f"Rule catalog contains {len(contained_literals)} literal pair(s) "
-            f"where one literal occurs inside another, which triggers ISSUE-003 "
+            f"where one literal occurs inside another, which triggers ISSUE-004 "
             f"and makes transformation results meaningless. Examples: {examples}"
         )
     _report_progress(
@@ -806,7 +806,7 @@ def generate_scale_artifacts(
         "generation_mode_distribution": dict(
             sorted(generation_mode_counts.items())
         ),
-        # ISSUE-003 exposure. Documents whose matches overlap cannot produce a
+        # ISSUE-004 exposure. Documents whose matches overlap cannot produce a
         # correct expected value, because the runtime corrupts them. Recorded
         # so a qualification run cannot silently include them.
         "overlapping_match_documents": documents_with_overlaps,

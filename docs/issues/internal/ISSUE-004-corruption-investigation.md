@@ -127,7 +127,7 @@ Add `-k` if the endpoint presents a self-signed certificate.
 
 ### Scripted reproductions (validation framework repository only)
 
-`scripts/repro-issue-003-curl.sh` and `scripts/repro-issue-003.py` cover the
+`scripts/repro-issue-004-curl.sh` and `scripts/repro-issue-004.py` cover the
 full case matrix including controls. These belong to the validation framework
 and are not needed to reproduce the defect.
 
@@ -627,5 +627,5 @@ Targeted guard for this defect:
   literal length plus the rendered replacement length.
 - No character preceding a replacement token is added or removed.
 
-`scripts/repro-issue-003.py` covers these cases and should fail while the
+`scripts/repro-issue-004.py` covers these cases and should fail while the
 runtime defect is present.

@@ -21,7 +21,7 @@ reconstructing context from chat history.
 > are superseded history. See "Clean qualification" and "Reproducibility after
 > FW-7" below.
 >
-> **Next work items:** (1) Send ISSUE-003 to engineering - drafts ready, still
+> **Next work items:** (1) Send ISSUE-004 to engineering - drafts ready, still
 > the one that matters to the product. (2) Continue the review: Tier 2
 > (security) and Tier 5 (structure and tests) are NOT STARTED.
 
@@ -54,7 +54,7 @@ NOT STARTED long after both had shipped. Accuracy over history.
 
 Two separate problems. Do not conflate them.
 
-**1. Themis has real product defects.** The headline is ISSUE-003: two rules
+**1. Themis has real product defects.** The headline is ISSUE-004: two rules
 matching overlapping text cause the runtime to write the replacement at the
 wrong offset and destroy adjacent data, silently, HTTP 200 every time.
 **Still open. Not yet reported to engineering.** Full product findings in
@@ -88,7 +88,8 @@ Consequences for anything sent to engineering:
 - Inline reproductions as literal curl against their endpoints and token.
 - Mention the framework only as provenance for finding the defect at scale.
 
-ISSUE-003 and the handover drafts already follow this. Keep it that way.
+The engineering-facing issue docs in `docs/issues/` already follow this. Keep it
+that way.
 
 ---
 
@@ -285,16 +286,21 @@ Supersedes three earlier runs, kept only as history:
   4,755 transformations. Under current logic those would be INCONCLUSIVE. This
   is exactly the blind spot FW-3 closed, now proven closed end to end.
 - `20260719T161514709224Z` - the original 272-failure run whose catalog had 31
-  overlapping pairs; the source of `issue-003-failure-sample.jsonl`.
+  overlapping pairs; the source of `issue-004-failure-sample.jsonl`.
 
-The last two together **prove ISSUE-003 was the sole cause of the original 272
+The last two together **prove ISSUE-004 was the sole cause of the original 272
 failures**, and that it is not a marginal edge case.
 
-## ISSUE-003 - OPEN, handover drafted but NOT SENT
+## ISSUE-004 - OPEN, engineering doc ready but NOT SENT
 
 **Do not record this as resolved.** A draft once described it as "resolved
 through policy quality validation". Wrong. The Themis defect is untouched; our
 *generator* stopped producing catalogs that trip it.
+
+Note the renumber: the overlapping-corruption defect is **ISSUE-004** (aligned
+to THM-4). It was formerly labelled ISSUE-003 - a Codex numbering that started at
+003 with no 001/002. The whole `issue-003` token was renamed to `issue-004`
+across docs, code comments, tests, scripts, and the evidence sample file.
 
 - **Themis defect** - open, unfixed, not yet reported.
 - **Framework workaround** - our catalogs no longer contain overlapping
@@ -314,9 +320,11 @@ Empirically established:
 - Replacement output is NOT re-scanned (single pass).
 - Match END offset is correct; only the START is displaced.
 
-**Handover drafts:** `docs/issues/ISSUE-003-handover-message.md` - Slack and
-email versions, plus the reasoning behind each choice. Reproduction is inline
-curl, no repository needed.
+**Engineering-facing report:** `docs/issues/ISSUE-004-overlapping-matches-corrupt-output.md`
+- self-contained, inline curl, no repository needed, safe to attach to an email.
+The full internal investigation is `docs/issues/internal/ISSUE-004-corruption-investigation.md`.
+The old ready-to-send handover-message draft was removed; its curl reproduction
+is folded into the ISSUE-004 report.
 
 ## Themis product limitations - seven findings
 
@@ -325,7 +333,7 @@ curl, no repository needed.
 1. A deployed policy has no identity (no read-back, version, or identifier)
 2. Deployment replaces the entire ruleset
 3. Deployment is fire and forget
-4. Overlapping matches corrupt output (ISSUE-003)
+4. Overlapping matches corrupt output (ISSUE-004)
 5. Replacements truncate at 15 characters (KB-001)
 6. Evaluation environment unreachable externally - VPN and SSH only, so agent
    integrations cannot be demonstrated
@@ -371,8 +379,8 @@ framed or streaming protocol. There may be an inline or proxy mode we are not
 using.
 
 Raise as a **question, not a finding**: is there an inline/streaming mode, and
-what is the intended integration pattern? Recorded at the end of the handover
-drafts.
+what is the intended integration pattern? Send it as its own short note, not
+stapled to any issue doc.
 
 ## Conceptual clarification - the oracle is ours, not the product
 
@@ -499,7 +507,7 @@ Now `framework/reporting/generate_report.py`:
 
 Divergence offset is **computed** from the live `expected_message` /
 `actual_message`; live comparison rows do NOT carry `divergence_offset` /
-`byte_delta` (only the curated `issue-003-failure-sample.jsonl` does). On a
+`byte_delta` (only the curated `issue-004-failure-sample.jsonl` does). On a
 252-failure / 3-signature render the failure section is ~15 KB with 9 examples,
 versus 252 full dumps before. INCONCLUSIVE rows never appear here. Tests:
 `tests/test_report_failure_grouping.py`, proven non-vacuous against the old
@@ -526,12 +534,18 @@ Design constraints:
 
 # Immediate Next Actions
 
-1. **Send ISSUE-003 to engineering.** Drafts ready in
-   `docs/issues/ISSUE-003-handover-message.md`. The user may have a parallel
-   Claude craft the message from these docs - written to be self-contained for
-   exactly that reason. This is the one that matters to the product.
+1. **Send ISSUE-004 to engineering.** The self-contained report is
+   `docs/issues/ISSUE-004-overlapping-matches-corrupt-output.md` - attach it to
+   an email or paste the reproduction into Slack. Send it alone; the other issue
+   docs go separately so the defect is not triaged as feedback. This is the one
+   that matters to the product.
 
-2. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
+2. **Send the other issue docs as wanted.** `docs/issues/` now holds a full
+   engineering-facing register (ISSUE-001..007) plus a README index, each doc
+   self-contained. The data-path question (inline/streaming mode) goes as its own
+   short note, not attached to an issue.
+
+3. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
    tests) are NOT STARTED; re-read `docs/CODE_REVIEW_PLAN.md` against current
    code first, since FW-4/FW-5/FW-6/FW-8 have already moved several items.
 
@@ -550,7 +564,7 @@ Done since last update:
 - Five-stage lifecycle; do not collapse stages.
 - `validate` is the only supported interface. Scripts are transport.
 - Manifest-driven state, written atomically.
-- Do NOT adjust validation expectations to make ISSUE-003 pass.
+- Do NOT adjust validation expectations to make ISSUE-004 pass.
 - A run where every request fails is deliberately NOT raised as a stage
   failure - that would block compare and report, leaving an exception instead
   of evidence. **The 2026-07-20 outage is exactly this case working as intended.**
@@ -571,7 +585,7 @@ Tracked evidence in `artifacts/evidence/` with a README explaining provenance:
   `20260720T221534714262Z`, SHA `27fe47db...`). Themis cannot read back what is
   deployed, so this is the only copy. Generated under the current post-FW-7
   generator; reproducible from seed 42.
-- `issue-003-failure-sample.jsonl` - 12 representative failures.
+- `issue-004-failure-sample.jsonl` - 12 representative failures.
 - `qualification-passing-report.html` - reference for a clean result.
 
 `docs/CLEANUP_PLAN.md` records what was removed and what still needs a decision

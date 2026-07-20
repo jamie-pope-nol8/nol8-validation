@@ -23,15 +23,18 @@ Findings are split by who owns the fix.
 
 ### Themis runtime - THM
 
-| ID | Finding | Severity | Status |
-|---|---|---|---|
-| THM-1 | A deployed policy has no identity | High | Open, not reported |
-| THM-2 | Deployment replaces the entire ruleset | High | Open, not reported |
-| THM-3 | Deployment is fire and forget | Medium | Open, not reported |
-| THM-4 | Overlapping matches corrupt output (ISSUE-003) | **High** | Open, **handover drafted** |
-| THM-5 | Replacements truncate at 15 characters (KB-001) | Medium | Open, worked around |
-| THM-6 | Evaluation environment unreachable externally | High | Open, not reported |
-| THM-7 | No way to check whether the runtime is healthy | Medium | Open, not reported |
+These are the internal IDs. Each maps to an engineering-facing, sendable report
+in `docs/issues/` (`ISSUE-NNN`), aligned 1:1 — **ISSUE-N = THM-N**.
+
+| ID | Ext. | Finding | Severity | Status |
+|---|---|---|---|---|
+| THM-1 | ISSUE-001 | A deployed policy has no identity | High | Open, not reported |
+| THM-2 | ISSUE-002 | Deployment replaces the entire ruleset | High | Open, not reported |
+| THM-3 | ISSUE-003 | Deployment is fire and forget | Medium | Open, not reported |
+| THM-4 | ISSUE-004 | Overlapping matches corrupt output | **High** | Open, **eng doc ready** |
+| THM-5 | ISSUE-005 | Replacements truncate at 15 characters (KB-001) | Medium | Open, worked around |
+| THM-6 | ISSUE-006 | Evaluation environment unreachable externally | High | Open, not reported |
+| THM-7 | ISSUE-007 | No way to check whether the runtime is healthy | Medium | Open, not reported |
 
 ### Operator tooling - OPS
 
@@ -119,9 +122,10 @@ actual   x [P[Q] y
 Redacting both `"Acme Corp"` and `"Acme Corporation"` triggers it. Reproduces
 with curl alone - two rules and one record.
 
-- Detail and evidence: `docs/issues/20260719-ISSUE-003-scale-validation-transformation-mismatch.md`
-- **Ready to send:** `docs/issues/ISSUE-003-handover-message.md`
-- Authoring constraint: `docs/issues/KNOWN_BEHAVIORS.md`
+- **Ready to send:** `docs/issues/ISSUE-004-overlapping-matches-corrupt-output.md`
+  (self-contained, inline curl, safe to attach to an email)
+- Detail and evidence: `docs/issues/internal/ISSUE-004-corruption-investigation.md`
+- Authoring constraint: `docs/issues/internal/KNOWN_BEHAVIORS.md`
 
 ## THM-5 - Replacements truncate at 15 characters
 
@@ -132,7 +136,7 @@ Replacement strings longer than 15 characters are truncated at runtime.
 indistinguishable in output, so a reader cannot tell which rule fired. That
 silently degrades auditability, and it is what made FW-3 possible.
 
-Detail: `docs/issues/KNOWN_BEHAVIORS.md` (KB-001).
+Detail: `docs/issues/internal/KNOWN_BEHAVIORS.md` (KB-001).
 
 ## THM-6 - Evaluation environment unreachable externally
 
@@ -310,7 +314,7 @@ excluded from failure details (neither pass nor product failure). Tests in
 full-dump renderer. Divergence offset is computed from the live
 `expected_message`/`actual_message`, not read from a field - live comparison
 rows do not carry `divergence_offset`/`byte_delta` (only the curated
-`issue-003-failure-sample.jsonl` does).
+`issue-004-failure-sample.jsonl` does).
 
 ## FW-7 - Generation depends on YAML key order (FIXED)
 
@@ -388,7 +392,7 @@ streaming protocol we may simply not be using.
 
 **Raise as a question, not a finding:** is there an inline or proxy mode, and
 what is the intended production integration pattern? Recorded at the end of the
-ISSUE-003 handover drafts.
+ISSUE-004 handover drafts.
 
 ---
 
@@ -399,11 +403,11 @@ ISSUE-003 handover drafts.
 | `docs/FINDINGS.md` | **this file** - the index of everything |
 | `docs/continue-conversation.md` | project state, environment, how to resume work |
 | `docs/product/themis-product-limitations.md` | THM-1 to THM-7 and OPS-1 to OPS-3 in full |
-| `docs/issues/20260719-ISSUE-003-*.md` | THM-4 evidence and reproduction |
-| `docs/issues/ISSUE-003-handover-message.md` | ready-to-send Slack and email drafts |
-| `docs/issues/KNOWN_BEHAVIORS.md` | KB-001 (THM-5) and the THM-4 authoring constraint |
+| `docs/issues/` | engineering-facing register: ISSUE-001..007, one sendable doc each, plus README index |
+| `docs/issues/internal/ISSUE-004-corruption-investigation.md` | THM-4 evidence and reproduction (internal) |
+| `docs/issues/internal/KNOWN_BEHAVIORS.md` | KB-001 (THM-5) and the THM-4 authoring constraint |
 | `docs/CODE_REVIEW_PLAN.md` | FW-1 to FW-7 with tiering |
-| `docs/issues/technical_debt.md` | minor framework debt, no customer impact |
+| `docs/issues/internal/technical_debt.md` | minor framework debt, no customer impact |
 | `docs/architecture/validation-boundaries.md` | what the framework does and does not prove |
 | `artifacts/evidence/` | the policy, failure samples, a reference report |
 
@@ -411,7 +415,7 @@ ISSUE-003 handover drafts.
 
 # What to send engineering, in order
 
-1. **THM-4 (ISSUE-003).** Drafts ready. Silent data corruption from ordinary
+1. **THM-4 (ISSUE-004).** Drafts ready. Silent data corruption from ordinary
    policy authoring - the only finding that destroys customer data.
 2. **OPS-1 to OPS-3 plus THM-7.** Cheap fixes, and together they turn a
    one-call recovery into an hour of misdirected work. Good will costs little.

@@ -244,7 +244,7 @@ Expected result: 50 of 50 requests succeed, `PASS: 50`,
 `--replacement-max-length 15` normalises for KB-001, a documented Themis
 behaviour where replacement strings are truncated to 15 characters at runtime.
 Without it every record containing a longer replacement is reported as a
-content mismatch. See `docs/issues/KNOWN_BEHAVIORS.md`.
+content mismatch. See `docs/issues/internal/KNOWN_BEHAVIORS.md`.
 
 **`validate policy` replaces the entire active policy on the target.** Restore
 a known policy when you are finished:
@@ -363,7 +363,7 @@ enforced at generation time rather than discovered after a run.
 **No literal may be nested inside another.** Two rules matching overlapping
 regions of the input cause the Themis runtime to write the replacement at the
 wrong offset and destroy adjacent content, silently, returning HTTP 200. This
-is ISSUE-003. A nested literal guarantees the overlap wherever the outer
+is ISSUE-004. A nested literal guarantees the overlap wherever the outer
 literal appears.
 
 **Replacement tokens must stay distinct when truncated to 15 characters.**
@@ -414,7 +414,7 @@ validate compare --run <RUN_ID>
 ```
 
 The current Themis implementation has an observed limitation that truncates
-replacement strings to 15 characters (KB-001 in `docs/issues/KNOWN_BEHAVIORS.md`). To
+replacement strings to 15 characters (KB-001 in `docs/issues/internal/KNOWN_BEHAVIORS.md`). To
 validate current behavior explicitly, normalize expected replacement literals at
 comparison time:
 

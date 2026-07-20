@@ -19,7 +19,7 @@ as broken when the framework is wrong. For a tool whose entire purpose is
 detecting silent corruption in someone else's product, silent corruption in
 this tool is the defining risk.
 
-Nothing here invalidates ISSUE-003. That defect was proven with raw curl
+Nothing here invalidates ISSUE-004. That defect was proven with raw curl
 against Themis's own response payload, with no framework code in the path.
 
 ---
@@ -160,7 +160,7 @@ way to read back what is currently deployed. Implications:
   is no server-side history.
 - Adding one rule requires re-uploading the entire ruleset, which is exactly
   the operation that introduces prefix-overlapping literals and therefore
-  ISSUE-003.
+  ISSUE-004.
 - A bad policy is either a DLP outage or silent under-redaction.
 
 **T3-2. Policy deployment is fire-and-forget with no readiness signal.**  
@@ -238,7 +238,7 @@ Load-bearing duplication, worth collapsing before the correctness fixes:
 
 **T5-2. Test gaps, highest value first.**
 - No test for prefix-overlapping literals, which the generator produces by
-  construction and which triggers ISSUE-003.
+  construction and which triggers ISSUE-004.
 - The expected-output equivalence test runs against a 12-rule fixture whose
   patterns cannot produce overlap, so it can never fail.
 - No end-to-end pipeline test; each stage is tested against hand-written
@@ -279,7 +279,7 @@ Two claims were checked empirically rather than assumed.
 `[BUSINESS_TERMS:*]` tokens collapse to a single 15-character string in the
 qualification catalog.
 
-**ISSUE-003 containment class** - tested prefix, suffix, and middle containment
+**ISSUE-004 containment class** - tested prefix, suffix, and middle containment
 against Themis with curl. Only prefix containment corrupts output; suffix and
 middle render correctly, as does a disjoint control. The "strict prefix"
-framing in ISSUE-003 is correct and precise.
+framing in ISSUE-004 is correct and precise.

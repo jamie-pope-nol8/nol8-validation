@@ -28,7 +28,7 @@ validate policy --file artifacts/evidence/tenant-restore-policy.nol --target the
 ```
 
 This catalog contains **no overlapping literals**, so it does not trigger
-ISSUE-003, and its replacement tokens remain distinct after the runtime's
+ISSUE-004, and its replacement tokens remain distinct after the runtime's
 15-character truncation (THM-5), so a comparison can tell which rule fired.
 
 Both properties are now enforced at generation time - a catalog lacking either
@@ -43,15 +43,15 @@ is refused rather than emitted.
 > `[BUSINESS_TERMS:*]` tokens that collapsed under truncation. Kept in history
 > only; do not deploy either.
 
-## issue-003-failure-sample.jsonl
+## issue-004-failure-sample.jsonl
 
 Twelve representative failures from the original qualification
 (`20260719T161514709224Z`, 272 CONTENT_MISMATCH of 10,000).
 
 Each row carries the record id, the byte offset where output diverged, the
 byte delta, and trimmed excerpts of expected versus actual. The full 61 MB
-comparison artifact is not retained - ISSUE-003 is reproducible from
-`scripts/repro-issue-003-curl.sh` with no corpus at all, so this sample is
+comparison artifact is not retained - ISSUE-004 is reproducible from
+`scripts/repro-issue-004-curl.sh` with no corpus at all, so this sample is
 corroborating evidence rather than the primary proof.
 
 ## qualification-passing-report.html

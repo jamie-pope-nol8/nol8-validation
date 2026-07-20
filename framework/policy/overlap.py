@@ -1,6 +1,6 @@
 """Detection of policy literals that can produce overlapping matches.
 
-Two rules whose matches share input bytes trigger ISSUE-003: the Themis runtime
+Two rules whose matches share input bytes trigger ISSUE-004: the Themis runtime
 computes the wrong match start offset and destroys content preceding the match,
 silently and with no error signal.
 
@@ -117,7 +117,7 @@ def summarize_overlaps(pairs: Sequence[OverlapPair], limit: int = 10) -> str:
     lines = [
         f"{len(pairs)} literal pair(s) can produce overlapping matches "
         f"({containment} containment, {suffix_prefix} suffix/prefix).",
-        "Overlapping matches corrupt Themis output silently - see ISSUE-003.",
+        "Overlapping matches corrupt Themis output silently - see ISSUE-004.",
     ]
     for pair in pairs[:limit]:
         lines.append(f"  {pair.describe()}")

@@ -6,7 +6,7 @@ per-rule scan cannot answer efficiently:
 1. Which catalog literals occur in it? Computing expected output from only the
    rules the generator *intended* to inject is wrong - unrelated generated
    values collide with catalog literals in practice.
-2. Do any of those matches overlap? Overlapping matches trigger ISSUE-003, so
+2. Do any of those matches overlap? Overlapping matches trigger ISSUE-004, so
    a corpus containing them cannot produce trustworthy validation results.
 
 A naive scan is O(rules x documents): 5,000 rules over 10,000 documents is 50
@@ -123,7 +123,7 @@ def resolve_non_overlapping(matches: Sequence[Match]) -> list[Match]:
 
     Used to compute expected output. Where matches do not overlap, Themis was
     observed to produce exactly this result. Where they DO overlap, Themis
-    corrupts the output (ISSUE-003) and no expected value is correct - callers
+    corrupts the output (ISSUE-004) and no expected value is correct - callers
     should treat such documents as unusable rather than compare against them.
     """
     selected: list[Match] = []

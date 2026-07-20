@@ -1,4 +1,4 @@
-"""Detection of literal pairs that can produce overlapping matches (ISSUE-003).
+"""Detection of literal pairs that can produce overlapping matches (ISSUE-004).
 
 The expectations below are anchored to behaviour observed directly from Themis,
 not to the implementation. Cases marked CORRUPT were reproduced with curl; the
@@ -103,7 +103,7 @@ class SummaryTests(unittest.TestCase):
         summary = summarize_overlaps(pairs)
         self.assertIn("containment", summary)
         self.assertIn("suffix/prefix", summary)
-        self.assertIn("ISSUE-003", summary)
+        self.assertIn("ISSUE-004", summary)
 
     def test_summary_truncates_long_lists(self) -> None:
         literals = [f"AB{index}" for index in range(40)] + ["ZAB"]

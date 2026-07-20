@@ -46,11 +46,11 @@ def _mismatch_row(record_id: str, expected: str, actual: str, **overrides) -> di
     return row
 
 
-# An ISSUE-003-shaped failure, modelled on artifacts/evidence/
-# issue-003-failure-sample.jsonl: a replacement token is written at a displaced
+# An ISSUE-004-shaped failure, modelled on artifacts/evidence/
+# issue-004-failure-sample.jsonl: a replacement token is written at a displaced
 # start offset, so the actual output has an extra fragment inserted and is
 # longer than expected, diverging mid-record.
-_ISSUE_003_EXPECTED = (
+_ISSUE_004_EXPECTED = (
     "000071,customer_record,2100-01-01T00:00:00Z,CUST-516774,"
     "[PII:PERSON_NAM,taylor.hayes103@example.test,+1-704-857-9914,"
     "6449 Maple Avenue,closed"
@@ -58,7 +58,7 @@ _ISSUE_003_EXPECTED = (
 # The displaced start offset writes the token early, leaving a "[PII:" fragment
 # before the real token: same tail, five extra bytes (byte_delta 5 in the real
 # sample), so the actual output is genuinely longer than expected.
-_ISSUE_003_ACTUAL = (
+_ISSUE_004_ACTUAL = (
     "000071,customer_record,2100-01-01T00:00:00Z,CUST-516774,"
     "[PII:[PII:PERSON_NAM,taylor.hayes103@example.test,+1-704-857-9914,"
     "6449 Maple Avenue,closed"
@@ -73,8 +73,8 @@ class ClassifyFailureTests(unittest.TestCase):
             "Actual is a prefix of expected (consistent with truncation)",
         )
 
-    def test_issue_003_shape_is_actual_longer(self) -> None:
-        row = _mismatch_row("r", _ISSUE_003_EXPECTED, _ISSUE_003_ACTUAL)
+    def test_issue_004_shape_is_actual_longer(self) -> None:
+        row = _mismatch_row("r", _ISSUE_004_EXPECTED, _ISSUE_004_ACTUAL)
         # Extra fragment inserted mid-string: longer, and NOT a clean extension.
         self.assertEqual(classify_failure(row), "Actual longer than expected")
 
@@ -110,7 +110,7 @@ class GroupFailuresTests(unittest.TestCase):
         failures = (
             [_mismatch_row(f"prefix-{i}", "[LONG_TOKEN_VALUE]", "[LONG") for i in range(3)]
             + [_mismatch_row(f"samelen-{i}", "AAAA", "AABA") for i in range(2)]
-            + [_mismatch_row("longer-0", _ISSUE_003_EXPECTED, _ISSUE_003_ACTUAL)]
+            + [_mismatch_row("longer-0", _ISSUE_004_EXPECTED, _ISSUE_004_ACTUAL)]
         )
         groups = group_failures(failures)
         signatures = [signature for signature, _ in groups]
@@ -154,7 +154,7 @@ class RenderFailureSectionTests(unittest.TestCase):
         self.assertLessEqual(html.count(big), 6)  # <=2 per representative (exp+act)
 
     def test_compact_diff_anchors_on_first_divergence(self) -> None:
-        failures = [_mismatch_row("document-000071", _ISSUE_003_EXPECTED, _ISSUE_003_ACTUAL)]
+        failures = [_mismatch_row("document-000071", _ISSUE_004_EXPECTED, _ISSUE_004_ACTUAL)]
         html = render_failure_section(failures)
         self.assertIn("First difference at byte", html)
         self.assertIn("diff-expected", html)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ISSUE-003 reproduction using curl only.
+# ISSUE-004 reproduction using curl only.
 #
 # This script deliberately uses NO code from the validation framework. It sends
 # a policy and a message to Themis with plain curl and prints the complete,
@@ -19,7 +19,7 @@
 #
 # Usage:
 #
-#   ./scripts/repro-issue-003-curl.sh
+#   ./scripts/repro-issue-004-curl.sh
 #
 # WARNING: deploying a policy REPLACES the active policy on the target tenant.
 # Restore the previous policy afterwards.
@@ -70,7 +70,7 @@ case_run() {
   send_message
 }
 
-printf 'ISSUE-003 reproduction via curl only\n'
+printf 'ISSUE-004 reproduction via curl only\n'
 printf 'no validation-framework code is involved\n\n'
 printf 'request body sent to the processing endpoint:\n'
 printf '  {"message":"%s"}\n' "$MESSAGE"

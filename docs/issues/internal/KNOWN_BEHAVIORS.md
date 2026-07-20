@@ -11,7 +11,7 @@ issues in this directory.
 
 Current defects affecting validation:
 
-- ISSUE-003 - Overlapping matches corrupt Themis output. When two rules match
+- ISSUE-004 - Overlapping matches corrupt Themis output. When two rules match
   overlapping regions of the input, the runtime computes the wrong match start
   offset and destroys content preceding the match. Silent; no error signal.
   Not prevented by KB-001's 15-character guidance.
@@ -74,7 +74,7 @@ Further engineering work is required to determine whether the runtime limitation
 IMPORTANT - normalization is not a general workaround
 
 Keeping replacement strings ≤15 characters does NOT guarantee correct Themis
-output. A separate and unrelated defect (ISSUE-003) corrupts output when a
+output. A separate and unrelated defect (ISSUE-004) corrupts output when a
 policy contains overlapping literals, at any replacement length.
 
 In run `20260719T161514709224Z`, 272 records failed with normalization applied
@@ -90,4 +90,4 @@ The functional validation suite should verify:
 
 Related Investigation:
 
-- 20260719-ISSUE-003-scale-validation-transformation-mismatch.md
+- 20260719-ISSUE-004-scale-validation-transformation-mismatch.md

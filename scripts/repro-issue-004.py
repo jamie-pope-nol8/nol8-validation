@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal reproduction for ISSUE-003.
+"""Minimal reproduction for ISSUE-004.
 
 Two rules whose literals overlap - one a strict prefix of the other - cause the
 Themis runtime to compute the wrong start offset for the replacement, silently
@@ -10,7 +10,7 @@ Rule order does not matter. Replacement length does not prevent it.
 
 Usage:
 
-    ./scripts/repro-issue-003.py
+    ./scripts/repro-issue-004.py
 
 Requires config/demo.env and .env (token), as with all validation execution.
 The script deploys policies to the configured Themis policy endpoint, which
@@ -102,13 +102,13 @@ def process(message: str) -> str | None:
 
 
 def main() -> int:
-    print("ISSUE-003 - overlapping matches corrupt output\n")
+    print("ISSUE-004 - overlapping matches corrupt output\n")
     print("%-31s %-24s %-24s %s" % ("case", "correct", "actual", ""))
     print("-" * 92)
 
     corrupted = 0
     with tempfile.TemporaryDirectory() as scratch:
-        policy_path = Path(scratch) / "repro-issue-003.nol"
+        policy_path = Path(scratch) / "repro-issue-004.nol"
         for name, rules, message, correct in CASES:
             if not deploy(rules, policy_path):
                 return 1

@@ -2,7 +2,7 @@
 
 A literal occurring inside another literal guarantees overlapping matches
 wherever the outer one appears, and overlapping matches silently corrupt
-Themis output (ISSUE-003). A catalog containing them cannot validate
+Themis output (ISSUE-004). A catalog containing them cannot validate
 transformation correctness, so generation refuses to produce one.
 """
 from __future__ import annotations
