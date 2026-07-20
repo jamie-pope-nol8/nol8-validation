@@ -5,25 +5,40 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-> **Handoff at 2026-07-20 (third handoff).** Clean tree (latest commit this
-> doc, or the newest re-qualification commit if later), 228 tests passing.
-> **FW-6 (report usability) and FW-7 (YAML key-order determinism) are both done
-> and committed this session, and the tenant was re-qualified under the
-> post-FW-7 generator.** Endpoint healthy; the new 5,000-rule policy is deployed
-> and verified. Nothing is mid-edit.
+> **Handoff at 2026-07-20 (end of day, third handoff).** Clean tree, all pushed
+> (latest commit `1d2a70e` or later), both hosts synced, 228 tests passing.
+> Endpoint healthy; the 5,000-rule qualification policy is deployed (SHA
+> `27fe47db`). Nothing mid-edit. User stopped for family time; resumes tomorrow
+> with **Tier 2 then Tier 5**.
 >
-> **The FW-7 reproducibility gap is now CLOSED.** FW-7 canonicalised selection
-> order, changing what seed 42 produces. Rather than leave the deployed policy
-> unreproducible, a fresh qualification `20260720T221534714262Z` was generated,
-> deployed to Themis, and verified airtight (10,000 PASS, 0 inconclusive). The
-> deployed policy again regenerates from seed 42. Evidence in
-> `artifacts/evidence/` is promoted to the new run; the two prior qualifications
-> are superseded history. See "Clean qualification" and "Reproducibility after
-> FW-7" below.
+> **Done this session (all committed + pushed):**
+> - **FW-6** report usability - grouped, compact failure details (`4cc2185`).
+> - **FW-7** generation independent of YAML key order (`53ea077`).
+> - **Re-qualification** under the post-FW-7 generator - new authoritative run
+>   `20260720T221534714262Z`, deployed and verified airtight (10,000 PASS, 0
+>   inconclusive). The FW-7 reproducibility gap is CLOSED; the deployed policy
+>   again regenerates from seed 42. Evidence promoted; prior qualifications are
+>   superseded history.
+> - **Engineering-facing issue register** in `docs/issues/` (`ISSUE-001..007`,
+>   aligned 1:1 to THM-1..7; the corruption defect renumbered ISSUE-003 ->
+>   ISSUE-004). Each doc self-contained and emailable. Internal material moved to
+>   `docs/issues/internal/`.
+> - **Reproductions verified against the live tenant** and corrected: control-
+>   plane curl calls need `--insecure` (self-signed cert); the docs now show the
+>   real response envelopes and actual observed output (ISSUE-004 `x [P[Q] y`,
+>   ISSUE-005 `[FINANCIAL:CRED`).
+> - **Outbound Slack comms** drafted: `docs/issues/internal/outbound-slack-comms.md`.
 >
-> **Next work items:** (1) Send ISSUE-004 to engineering - drafts ready, still
-> the one that matters to the product. (2) Continue the review: Tier 2
-> (security) and Tier 5 (structure and tests) are NOT STARTED.
+> **Next work items (tomorrow, in order):**
+> 1. **Tier 2 - security.** NOT STARTED. T2-1..T2-4 catalogued in
+>    `docs/CODE_REVIEW_PLAN.md` (re-read against current code first; FW-4/FW-5
+>    already hardened the env-file transport).
+> 2. **Tier 5 - structure and tests.** NOT STARTED.
+> 3. **Then: demonstrations.** Once the tiers are sorted, the user wants to work
+>    on **demonstrations and demonstration stories** - see "Next horizon" below.
+>
+> Still open but not blocking: send ISSUE-004 to engineering (register + comms
+> are ready; the user handles the actual send).
 
 This file is project *state*: where things stand and what to do next. Three
 companions carry the rest, and they are the ones to reach for first:
@@ -547,24 +562,56 @@ Design:
   as a repeatable build step so re-running regenerates after any doc edit.
 - Reuse it going forward for anything we hand off, not just the current issues.
 
+## Next horizon - demonstrations and demonstration stories
+
+**After Tier 2 and Tier 5.** The user wants to work on demonstrations and demo
+stories next - how to show Themis to a buyer compellingly. Not started as a
+work item, but several threads already in this doc feed it; start by pulling
+them together rather than from scratch:
+
+- **Agent-mediated integration is the fastest-growing buyer interest** (ISSUE-006 /
+  THM-6), and currently cannot be demonstrated because the eval environment is
+  VPC-only. A reachable endpoint is the unlock. A compelling angle: Themis as a
+  **prompt-injection / data-loss filter in front of a model** - e.g. a rule like
+  `"ignore previous instructions" -> "[BLOCKED]"` plus PII redaction on the
+  model's input/output. Ties the product to the agent story buyers care about.
+- **"How do I do this with my data?"** is the question a demo audience asks. The
+  honest answer ("you don't, the oracle is ours - this proves the engine works")
+  is weak alone. The two product-capable answers to build toward are in
+  "Conceptual clarification - the oracle is ours": **invariants** ("no unredacted
+  SSN pattern appears in output", checkable with no oracle) and **synthetic
+  canaries in a live stream** (inject known values, verify they come back
+  redacted - continuous assurance).
+- **Pre-generated demo datasets** (the "Idea under discussion" section) remove the
+  dead air of generation during a live demo. Bundles of input+expected+policy in
+  t-shirt sizes; collides with THM-2 (one policy at a time).
+- **The data-path question** (OBS-2) matters here too: the intended production
+  integration mode (inline/proxy/streaming?) shapes what a realistic demo looks
+  like. Worth engineering's answer before building the integration demo.
+
+Treat this section as the seed, not the plan; the plan gets built when we start.
+
 ---
 
 # Immediate Next Actions
 
-1. **Send ISSUE-004 to engineering.** The self-contained report is
-   `docs/issues/ISSUE-004-overlapping-matches-corrupt-output.md` - attach it to
-   an email or paste the reproduction into Slack. Send it alone; the other issue
-   docs go separately so the defect is not triaged as feedback. This is the one
-   that matters to the product.
+**Tomorrow's plan, in order:**
 
-2. **Send the other issue docs as wanted.** `docs/issues/` now holds a full
-   engineering-facing register (ISSUE-001..007) plus a README index, each doc
-   self-contained. The data-path question (inline/streaming mode) goes as its own
-   short note, not attached to an issue.
+1. **Tier 2 - security. START HERE.** NOT STARTED. Re-read
+   `docs/CODE_REVIEW_PLAN.md` against current code first (T2-1..T2-4 are
+   catalogued there; FW-4/FW-5 already hardened the git-tracked env-file
+   transport, so confirm what remains before acting). Work one item at a time,
+   verify each issue is real before proposing changes, add a test per fix.
 
-3. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
-   tests) are NOT STARTED; re-read `docs/CODE_REVIEW_PLAN.md` against current
-   code first, since FW-4/FW-5/FW-6/FW-8 have already moved several items.
+2. **Tier 5 - structure and tests.** NOT STARTED. After Tier 2.
+
+3. **Then: demonstrations and demonstration stories.** See "Next horizon" above -
+   pull the existing demo threads together rather than starting cold.
+
+**In the background (user handles the send):** ISSUE-004 and the rest of the
+issue register are ready in `docs/issues/`, with Slack comms drafted in
+`docs/issues/internal/outbound-slack-comms.md`. Send ISSUE-004 first and alone;
+the data-path question goes as its own note.
 
 Done since last update:
 - **FW-6** report usability (commit `4cc2185`) - grouped, compact failure
