@@ -251,6 +251,13 @@ Now: colliding tokens are detected, affected would-be passes become
 Mismatches are deliberately untouched - truncation can only make messages look
 more alike, so an inequality is still genuine evidence. Commit `ca5c377`.
 
+**Proven closed end to end (2026-07-20).** Generation now refuses a catalog
+whose tokens collapse under truncation, and qualification run
+`20260720T193444152733Z` (5,000 rules / 10,000 records) returned 10,000 PASS
+with **0 inconclusive** - verified against the manifest and by an independent
+recount. The prior authoritative run had 4,755 transformations behind collapsed
+tokens; this one has none.
+
 ## FW-4 - Transports source a committed config file (OPEN)
 
 Both transports `source config/demo.env`, which is tracked. Anyone who can land

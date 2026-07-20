@@ -187,24 +187,38 @@ containers, no Themis processes. Pure client box, holds our checkout.
 deploys via the API are fine and are the recovery path; service restarts and
 system changes are not ours to make.
 
-## Clean qualification - 20260719T230452981053Z (AUTHORITATIVE)
+## Clean qualification - 20260720T193444152733Z (AUTHORITATIVE)
 
 ```
-5,000 rules / 10,000 records / customer-record-csv
-overlapping_match_documents: 0
+5,000 rules / 10,000 records / customer-record-csv / seed 42
+overlapping_match_documents: 0    intended_clean_with_literals: 0
 
-Requests succeeded: 10,000    Requests failed: 0
-PASS: 10,000                  CONTENT_MISMATCH: 0
-Latency p50/p95/p99: 12.492 / 14.214 / 16.686 ms
+PASS: 10,000        CONTENT_MISMATCH: 0
+EXECUTION_FAILURE: 0    INCONCLUSIVE: 0
+Pre-flight: healthy    Pass rate: 100.000%
+Latency p50/p95/p99: 12.618 / 14.383 / 17.032 ms
+policy SHA256: c3b763aa...
 ```
 
-Like-for-like with the original failing run. **Proves ISSUE-003 was the sole
-cause of the original 272 failures**, and that it is not a marginal edge case.
+This is the **airtight** qualification: 0 inconclusive, verified against the
+manifest and by an independent recount of `comparison.jsonl`, report banner
+PASS. Its policy and report are promoted into `artifacts/evidence/`, and the
+policy is the one deployed on the tenant.
 
-Caveat now closed: this run used `--replacement-max-length 15`, and three
-`[BUSINESS_TERMS:*]` tokens collapsed to one string under truncation. `compare`
-would now report those records INCONCLUSIVE rather than PASS. **Worth re-running
-once the endpoint returns** to get a qualification with no inconclusive records.
+Determinism verified: two generations from seed 42 gave byte-identical policy,
+input, and expected artifacts.
+
+Supersedes two earlier runs, kept only as history:
+
+- `20260719T230452981053Z` - also 10,000 PASS, but predated collision detection
+  and had three `[BUSINESS_TERMS:*]` tokens collapsing under truncation across
+  4,755 transformations. Under current logic those would be INCONCLUSIVE. This
+  is exactly the blind spot FW-3 closed, now proven closed end to end.
+- `20260719T161514709224Z` - the original 272-failure run whose catalog had 31
+  overlapping pairs; the source of `issue-003-failure-sample.jsonl`.
+
+Together they **prove ISSUE-003 was the sole cause of the original 272
+failures**, and that it is not a marginal edge case.
 
 ## ISSUE-003 - OPEN, handover drafted but NOT SENT
 
@@ -418,13 +432,9 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Re-run the qualification** to get a result with zero inconclusive records
-   now that `compare` can detect token collisions. The endpoint is live again
-   and the 5,000-rule policy is restored (SHA256 `0902f0e1...`).
-
-5. **Tier 2 security remainder.** Both transports `source config/demo.env`,
-   which is committed, so anyone who can land a change to it gets code
-   execution plus the tokens sourced next.
+2. **Tier 2 security remainder (FW-4, FW-5).** Both transports
+   `source config/demo.env`, which is committed, so anyone who can land a change
+   to it gets code execution plus the tokens sourced next.
 
    Related, found while testing TLS: **a caller's environment variables are
    silently overridden by the sourced config file**, because the scripts source
@@ -432,10 +442,13 @@ Design constraints:
    had no effect. Same root cause as the transport tests running against a
    developer's real token.
 
-6. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
-   blocks with no diff, grouping, or root-cause classification.
+3. **Tier 4 report usability (FW-6).** Failing reports are 2.6 MB of
+   undifferentiated blocks with no diff, grouping, or root-cause classification.
 
-7. **T1-6:** generation depends on YAML key order, not only the seed.
+4. **T1-6 (FW-7):** generation depends on YAML key order, not only the seed.
+
+Done since last update: the airtight qualification (0 inconclusive) is
+complete - see the qualification section above.
 
 ---
 
