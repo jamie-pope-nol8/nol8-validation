@@ -5,14 +5,22 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-> **Handoff at 2026-07-20.** Clean tree (this doc is the latest commit), both
-> hosts synced, 213 tests passing, endpoint healthy with the 5,000-rule policy
-> deployed (SHA256 `c3b763aa`). The
-> user is closing and reopening the VS Code folder to accept the workspace-trust
-> dialog and stop the constant Bash permission prompts (see Permissions below).
-> A fresh session resumes here. **Next work item: FW-6** (report usability) then
-> FW-7. Last completed: FW-4/FW-5 transport security, and the airtight
-> qualification. Nothing is mid-edit; the tree is clean.
+> **Handoff at 2026-07-20 (second handoff).** Clean tree (latest commit
+> `e216b42`, or this doc if later), both hosts synced, 213 tests passing,
+> endpoint healthy with the 5,000-rule policy deployed (SHA256 `c3b763aa`).
+> Nothing is mid-edit.
+>
+> **Why a fresh session:** Bash permission prompts have been relentless. We
+> tried, in order: a `Bash` allow-all rule, reopening the folder for
+> workspace-trust, and `bypassPermissions` in `.claude/settings.local.json`
+> reloaded via `/config`. None reliably stopped the prompts. The user is now
+> installing a pending **VS Code update** and restarting, which drops this chat.
+> See Permissions below for the full state and what to try next.
+>
+> **Last completed:** FW-4/FW-5 transport security, FW-8 ledger isolation, the
+> airtight qualification (0 inconclusive), and repo hygiene (PDFs untracked,
+> export redirected to `handoff/`). **Next work item: FW-6** (report usability) -
+> design is written under "FW-6 design" below; start there. Then FW-7.
 
 This file is project *state*: where things stand and what to do next. Three
 companions carry the rest, and they are the ones to reach for first:
@@ -116,24 +124,42 @@ one line per ten percent with no escapes when redirected.
 EC2 is a **test and demo environment**, not production. Overwriting a policy is
 not an emergency.
 
-## Permissions
+## Permissions - UNRESOLVED, actively frustrating the user
 
-`.claude/settings.json` allows all Bash (bare `Bash`) with a deny list for
-destructive commands (sudo, `rm -rf /`, force push, curl-pipe-to-shell, reading
-`.env` and private keys). The empty `settings.local.json` was deleted - it
-served no purpose.
+The single most important quality-of-life issue. Bash prompts keep
+interrupting; the user cannot walk away during long runs. Do NOT relitigate the
+mechanics from scratch - here is exactly what was tried and what is left.
 
-This replaced a per-command allow list that did not work: nearly every real
-command is compound (`source .venv/bin/activate && python -m ...`) or uses a
-pipe or heredoc, so it matched no single-command rule and prompted anyway.
+**Committed baseline (`.claude/settings.json`, safe, shareable):** allows all
+Bash (bare `Bash`) with a deny list (sudo, `rm -rf /`, force push,
+curl-pipe-to-shell, reading `.env` and private keys).
 
-**If Bash still prompts:** project `allow` rules only take effect after the VS
-Code **workspace-trust** dialog is accepted for this folder. That is the most
-likely remaining cause of prompts - it is a one-time UI action the user must do
-(close and reopen the folder, accept trust). As of the 2026-07-20 handoff the
-user was about to do exactly this. Also check the VS Code setting
-`claudeCode.initialPermissionMode` is not forcing an ask mode. Revisit the
-whole scheme if this stops being a personal sandbox.
+**Local override (`.claude/settings.local.json`, gitignored, this machine):**
+`permissions.defaultMode: "bypassPermissions"`. Delete this file to return to
+the safe allow+deny baseline.
+
+**Tried, in order, none reliably worked:**
+1. Per-command allow list - failed: real commands are compound/piped, matched
+   no single-command rule.
+2. Bare `Bash` allow-all in project settings - still prompted.
+3. Reopening the folder for the VS Code workspace-trust dialog - still prompted.
+4. `bypassPermissions` in local settings, reloaded via `/config` - the user
+   reported it did NOT fix it and possibly made it worse.
+
+**Next thing being tried:** a pending **VS Code / extension update**, then
+restart. If prompts persist after that:
+- Confirm the running extension actually loaded `settings.local.json`
+  (`bypassPermissions`). A mid-session-created settings file is not picked up by
+  the watcher until a full restart - the update+restart should cure that.
+- Check the VS Code setting `claudeCode.initialPermissionMode` is not forcing an
+  ask mode.
+- As a last resort, launching the CLI with `--dangerously-skip-permissions`
+  bypasses everything (sandbox only).
+- Consider whether the extension version honors `defaultMode` from
+  `.claude/settings.local.json` at all; if not, the same setting in user
+  settings (`~/.claude/settings.json`) is not repo-scoped but is more reliable.
+
+Revisit the whole scheme if this stops being a personal sandbox.
 
 ---
 
@@ -448,8 +474,9 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Tier 4 report usability (FW-6).** Failing reports are 2.6 MB of
-   undifferentiated blocks with no diff, grouping, or root-cause classification.
+2. **Tier 4 report usability (FW-6) - START HERE.** Failing reports are 2.6 MB
+   of undifferentiated blocks with no diff, grouping, or root-cause
+   classification. Design is written below; nothing started in code yet.
 
 3. **T1-6 (FW-7):** generation depends on YAML key order, not only the seed.
 
@@ -458,6 +485,52 @@ Done since last update:
 - FW-4 and FW-5 (transport security): env files are parsed not executed, with
   an allowlist and caller precedence. `scripts/lib/env-config.sh`, commit
   `e7bdac5`. Verified live on EC2.
+- FW-8 (ledger isolation): policy tests no longer pollute the real
+  `artifacts/policy-deployments.jsonl`. Commit `e216b42`.
+
+## FW-6 design - report usability (not yet started)
+
+**Problem.** In `framework/reporting/generate_report.py`, the "Failure details"
+section builds one `<article>` per failing row containing the FULL expected
+message, the FULL actual message, and a full match-evidence table. At scale
+(hundreds of failures over large documents) that is ~2.6 MB of undifferentiated
+blocks with no way to see the shape of what failed.
+
+Relevant code:
+- `aggregate_evidence()` produces `evidence["failures"]` (rows with status not
+  in PASS/INCONCLUSIVE).
+- The failure loop is around lines 226-268; it is joined into the HTML at the
+  "Failure details" heading (~line 373).
+- The comparison row schema carries `status`, `expected_message`,
+  `actual_message`, `expected_matches`, `http_status`, `error`, `record_id`,
+  `kind`. The preserved failure sample
+  (`artifacts/evidence/issue-003-failure-sample.jsonl`) also shows
+  `divergence_offset` and `byte_delta` fields worth reusing as the diff anchor.
+
+**Planned approach (confirm scope with user first if they want less):**
+1. Classify each failure by a robust, explainable signature:
+   - EXECUTION_FAILURE -> sub-key by http_status / error category.
+   - CONTENT_MISMATCH -> a factual diff-shape label: "actual is a prefix of
+     expected (consistent with truncation)", "actual shorter (content lost)",
+     "actual longer", "same length differs". Do NOT over-claim root cause; label
+     the shape, let the reader infer.
+2. Group failures by signature. Render a summary table at the top of Failure
+   details: signature | count | first example record_id.
+3. Per group, show at most ~3 representative COMPACT diffs: a window around the
+   first divergence offset (short common prefix, then expected vs actual tails,
+   each capped), not the whole document. Keep full expected/actual only inside a
+   collapsed `<details>` for those few representatives.
+4. Cap examples per group and STATE what was dropped ("showing 3 of 187") -
+   never silently truncate.
+
+**Testing discipline (has held all session):** add tests in
+`tests/test_tier0_silent_success.py` or a new file using the existing
+`aggregate_evidence` / `render_report_html` helpers. Prove non-vacuous by
+checking behaviour changes vs the current full-dump rendering. Build a fixture
+from the real failure-sample schema, not invented fields.
+
+Watch: keep INCONCLUSIVE handling intact (it is neither pass nor failure and
+must not appear in Failure details as a product failure).
 
 ---
 
@@ -491,7 +564,15 @@ dead but were not removed unilaterally).
 
 `docs/product/validation-framework-overview.md` is a 0-byte placeholder.
 
-Tests: 208, all passing.
+**PDFs are not tracked.** The user generates PDF renders of the docs (via the
+`yzane.markdown-pdf` VS Code extension) on demand to hand to engineering, then
+removes them while work continues. `*.pdf` and `handoff/` are gitignored; the
+extension is configured in `.vscode/settings.json` (itself gitignored) to export
+to `handoff/`. Three PDFs were once committed by accident via `git add -A` -
+**do not use `git add -A`; stage specific files** so generated artifacts never
+ride along again.
+
+Tests: 213, all passing.
 
 ```bash
 source .venv/bin/activate && python -m unittest discover -s tests -q
