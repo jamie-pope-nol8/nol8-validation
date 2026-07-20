@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from framework.cli.main import (
+    PREFLIGHT_PROBE_MESSAGE,
     RunExecutionError,
     _LiveRunProgress,
     main,
@@ -72,12 +73,12 @@ class ValidateRunTests(unittest.TestCase):
 
     def test_missing_run_and_manifest_are_rejected(self) -> None:
         with self.assertRaisesRegex(RunExecutionError, "does not exist"):
-            run_validation_corpus(self.root / "missing", "themis")
+            run_validation_corpus(self.root / "missing", "themis", skip_preflight=True)
 
         empty_run = self.root / "empty"
         empty_run.mkdir()
         with self.assertRaisesRegex(RunExecutionError, "manifest does not exist"):
-            run_validation_corpus(empty_run, "themis")
+            run_validation_corpus(empty_run, "themis", skip_preflight=True)
 
     @patch("framework.cli.main._check_run_target")
     @patch("framework.cli.main.execute_request")
@@ -107,7 +108,7 @@ class ValidateRunTests(unittest.TestCase):
         ]
         run_directory = self.create_run()
 
-        manifest = run_validation_corpus(run_directory, "themis")
+        manifest = run_validation_corpus(run_directory, "themis", skip_preflight=True)
         output = self.read_output(run_directory)
 
         self.assertEqual(mocked_execute.call_count, 3)
@@ -141,7 +142,7 @@ class ValidateRunTests(unittest.TestCase):
         ]
         run_directory = self.create_run()
 
-        manifest = run_validation_corpus(run_directory, "themis")
+        manifest = run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         self.assertEqual(mocked_execute.call_count, 3)
         self.assertEqual(manifest["stages"]["run"]["requests_failed"], 1)
@@ -161,7 +162,7 @@ class ValidateRunTests(unittest.TestCase):
         }
         run_directory = self.create_run()
 
-        manifest = run_validation_corpus(run_directory, "themis")
+        manifest = run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         self.assertEqual(mocked_execute.call_count, 3)
         self.assertEqual(manifest["stages"]["run"]["requests_completed"], 3)
@@ -177,7 +178,7 @@ class ValidateRunTests(unittest.TestCase):
         run_directory = self.create_run()
 
         with self.assertRaises(RunExecutionError):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         manifest = self.read_manifest(run_directory)
         self.assertEqual(mocked_execute.call_count, 3)
@@ -203,7 +204,7 @@ class ValidateRunTests(unittest.TestCase):
         )
 
         with self.assertRaises(RunExecutionError):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         output = self.read_output(run_directory)
         self.assertEqual(mocked_execute.call_count, 2)
@@ -217,14 +218,14 @@ class ValidateRunTests(unittest.TestCase):
                     policy_status=status, run_name=f"policy-{index}"
                 )
                 with self.assertRaises(RunExecutionError):
-                    run_validation_corpus(run_directory, "themis")
+                    run_validation_corpus(run_directory, "themis", skip_preflight=True)
                 manifest = self.read_manifest(run_directory)
                 self.assertEqual(manifest["stages"]["run"]["status"], "failed")
 
     def test_missing_corpus_is_rejected_and_recorded(self) -> None:
         run_directory = self.create_run(include_corpus=False)
         with self.assertRaisesRegex(RunExecutionError, "corpus does not exist"):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
         manifest = self.read_manifest(run_directory)
         self.assertEqual(manifest["stages"]["run"]["status"], "failed")
 
@@ -236,7 +237,7 @@ class ValidateRunTests(unittest.TestCase):
         run_directory = self.create_run()
 
         with self.assertRaises(RunExecutionError):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         manifest = self.read_manifest(run_directory)
         self.assertEqual(manifest["stages"]["run"]["status"], "failed")
@@ -265,6 +266,7 @@ class ValidateRunTests(unittest.TestCase):
             "themis",
             progress_callback=lambda *values: progress.append(values),
             progress_interval=40,
+            skip_preflight=True,
         )
 
         self.assertEqual(
@@ -300,6 +302,7 @@ class ValidateRunTests(unittest.TestCase):
             run_directory,
             "themis",
             startup_callback=lambda total, _limit: events.append(("startup", total)),
+            skip_preflight=True,
         )
 
         self.assertEqual(events[0], ("startup", 3))
@@ -321,7 +324,7 @@ class ValidateRunTests(unittest.TestCase):
         stdout = StringIO()
 
         with redirect_stdout(stdout):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         self.assertEqual(stdout.getvalue(), "")
 
@@ -340,12 +343,13 @@ class ValidateRunTests(unittest.TestCase):
         quiet_run = self.create_run(run_name="quiet-run")
         reported_run = self.create_run(run_name="reported-run")
 
-        quiet_manifest = run_validation_corpus(quiet_run, "themis")
+        quiet_manifest = run_validation_corpus(quiet_run, "themis", skip_preflight=True)
         reported_manifest = run_validation_corpus(
             reported_run,
             "themis",
             progress_callback=lambda *_values: None,
             progress_interval=2,
+            skip_preflight=True,
         )
 
         self.assertEqual(self.read_output(quiet_run), self.read_output(reported_run))
@@ -386,7 +390,7 @@ class ValidateRunTests(unittest.TestCase):
         run_directory = self.create_run()
 
         with self.assertRaises(KeyboardInterrupt):
-            run_validation_corpus(run_directory, "themis")
+            run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         output = self.read_output(run_directory)
         manifest = self.read_manifest(run_directory)
@@ -418,7 +422,7 @@ class ValidateRunTests(unittest.TestCase):
             json.loads(json.dumps(manifest))
         )
 
-        run_validation_corpus(run_directory, "themis")
+        run_validation_corpus(run_directory, "themis", skip_preflight=True)
 
         completed_values = [
             snapshot["stages"]["run"]["requests_completed"]
@@ -497,7 +501,7 @@ class ValidateRunTests(unittest.TestCase):
         }
         run_directory = self.create_run()
 
-        manifest = run_validation_corpus(run_directory, "themis", limit=2)
+        manifest = run_validation_corpus(run_directory, "themis", limit=2, skip_preflight=True)
         output = self.read_output(run_directory)
 
         self.assertEqual(mocked_execute.call_count, 2)
@@ -556,6 +560,188 @@ class ValidateRunTests(unittest.TestCase):
             "Output: generated/output.jsonl",
         ):
             self.assertIn(expected, rendered)
+
+
+class PreflightTests(unittest.TestCase):
+    """The endpoint publishes no health route, so the probe is a real request.
+
+    Its job is to stop a long run from discovering an unavailable engine one
+    execution failure at a time.
+    """
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+
+    create_run = ValidateRunTests.create_run
+    read_output = ValidateRunTests.read_output
+
+    # The exact body Themis returned during the 2026-07-20 outage.
+    UPSTREAM_DOWN = {
+        "http_status": 503,
+        "latency_ms": 4130.0,
+        "success": False,
+        "response": {
+            "error": {
+                "code": "ARGUS_UPSTREAM_UNAVAILABLE",
+                "message": (
+                    "stream submit: ARGUS_UPSTREAM_UNAVAILABLE: backend send "
+                    "failed: dispatcher: iris send: ARGUS_UPSTREAM_TIMEOUT: "
+                    "RESPONSE_WAIT: request timed out (no apollo response in >2s)"
+                ),
+            }
+        },
+    }
+    HEALTHY = {
+        "http_status": 200,
+        "latency_ms": 12.0,
+        "success": True,
+        "response": {"message": "processed"},
+    }
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_unavailable_engine_aborts_before_any_request(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = self.UPSTREAM_DOWN
+        run_directory = self.create_run()
+
+        with self.assertRaises(RunExecutionError) as raised:
+            run_validation_corpus(run_directory, "themis")
+
+        # Exactly one request: the probe. The corpus was never sent.
+        self.assertEqual(mocked_execute.call_count, 1)
+        self.assertEqual(
+            mocked_execute.call_args.args[1],
+            {"message": PREFLIGHT_PROBE_MESSAGE},
+        )
+        self.assertFalse((run_directory / "generated/output.jsonl").exists())
+
+        message = str(raised.exception)
+        self.assertIn("no requests were sent", message)
+        # The remedy must name the cheap fix, since a paused data plane and a
+        # dead engine are indistinguishable from the client.
+        self.assertIn("PAUSED awaiting a policy", message)
+        self.assertIn("validate policy --file", message)
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_probe_result_is_recorded_in_the_manifest(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = self.UPSTREAM_DOWN
+        run_directory = self.create_run()
+
+        with self.assertRaises(RunExecutionError):
+            run_validation_corpus(run_directory, "themis")
+
+        stage = json.loads((run_directory / "manifest.json").read_text())[
+            "stages"
+        ]["run"]
+        self.assertEqual(stage["status"], "failed")
+        preflight = stage["preflight"]
+        self.assertEqual(preflight["status"], "unhealthy")
+        self.assertEqual(preflight["category"], "engine_unavailable")
+        self.assertEqual(preflight["error_code"], "ARGUS_UPSTREAM_UNAVAILABLE")
+        self.assertEqual(preflight["http_status"], 503)
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_healthy_probe_runs_the_corpus(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = self.HEALTHY
+        run_directory = self.create_run()
+
+        manifest = run_validation_corpus(run_directory, "themis")
+
+        # One probe plus three records.
+        self.assertEqual(mocked_execute.call_count, 4)
+        stage = manifest["stages"]["run"]
+        self.assertEqual(stage["status"], "completed")
+        self.assertEqual(stage["requests_completed"], 3)
+        self.assertEqual(stage["preflight"]["status"], "healthy")
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_rejected_credential_is_named_as_such(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 401,
+            "latency_ms": 5.0,
+            "success": False,
+            "response": {"error": {"code": "UNAUTHORIZED"}},
+        }
+        run_directory = self.create_run()
+
+        with self.assertRaises(RunExecutionError) as raised:
+            run_validation_corpus(run_directory, "themis")
+
+        message = str(raised.exception)
+        self.assertIn("rejected the credential", message)
+        # Must not send an operator chasing a policy deployment.
+        self.assertNotIn("PAUSED", message)
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_2xx_without_a_processed_message_is_unhealthy(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        """A 200 alone does not mean the engine processed anything."""
+
+        del mocked_check
+        mocked_execute.return_value = {
+            "http_status": 200,
+            "latency_ms": 3.0,
+            "success": False,
+            "response": {"jid": 1, "frameId": 1},
+        }
+        run_directory = self.create_run()
+
+        with self.assertRaises(RunExecutionError):
+            run_validation_corpus(run_directory, "themis")
+        self.assertEqual(mocked_execute.call_count, 1)
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_skip_preflight_sends_no_probe(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = self.HEALTHY
+        run_directory = self.create_run()
+
+        manifest = run_validation_corpus(
+            run_directory, "themis", skip_preflight=True
+        )
+
+        self.assertEqual(mocked_execute.call_count, 3)
+        self.assertNotIn("preflight", manifest["stages"]["run"])
+
+    @patch("framework.cli.main._check_run_target")
+    @patch("framework.cli.main.execute_request")
+    def test_cli_reports_the_failure_and_exits_nonzero(
+        self, mocked_execute, mocked_check
+    ) -> None:
+        del mocked_check
+        mocked_execute.return_value = self.UPSTREAM_DOWN
+        run_directory = self.create_run()
+
+        stderr = StringIO()
+        with redirect_stdout(StringIO()), redirect_stderr(stderr):
+            exit_code = main(["run", "--run", str(run_directory)])
+
+        self.assertEqual(exit_code, 1)
+        rendered = stderr.getvalue()
+        self.assertIn("Pre-flight check failed", rendered)
+        self.assertIn("validate policy --file", rendered)
 
 
 if __name__ == "__main__":

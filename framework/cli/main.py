@@ -677,6 +677,87 @@ def execute_request(target: str, payload: dict[str, str]) -> dict[str, Any]:
     )
 
 
+PREFLIGHT_PROBE_MESSAGE = "nol8-validation preflight probe"
+
+# Guidance attached to a failed pre-flight. Kept next to the probe so the
+# remedy and the detection stay in step.
+_PREFLIGHT_UPSTREAM_REMEDY = (
+    "The engine did not answer. Two causes are indistinguishable from here:\n"
+    "  1. Apollo is running but its data plane is PAUSED awaiting a policy.\n"
+    "     It boots paused and un-pauses only when a policy commits, so a host\n"
+    "     that was restarted without a deployment sits in this state.\n"
+    "  2. The engine is genuinely unavailable.\n"
+    "\n"
+    "Try (1) first - it is cheap, non-destructive, and the common cause:\n"
+    "  validate policy --file <policy.nol> --target {target}\n"
+    "\n"
+    "If that does not help, the engine needs attention on the Themis host.\n"
+    "Do NOT rely on 'systemctl is-active' or the service status string: an\n"
+    "active-but-paused apollo is reported as active, and the status string is\n"
+    "set once at startup and never updated. See THM-7 and OPS-1..3 in\n"
+    "docs/FINDINGS.md."
+)
+
+
+def preflight_probe(target: str) -> dict[str, Any]:
+    """Send one throwaway record to confirm the endpoint actually processes.
+
+    Themis publishes no health, readiness, or status route - `/v1/process` is
+    the only route that exists (THM-7). So the only way to establish liveness
+    is to put a real record through it.
+
+    Without this, an unavailable engine is discovered one execution failure at
+    a time: a 10,000 record run completes normally and produces nothing but
+    failures.
+    """
+
+    evidence = execute_request(target, {"message": PREFLIGHT_PROBE_MESSAGE})
+    http_status = evidence.get("http_status")
+    response = evidence.get("response")
+    processed = response.get("message") if isinstance(response, dict) else None
+
+    result: dict[str, Any] = {
+        "probed_at": isoformat_utc(utc_now()),
+        "target": target,
+        "http_status": http_status,
+        "latency_ms": evidence.get("latency_ms"),
+    }
+
+    if evidence.get("success") is True and isinstance(processed, str):
+        result["status"] = "healthy"
+        return result
+
+    result["status"] = "unhealthy"
+
+    error_code = None
+    if isinstance(response, dict):
+        error = response.get("error")
+        if isinstance(error, dict):
+            error_code = error.get("code")
+    result["error_code"] = error_code
+
+    if http_status in (401, 403):
+        result["category"] = "authentication"
+        result["remedy"] = (
+            "The processing endpoint rejected the credential. Check the token "
+            "for this target in .env."
+        )
+    elif http_status == 503 or (
+        isinstance(error_code, str) and "UPSTREAM_UNAVAILABLE" in error_code
+    ):
+        result["category"] = "engine_unavailable"
+        result["remedy"] = _PREFLIGHT_UPSTREAM_REMEDY.format(target=target)
+    else:
+        result["category"] = "unexpected_response"
+        result["remedy"] = (
+            "The endpoint answered but did not return a processed message. "
+            "The response is recorded in the manifest under stages.run.preflight."
+        )
+        result["response"] = response
+
+    return result
+
+
 def _write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
     temporary_path = path.with_name(f".{path.name}.tmp")
     with temporary_path.open("w", encoding="utf-8") as handle:
@@ -719,6 +800,7 @@ def run_validation_corpus(
     startup_callback: Callable[[int, int | None], None] | None = None,
     progress_interval: int = 50,
     limit: int | None = None,
+    skip_preflight: bool = False,
 ) -> dict[str, Any]:
     if progress_interval < 1:
         raise ValueError("Progress interval must be at least 1.")
@@ -792,10 +874,32 @@ def run_validation_corpus(
         run_stage["requests_total"] = len(execution_lines)
         manifest["updated_at"] = isoformat_utc(utc_now())
         write_manifest_atomic(manifest_path, manifest)
+        _check_run_target(target)
+
+        # Probe before generating load. An unavailable engine otherwise
+        # surfaces one execution failure at a time, so a long run completes
+        # normally and produces nothing but failures.
+        #
+        # This aborts rather than recording evidence, and that is deliberate:
+        # it runs before any request, so there is no partial evidence to
+        # preserve. That differs from a run whose requests all fail once
+        # underway, which is NOT raised as a stage failure because doing so
+        # would block compare and report.
+        if not skip_preflight:
+            preflight = preflight_probe(target)
+            run_stage["preflight"] = preflight
+            manifest["updated_at"] = isoformat_utc(utc_now())
+            write_manifest_atomic(manifest_path, manifest)
+            if preflight["status"] != "healthy":
+                raise RunExecutionError(
+                    preflight["category"],
+                    "Pre-flight check failed, so no requests were sent.\n\n"
+                    f"{preflight['remedy']}",
+                )
+
         _initialize_jsonl_atomic(output_path)
         if startup_callback is not None:
             startup_callback(len(lines), limit)
-        _check_run_target(target)
 
         for request_index, line in enumerate(execution_lines, start=1):
             request_result: dict[str, Any]
@@ -1567,6 +1671,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=_positive_integer,
         help="Execute only the first N generated requests",
     )
+    run_parser.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help=(
+            "Skip the endpoint health probe. The probe sends one throwaway "
+            "record because the runtime publishes no health route; skipping "
+            "means an unavailable engine is discovered one failure at a time"
+        ),
+    )
 
     compare_parser = subparsers.add_parser(
         "compare", help="Compare execution output with expected results"
@@ -1889,6 +2002,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Run ID: {args.run.name}", flush=True)
         print(f"Target: {args.target}", flush=True)
         print(flush=True)
+        if not args.skip_preflight:
+            print("Checking the processing endpoint...", flush=True)
         progress = _LiveRunProgress()
         try:
             manifest = run_validation_corpus(
@@ -1898,6 +2013,7 @@ def main(argv: list[str] | None = None) -> int:
                 startup_callback=progress.start,
                 progress_interval=args.progress_interval,
                 limit=args.limit,
+                skip_preflight=args.skip_preflight,
             )
         except RunExecutionError as error:
             print(f"Run execution failed: {error}", file=sys.stderr)
@@ -1919,6 +2035,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Run ID:        {manifest.get('run_id', 'unavailable')}")
         print(f"Run directory: {args.run}")
         print(f"Target:        {args.target}")
+        preflight = run_stage.get("preflight")
+        if isinstance(preflight, dict):
+            print(
+                f"Pre-flight:    {preflight.get('status')} "
+                f"({preflight.get('latency_ms')} ms)"
+            )
+        elif args.skip_preflight:
+            print("Pre-flight:    skipped")
         print()
         print(f"Records processed:  {run_stage['requests_completed']}")
         print(f"Requests succeeded: {succeeded}")
