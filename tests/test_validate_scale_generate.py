@@ -312,17 +312,36 @@ class ValidateScaleGenerateTests(unittest.TestCase):
         self.assertIn("Step 2/4: Building rule catalog", output)
         self.assertIn("Rules generated: 12/12", output)
         self.assertIn("Step 3/4: Generating documents", output)
-        self.assertIn("Calculating expected transformations", output)
-        self.assertIn("Documents generated: 3/8", output)
-        self.assertIn("Documents generated: 6/8", output)
-        self.assertIn("Documents generated: 8/8", output)
-        self.assertIn("Expected records completed: 3/8", output)
-        self.assertIn("Expected records completed: 6/8", output)
-        self.assertIn("Expected records completed: 8/8", output)
+        self.assertIn("8/8", output)
         self.assertIn("Step 4/4: Writing artifacts", output)
         self.assertIn("Generation completed", output)
-        self.assertEqual(output.count("Documents generated:"), 3)
-        self.assertEqual(output.count("Expected records completed:"), 3)
+
+    def test_generation_progress_does_not_scroll_one_line_per_interval(self) -> None:
+        """Progress must be a bar, not a line per interval.
+
+        Generation previously printed two lines per progress interval, so a
+        million-record corpus produced tens of thousands of lines of scrollback.
+        """
+        workload = yaml.safe_load(self.config.read_text(encoding="utf-8"))
+        workload["documents"]["count"] = 200
+        workload["documents"]["progress_interval_records"] = 1
+        config = self.root / "scrolling-check.yaml"
+        config.write_text(yaml.safe_dump(workload, sort_keys=False), encoding="utf-8")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            result = main([
+                "generate", "--config", str(config),
+                "--runs-dir", str(self.root / "scrolling-runs"),
+            ])
+        self.assertEqual(result, 0)
+
+        output = stdout.getvalue()
+        # 200 records at an interval of 1 previously produced 400 progress
+        # lines. Redirected output is bounded to roughly one line per 10%.
+        self.assertLess(len(output.splitlines()), 40)
+        self.assertNotIn("\033", output)
+        self.assertIn("200/200", output)
 
     def test_direct_scale_generation_is_quiet_without_callback(self) -> None:
         stdout = StringIO()

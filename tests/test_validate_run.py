@@ -434,7 +434,7 @@ class ValidateRunTests(unittest.TestCase):
     ) -> None:
         mocked_clock.side_effect = [100.0, 110.0, 120.0]
         output = StringIO()
-        progress = _LiveRunProgress()
+        progress = _LiveRunProgress(interactive=True)
         with redirect_stdout(output):
             progress(250, 1000, 250, 0)
             progress(500, 1000, 499, 1)
@@ -448,6 +448,29 @@ class ValidateRunTests(unittest.TestCase):
         self.assertIn("\033[31m", rendered)
         self.assertIn("\033[2A", rendered)
         self.assertIn("Failed: 1", rendered)
+
+    @patch("framework.cli.main.time.perf_counter")
+    def test_redirected_progress_omits_escapes_and_stays_bounded(
+        self, mocked_clock
+    ) -> None:
+        """Piping to a log must not fill it with cursor moves or one line per update.
+
+        Progress escapes were previously emitted unconditionally, so captured
+        evidence contained control sequences and had to be stripped before it
+        could be read.
+        """
+        mocked_clock.side_effect = [100.0] + [100.0 + n for n in range(1, 200)]
+        output = StringIO()
+        progress = _LiveRunProgress(interactive=False)
+        with redirect_stdout(output):
+            for processed in range(1, 101):
+                progress(processed, 100, processed, 0)
+
+        rendered = output.getvalue()
+        self.assertNotIn("\033", rendered)
+        # One line per 10% plus the final state, not one per update.
+        self.assertLessEqual(len(rendered.strip().splitlines()), 12)
+        self.assertIn("100/100", rendered)
 
     def test_terminal_startup_renderer_shows_loaded_request_count(self) -> None:
         output = StringIO()

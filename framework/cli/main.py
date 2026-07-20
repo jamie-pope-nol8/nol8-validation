@@ -11,7 +11,7 @@ import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import yaml
 
@@ -1510,11 +1510,75 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-class _LiveRunProgress:
-    def __init__(self) -> None:
-        self.started_at = time.perf_counter()
-        self.rendered = False
+class _ProgressRenderer:
+    """Redraw progress in place on a terminal, log sparsely everywhere else.
 
+    Two constraints. A run of a million records must not emit a million lines,
+    so progress is rewritten in place rather than appended. And when output is
+    redirected to a log file, cursor-movement and colour escapes are noise in
+    captured evidence, so they are suppressed and progress is reported at
+    coarse intervals instead.
+    """
+
+    BAR_WIDTH = 40
+
+    def __init__(self, *, interactive: bool | None = None) -> None:
+        self.started_at = time.perf_counter()
+        self._interactive_override = interactive
+        self.rendered_lines = 0
+        self.last_logged_tenth = -1
+        self.last_logged_completed = -1
+
+    @property
+    def interactive(self) -> bool:
+        """Resolved per render, so a redirected stdout is honoured."""
+        if self._interactive_override is not None:
+            return self._interactive_override
+        try:
+            return sys.stdout.isatty()
+        except (AttributeError, ValueError):
+            return False
+
+    def bar(self, completed: int, total: int) -> str:
+        filled = int(self.BAR_WIDTH * completed / total) if total else self.BAR_WIDTH
+        return "█" * filled + "-" * (self.BAR_WIDTH - filled)
+
+    @property
+    def elapsed(self) -> float:
+        return time.perf_counter() - self.started_at
+
+    def rate(self, completed: int) -> float:
+        elapsed = self.elapsed
+        return completed / elapsed if elapsed > 0 else 0.0
+
+    def update(
+        self,
+        lines: Sequence[str],
+        *,
+        completed: int,
+        total: int,
+        colour: str = "\033[32m",
+        final: bool = False,
+    ) -> None:
+        if self.interactive:
+            if self.rendered_lines:
+                print(f"\033[{self.rendered_lines}A", end="", flush=True)
+            for line in lines:
+                print(f"\r\033[2K{colour}{line}\033[0m", flush=True)
+            self.rendered_lines = len(lines)
+            return
+
+        # Non-interactive: one line per 10% of progress, plus the final state.
+        tenth = int(10 * completed / total) if total else 10
+        if completed == self.last_logged_completed:
+            return  # Two events can report the same position; log it once.
+        if final or tenth > self.last_logged_tenth:
+            self.last_logged_tenth = tenth
+            self.last_logged_completed = completed
+            print(lines[0], flush=True)
+
+
+class _LiveRunProgress(_ProgressRenderer):
     def start(self, total: int, limit: int | None) -> None:
         print(f"Requests loaded: {total}", flush=True)
         if limit is not None:
@@ -1530,31 +1594,32 @@ class _LiveRunProgress:
         passed: int,
         failed: int,
     ) -> None:
-        elapsed = time.perf_counter() - self.started_at
-        rate = processed / elapsed if elapsed > 0 else 0.0
-        bar_width = 40
-        filled = int(bar_width * processed / total) if total else bar_width
-        bar = "█" * filled + "-" * (bar_width - filled)
-        color = "\033[32m" if failed == 0 else "\033[31m"
-        reset = "\033[0m"
-
-        if self.rendered:
-            print("\033[2A", end="", flush=True)
-        print(
-            f"\r\033[2K{color}[{bar}] {processed}/{total}{reset}",
-            flush=True,
+        self.update(
+            (
+                f"[{self.bar(processed, total)}] {processed}/{total}",
+                f"Succeeded: {passed}  Failed: {failed}  "
+                f"Rate: {self.rate(processed):.1f} req/s",
+            ),
+            completed=processed,
+            total=total,
+            colour="\033[32m" if failed == 0 else "\033[31m",
+            final=processed >= total,
         )
-        print(
-            f"\r\033[2K{color}Succeeded: {passed}  Failed: {failed}  "
-            f"Rate: {rate:.1f} req/s{reset}",
-            flush=True,
-        )
-        self.rendered = True
 
 
-class _ScaleGenerationProgress:
-    def __init__(self) -> None:
+class _ScaleGenerationProgress(_ProgressRenderer):
+    """Generation progress, rendered as a bar rather than one line per interval.
+
+    Documents and their expected transformations are produced in the same pass,
+    so both are reported on a single bar. Previously each interval printed two
+    lines, which for a million-record corpus meant tens of thousands of lines of
+    scrollback.
+    """
+
+    def __init__(self, *, interactive: bool | None = None) -> None:
+        super().__init__(interactive=interactive)
         self.completed = False
+        self.documents_done = 0
 
     def __call__(self, event: str, completed: int, total: int) -> None:
         if event == "configuration_loaded":
@@ -1573,14 +1638,21 @@ class _ScaleGenerationProgress:
             print(f"Rules generated: {completed}/{total}", flush=True)
             print(flush=True)
         elif event == "documents_started":
-            print("Step 3/4: Generating documents", flush=True)
-        elif event == "expected_started":
+            print("Step 3/4: Generating documents and expected results",
+                  flush=True)
             print(flush=True)
-            print("Calculating expected transformations", flush=True)
+            # Reset the clock so the reported rate covers document generation
+            # rather than including configuration loading.
+            self.started_at = time.perf_counter()
+        elif event == "expected_started":
+            pass  # Same pass as document generation; one bar covers both.
         elif event == "documents_progress":
-            print(f"Documents generated: {completed}/{total}", flush=True)
+            self.documents_done = completed
+            self._render(completed, total)
         elif event == "expected_progress":
-            print(f"Expected records completed: {completed}/{total}", flush=True)
+            # Expected results track documents exactly; render on whichever
+            # event arrives so the bar stays live if either is throttled.
+            self._render(max(completed, self.documents_done), total)
         elif event == "artifacts_started":
             print(flush=True)
             print("Step 4/4: Writing artifacts", flush=True)
@@ -1588,6 +1660,18 @@ class _ScaleGenerationProgress:
             print("Complete", flush=True)
             print(flush=True)
             self.completed = True
+
+    def _render(self, completed: int, total: int) -> None:
+        self.update(
+            (
+                f"[{self.bar(completed, total)}] {completed}/{total}",
+                f"Documents and expected results  "
+                f"Rate: {self.rate(completed):.0f} rec/s",
+            ),
+            completed=completed,
+            total=total,
+            final=completed >= total,
+        )
 
 
 def _cli_percentile(values: list[float], percentage: float) -> float:
