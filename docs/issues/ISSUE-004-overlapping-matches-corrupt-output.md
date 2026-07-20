@@ -60,25 +60,39 @@ satisfy and impossible to verify by eye.
 
 ## Reproduction
 
-Two rules and one record, straight curl against your own tenant. Nothing to
-install.
-
-> Loading a policy replaces the active policy, so use a tenant where that is
-> acceptable.
+Two rules and one record, straight curl. Nothing to install. The commands below
+were run end to end against the evaluation tenant; the responses shown are the
+actual output.
 
 ```bash
-POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"
-PROCESS_ENDPOINT="https://<tenant-host>/v1/process"
+POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"   # self-signed cert
+PROCESS_ENDPOINT="https://<tenant-host>/v1/process"          # valid cert
 TOKEN="<bearer-token>"
 ```
+
+> **TLS:** the policy control plane presents a **self-signed certificate** whose
+> subject is an internal address, so the policy calls use `--insecure`. The
+> processing endpoint has a valid certificate and does not need it. Adjust to
+> your own environment if the control plane verifies normally there.
+>
+> **Note:** loading a policy replaces the entire active ruleset, so use a tenant
+> where that is acceptable.
 
 **Step 1 — load a policy with two rules whose matches overlap:**
 
 ```bash
-printf '"ABCD" -> "[P]";\n"DEFG" -> "[Q]";\n' | curl -sS \
+printf '"ABCD" -> "[P]";\n"DEFG" -> "[Q]";\n' | curl -sS --insecure \
   -X POST "$POLICY_ENDPOINT" \
   -H "Authorization: Bearer $TOKEN" \
   --data-binary @-
+```
+
+Response confirms the load:
+
+```json
+{"ok": true, "command_id": "cmd-480", "stage": "apollo",
+ "message": "loaded 2 rule(s) into native apollo via reload_rules (persisted, REPLACE)",
+ "rules": 2}
 ```
 
 **Step 2 — send one record containing `ABCDEFG`:**
@@ -90,26 +104,29 @@ curl -sS -X POST "$PROCESS_ENDPOINT" \
   -d '{"message":"x ABCDEFG y"}'
 ```
 
-Correct output is `x [P]EFG y`. Observed output is `x [P[Q] y`.
+Correct output would be `x [P]EFG y`. **Observed:**
+
+```json
+{"jid":1978103430208103584,"frameId":1,"last":true,"result":{"message":"x [P[Q] y"}}
+```
+
+The corrupted value is in `result.message`: `x [P[Q] y`.
 
 **Step 3 — the control.** Load either rule on its own and repeat step 2:
 
 ```bash
-printf '"ABCD" -> "[P]";\n' | curl -sS \
+printf '"ABCD" -> "[P]";\n' | curl -sS --insecure \
   -X POST "$POLICY_ENDPOINT" \
   -H "Authorization: Bearer $TOKEN" \
   --data-binary @-
 ```
 
-That returns `x [P]EFG y` correctly, isolating the fault to the combination
-rather than to either rule.
+With only that rule loaded, step 2 returns `"result":{"message":"x [P]EFG y"}` —
+correct — isolating the fault to the combination rather than to either rule.
 
 **A larger overlap destroys more.** With `"ABCDEF" -> "[P]"` and
-`"DEFGHI" -> "[Q]"` against `x ABCDEFGHI y`, the output is `x [Q] y` — the `AB`
-is gone.
-
-> If the control-plane endpoint presents a self-signed certificate you may need
-> `-k`. We mention it only because we hit it; it is not part of the defect.
+`"DEFGHI" -> "[Q]"` loaded, processing `x ABCDEFGHI y` returns
+`"result":{"message":"x [Q] y"}` — the `AB` is gone.
 
 ## Scale of impact
 

@@ -94,14 +94,17 @@ Any policy un-pauses the data plane. This is also the recovery for the incident
 above:
 
 ```bash
-POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"
+POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"   # self-signed cert
 TOKEN="<bearer-token>"
 
-printf '"SSN" -> "[REDACTED]";\n' | curl -sS \
+printf '"SSN" -> "[REDACTED]";\n' | curl -sS --insecure \
   -X POST "$POLICY_ENDPOINT" -H "Authorization: Bearer $TOKEN" --data-binary @-
 ```
 
-(If the control-plane endpoint presents a self-signed certificate, add `-k`.)
+The `--insecure` is required because the policy control plane presents a
+self-signed certificate whose subject is an internal address. A successful load
+returns `{"ok": true, …, "message": "loaded 1 rule(s) … REPLACE", "rules": 1}`
+and un-pauses the data plane immediately.
 
 ## What would resolve it
 

@@ -18,17 +18,24 @@ The truncation is silent — HTTP 200, no error.
 
 ## Reproduction
 
+Run end to end against the evaluation tenant; the responses shown are the actual
+output.
+
 ```bash
-POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"
-PROCESS_ENDPOINT="https://<tenant-host>/v1/process"
+POLICY_ENDPOINT="https://<control-plane-host>:8444/policy"   # self-signed cert
+PROCESS_ENDPOINT="https://<tenant-host>/v1/process"          # valid cert
 TOKEN="<bearer-token>"
 ```
+
+> The policy control plane presents a self-signed certificate, so the policy
+> call uses `--insecure`; the processing endpoint has a valid certificate and
+> does not. Loading a policy replaces the entire active ruleset.
 
 Load a rule with a replacement longer than 15 characters, then process a record
 that matches it:
 
 ```bash
-printf '"4111111111111111" -> "[FINANCIAL:CREDIT_CARD_NUMBER]";\n' | curl -sS \
+printf '"4111111111111111" -> "[FINANCIAL:CREDIT_CARD_NUMBER]";\n' | curl -sS --insecure \
   -X POST "$POLICY_ENDPOINT" -H "Authorization: Bearer $TOKEN" --data-binary @-
 
 curl -sS -X POST "$PROCESS_ENDPOINT" \
@@ -36,8 +43,13 @@ curl -sS -X POST "$PROCESS_ENDPOINT" \
   -d '{"message":"card 4111111111111111 on file"}'
 ```
 
-The replacement appears as `[FINANCIAL:CRED` — the first 15 characters — rather
-than the full token.
+**Observed** — the replacement is truncated to its first 15 characters:
+
+```json
+{"jid":114118497663452371,"frameId":1,"last":true,"result":{"message":"card [FINANCIAL:CRED on file"}}
+```
+
+`[FINANCIAL:CREDIT_CARD_NUMBER]` (29 chars) is emitted as `[FINANCIAL:CRED`.
 
 ## Why it matters
 
