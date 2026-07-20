@@ -5,6 +5,15 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
+> **Handoff at 2026-07-20.** Clean tree (this doc is the latest commit), both
+> hosts synced, 213 tests passing, endpoint healthy with the 5,000-rule policy
+> deployed (SHA256 `c3b763aa`). The
+> user is closing and reopening the VS Code folder to accept the workspace-trust
+> dialog and stop the constant Bash permission prompts (see Permissions below).
+> A fresh session resumes here. **Next work item: FW-6** (report usability) then
+> FW-7. Last completed: FW-4/FW-5 transport security, and the airtight
+> qualification. Nothing is mid-edit; the tree is clean.
+
 This file is project *state*: where things stand and what to do next. Three
 companions carry the rest, and they are the ones to reach for first:
 
@@ -109,15 +118,22 @@ not an emergency.
 
 ## Permissions
 
-`.claude/settings.json` allows `Bash(*)` with a deny list for destructive
-commands (sudo, `rm -rf /`, force push, curl-pipe-to-shell, reading `.env` and
-private keys).
+`.claude/settings.json` allows all Bash (bare `Bash`) with a deny list for
+destructive commands (sudo, `rm -rf /`, force push, curl-pipe-to-shell, reading
+`.env` and private keys). The empty `settings.local.json` was deleted - it
+served no purpose.
 
 This replaced a per-command allow list that did not work: nearly every real
 command is compound (`source .venv/bin/activate && python -m ...`) or uses a
-pipe or heredoc, so it matched no single-command rule and prompted anyway. The
-constant prompting blocked unattended long runs, which was the whole point.
-Revisit if this stops being a personal sandbox.
+pipe or heredoc, so it matched no single-command rule and prompted anyway.
+
+**If Bash still prompts:** project `allow` rules only take effect after the VS
+Code **workspace-trust** dialog is accepted for this folder. That is the most
+likely remaining cause of prompts - it is a one-time UI action the user must do
+(close and reopen the folder, accept trust). As of the 2026-07-20 handoff the
+user was about to do exactly this. Also check the VS Code setting
+`claudeCode.initialPermissionMode` is not forcing an ask mode. Revisit the
+whole scheme if this stops being a personal sandbox.
 
 ---
 
