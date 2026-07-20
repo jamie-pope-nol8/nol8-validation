@@ -207,9 +207,8 @@ It is set in `config/demo.env` and deliberately not hardcoded, so the exception
 stays visible. **Not a security finding here** - VPC-only, one team, no
 customer traffic.
 
-Note the ordering bug (FW-5): the scripts source `config/demo.env` *after* your
-environment, so setting this variable on the command line is silently
-overridden. Edit the config file if you need to change it.
+Setting it on the command line works and overrides the config default (fixed in
+FW-5), e.g. `THEMIS_ALLOW_INSECURE_TLS=0 validate policy ...`.
 
 ---
 

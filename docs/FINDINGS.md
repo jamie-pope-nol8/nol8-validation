@@ -48,8 +48,8 @@ Findings are split by who owns the fix.
 | FW-1 | Could report success it had not verified (Tier 0) | Critical | **Fixed** |
 | FW-2 | Blamed Themis for its own expected-output bugs (Tier 1) | Critical | **Fixed** |
 | FW-3 | `compare` scored unverifiable records as PASS | High | **Fixed** |
-| FW-4 | Transports source a committed config file (Tier 2) | Medium | Open |
-| FW-5 | Caller environment silently overridden by config | Medium | Open |
+| FW-4 | Transports source a committed config file (Tier 2) | Medium | **Fixed** |
+| FW-5 | Caller environment silently overridden by config | Medium | **Fixed** |
 | FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Open |
 | FW-7 | Generation depends on YAML key order (T1-6) | Low | Open |
 
@@ -258,16 +258,30 @@ with **0 inconclusive** - verified against the manifest and by an independent
 recount. The prior authoritative run had 4,755 transformations behind collapsed
 tokens; this one has none.
 
-## FW-4 - Transports source a committed config file (OPEN)
+## FW-4 - Transports sourced a committed config file (FIXED)
 
-Both transports `source config/demo.env`, which is tracked. Anyone who can land
-a change to it gets code execution plus the tokens sourced next.
+Both transports `source`d `config/demo.env`, which is tracked. Anyone who could
+land a change to it got code execution plus the tokens loaded on the next line.
 
-## FW-5 - Caller environment silently overridden (OPEN)
+Now: `scripts/lib/env-config.sh` parses the file as `KEY=VALUE` rather than
+executing it, so it can only set variables - never run commands - and rejects
+any key outside an allowlist, so a tampered file cannot smuggle in `LD_PRELOAD`
+or similar. Sourcing that library is fine: it is code we commit deliberately;
+the distinction is data versus code. Commit `e7bdac5`.
 
-Scripts source the config *after* the caller's environment, so
-`THEMIS_ALLOW_INSECURE_TLS=0` on the command line has no effect. Same root
-cause as transport tests running against a developer's real token.
+## FW-5 - Caller environment silently overridden (FIXED)
+
+Scripts sourced the config *after* the caller's environment, so
+`THEMIS_ALLOW_INSECURE_TLS=0` on the command line had no effect.
+
+Now: the loader leaves an already-set variable untouched - the file supplies
+defaults, the caller wins. Verified live: overriding the endpoint on the
+command line reaches the override, not the config value. Commit `e7bdac5`.
+
+Fixing this exposed a latent bash 3.2 crash (an empty array expanded under
+`set -u`) in `load-policy.sh`, since the `=0` path was previously unreachable;
+the single `--insecure` flag is now a `${VAR:+"$VAR"}` string, safe on every
+bash.
 
 ## FW-6 - Failing reports unusable at scale (OPEN)
 

@@ -432,23 +432,16 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Tier 2 security remainder (FW-4, FW-5).** Both transports
-   `source config/demo.env`, which is committed, so anyone who can land a change
-   to it gets code execution plus the tokens sourced next.
-
-   Related, found while testing TLS: **a caller's environment variables are
-   silently overridden by the sourced config file**, because the scripts source
-   it after startup. Setting `THEMIS_ALLOW_INSECURE_TLS=0` on the command line
-   had no effect. Same root cause as the transport tests running against a
-   developer's real token.
-
-3. **Tier 4 report usability (FW-6).** Failing reports are 2.6 MB of
+2. **Tier 4 report usability (FW-6).** Failing reports are 2.6 MB of
    undifferentiated blocks with no diff, grouping, or root-cause classification.
 
-4. **T1-6 (FW-7):** generation depends on YAML key order, not only the seed.
+3. **T1-6 (FW-7):** generation depends on YAML key order, not only the seed.
 
-Done since last update: the airtight qualification (0 inconclusive) is
-complete - see the qualification section above.
+Done since last update:
+- The airtight qualification (0 inconclusive) - see the qualification section.
+- FW-4 and FW-5 (transport security): env files are parsed not executed, with
+  an allowlist and caller precedence. `scripts/lib/env-config.sh`, commit
+  `e7bdac5`. Verified live on EC2.
 
 ---
 
