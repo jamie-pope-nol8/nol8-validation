@@ -34,6 +34,7 @@ capture = {
         and arguments[arguments.index("--connect-timeout") + 1] == "5",
     "max_time": "--max-time" in arguments
         and arguments[arguments.index("--max-time") + 1] == "30",
+    "insecure": "--insecure" in arguments,
 }
 with open(os.environ["TRANSPORT_CAPTURE"], "w", encoding="utf-8") as handle:
     json.dump(capture, handle)
@@ -110,6 +111,8 @@ class TransportScriptTests(unittest.TestCase):
                 "authorization_header": True,
                 "connect_timeout": True,
                 "max_time": True,
+                # config/demo.env sets THEMIS_ALLOW_INSECURE_TLS=1.
+                "insecure": True,
             },
         )
 
@@ -185,6 +188,101 @@ class TransportScriptTests(unittest.TestCase):
                 self.assertTrue(capture["connect_timeout"])
                 self.assertTrue(capture["max_time"])
                 self.assertTrue(capture["authorization_header"])
+
+
+    def test_caller_can_override_insecure_tls_from_the_config(self) -> None:
+        """FW-5: a caller value wins over config/demo.env.
+
+        demo.env sets THEMIS_ALLOW_INSECURE_TLS=1. Before the fix the transport
+        sourced the config after the caller's environment, so setting the
+        variable to 0 on the command line had no effect.
+        """
+        policy_path = self.root / "policy.nol"
+        policy_path.write_text('"x" -> "y";\n')
+
+        self.environment["THEMIS_ALLOW_INSECURE_TLS"] = "0"
+        result = subprocess.run(
+            [str(POLICY_SCRIPT), "themis", str(policy_path)],
+            cwd=REPOSITORY_ROOT,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The caller disabled it, so --insecure must not be passed. On bash 3.2
+        # this also exercises the empty-flag path that previously crashed.
+        self.assertFalse(self.capture()["insecure"])
+
+
+LIBRARY = REPOSITORY_ROOT / "scripts/lib/env-config.sh"
+
+
+class EnvConfigLoaderTests(unittest.TestCase):
+    """FW-4: config files are parsed, never executed."""
+
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.root = Path(self.temporary_directory.name)
+
+    def _load(self, file_contents: str, allowed: str = "", *, preamble: str = "") -> subprocess.CompletedProcess:
+        env_file = self.root / "sample.env"
+        env_file.write_text(file_contents)
+        script = (
+            "set -euo pipefail\n"
+            f"source {LIBRARY}\n"
+            f"{preamble}"
+            f"load_env_file {env_file} {allowed}\n"
+            "for name in THEMIS_PROCESS_ENDPOINT THEMIS_ALLOW_INSECURE_TLS "
+            "THEMIS_TOKEN EVIL LD_PRELOAD; do\n"
+            # Direct indirect expansion - never eval, which would re-parse a
+            # value containing $ or backticks and defeat the point of the test.
+            "  printf '%s=[%s]\\n' \"$name\" \"${!name-UNSET}\"\n"
+            "done\n"
+        )
+        return subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_command_substitution_is_not_executed(self) -> None:
+        sentinel = self.root / "PWNED"
+        result = self._load(
+            f'THEMIS_PROCESS_ENDPOINT="https://legit"\n'
+            f"EVIL=$(touch {sentinel})\n"
+            f"`touch {sentinel}`\n",
+            allowed="THEMIS_PROCESS_ENDPOINT",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(sentinel.exists(), "config file was executed")
+        self.assertIn("THEMIS_PROCESS_ENDPOINT=[https://legit]", result.stdout)
+        self.assertIn("EVIL=[UNSET]", result.stdout)
+
+    def test_allowlist_blocks_unexpected_keys(self) -> None:
+        result = self._load(
+            "THEMIS_PROCESS_ENDPOINT=https://legit\n"
+            "LD_PRELOAD=/tmp/evil.so\n",
+            allowed="THEMIS_PROCESS_ENDPOINT",
+        )
+        self.assertIn("LD_PRELOAD=[UNSET]", result.stdout)
+        self.assertIn("unexpected key 'LD_PRELOAD'", result.stderr)
+
+    def test_caller_environment_takes_precedence(self) -> None:
+        result = self._load(
+            "THEMIS_ALLOW_INSECURE_TLS=1\n",
+            allowed="THEMIS_ALLOW_INSECURE_TLS",
+            preamble="export THEMIS_ALLOW_INSECURE_TLS=0\n",
+        )
+        self.assertIn("THEMIS_ALLOW_INSECURE_TLS=[0]", result.stdout)
+
+    def test_values_are_literal_not_expanded(self) -> None:
+        # No allowlist: the secrets file accepts any key, but still no execution.
+        result = self._load("THEMIS_TOKEN='ab$cd`e'\n")
+        self.assertIn("THEMIS_TOKEN=[ab$cd`e]", result.stdout)
 
 
 if __name__ == "__main__":

@@ -19,11 +19,16 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   exit 3
 fi
 
-# shellcheck disable=SC1090
-source "$CONFIG_FILE"
+# shellcheck source=scripts/lib/env-config.sh
+source "$SCRIPT_DIR/lib/env-config.sh"
 
-# shellcheck disable=SC1090
-source "$SECRETS_FILE"
+# Parse rather than execute (FW-4), and let the caller's environment win over
+# the files (FW-5). The committed config is restricted to its known keys; the
+# local secrets file is the operator's own.
+load_env_file "$CONFIG_FILE" \
+  THEMIS_POLICY_ENDPOINT AERGIA_POLICY_ENDPOINT \
+  THEMIS_PROCESS_ENDPOINT THEMIS_ALLOW_INSECURE_TLS
+load_env_file "$SECRETS_FILE"
 
 TARGET="${1:-}"
 POLICY_FILE="${2:-}"
@@ -81,13 +86,18 @@ trap cleanup EXIT
 # in docs/product/themis-product-limitations.md - an observation, not a
 # limitation, but kept explicit so the exception does not silently propagate
 # into an environment where it would matter.
-INSECURE_FLAG=()
+# A single optional flag, held as a string rather than an array: an empty array
+# expanded under `set -u` is an "unbound variable" error on bash 3.2 (the macOS
+# system bash). The ${VAR:+"$VAR"} form expands to nothing when unset and is
+# safe everywhere. Now that the caller can set THEMIS_ALLOW_INSECURE_TLS=0
+# (FW-5), the empty case is actually reachable.
+INSECURE_FLAG=""
 if [[ "${THEMIS_ALLOW_INSECURE_TLS:-0}" == "1" ]]; then
-  INSECURE_FLAG=(--insecure)
+  INSECURE_FLAG="--insecure"
 fi
 
 set +e
-HTTP_CODE="$(curl -sS "${INSECURE_FLAG[@]}" \
+HTTP_CODE="$(curl -sS ${INSECURE_FLAG:+"$INSECURE_FLAG"} \
   --connect-timeout 5 \
   --max-time 30 \
   -o "$RESPONSE_FILE" \

@@ -17,11 +17,16 @@ if [[ ! -f "$SECRETS_FILE" ]]; then
   exit 2
 fi
 
-# shellcheck disable=SC1090
-source "$CONFIG_FILE"
+# shellcheck source=scripts/lib/env-config.sh
+source "$SCRIPT_DIR/lib/env-config.sh"
 
-# shellcheck disable=SC1090
-source "$SECRETS_FILE"
+# Parse rather than execute (FW-4), and let the caller's environment win over
+# the files (FW-5). The committed config is restricted to its known keys; the
+# local secrets file is the operator's own.
+load_env_file "$CONFIG_FILE" \
+  THEMIS_POLICY_ENDPOINT AERGIA_POLICY_ENDPOINT \
+  THEMIS_PROCESS_ENDPOINT THEMIS_ALLOW_INSECURE_TLS
+load_env_file "$SECRETS_FILE"
 
 if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=true
