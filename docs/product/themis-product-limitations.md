@@ -22,10 +22,15 @@ Framework issues are tracked separately in `docs/issues/`.
 | 3 | Deployment is fire and forget | Medium | Traffic may be evaluated against the previous policy |
 | 4 | Overlapping matches corrupt output | High | Silent data destruction (ISSUE-003) |
 | 5 | Replacements truncate at 15 characters | Medium | Constrains redaction token design (KB-001) |
+| 6 | Evaluation environment is unreachable externally | High | Agent integrations cannot be demonstrated |
 
 Items 1 to 3 concern the policy lifecycle and share one root cause: **a policy
 is not a first-class object.** It has no identity, no version, and no
 addressable existence after it is posted.
+
+Item 6 is not a defect but an environment configuration choice. It is included
+because it currently prevents demonstrating the product to the audience most
+likely to buy it.
 
 ---
 
@@ -193,11 +198,64 @@ Whether the limit is configurable has not been established.
 
 ---
 
+## 6. The evaluation environment cannot be reached by the integrations we most need to demonstrate
+
+### Observed
+
+The evaluation environment is reachable only from inside the VPC. Access
+requires a VPN connection and, in practice, an SSH session to a host inside the
+network. The processing and policy endpoints are not reachable from outside.
+
+### Why it matters
+
+This is an appropriate posture for production. It is a poor fit for an
+environment whose purpose is evaluation and demonstration, and it rules out a
+category of integration entirely.
+
+An agent - or any external service, customer sandbox, CI pipeline, or partner
+integration - cannot establish a VPN connection or drive an SSH session. It
+needs a reachable HTTPS endpoint and a credential. Without one, agent-mediated
+integrations cannot be demonstrated at all, and that is the fastest-growing
+category of buyer interest for a data-protection product sitting in front of
+models.
+
+The practical cost is straightforward: **we cannot demonstrate the product to
+the audience most likely to buy it**, because the demonstration itself cannot
+reach the service.
+
+It also raises a question a prospect will ask directly. If evaluating the
+product requires network-level access to the vendor's VPC, what does
+integrating it require? The access model shapes the perceived integration cost
+whether or not that perception is accurate.
+
+### What is needed
+
+A reachable evaluation endpoint. Not an open one:
+
+- public HTTPS endpoint for the processing and policy APIs
+- scoped, revocable tokens per evaluator or per demonstration
+- rate limiting and request size caps
+- synthetic data only, with that stated as a condition of use
+- separate from any environment holding customer data
+
+That is a normal shape for a vendor evaluation environment and gives up little.
+The current model gives up the ability to demonstrate the product's most
+strategically relevant use case.
+
+### Note
+
+This is not an argument for weakening production security. It is an argument
+that an evaluation environment has a different job from a production one, and
+is currently configured for the latter.
+
+---
+
 ## Note on how these were found
 
-All five were surfaced by building a validation capability against a live
-Themis instance, and all are reproducible outside this repository. Items 4 and
-5 are reproducible with curl alone.
+All six were surfaced by building a validation capability against a live Themis
+instance. Items 1 to 5 are reproducible outside this repository, and items 4
+and 5 with curl alone.
 
-Items 1 to 3 were not found by testing Themis. They were found by trying to
-operate it safely and repeatedly - which is what a customer will do.
+Items 1 to 3 and 6 were not found by testing Themis. They were found by trying
+to operate and demonstrate it repeatedly - which is what a customer and a sales
+engineer will do.
