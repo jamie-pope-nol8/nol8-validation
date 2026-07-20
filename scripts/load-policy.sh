@@ -77,8 +77,10 @@ trap cleanup EXIT
 #
 # This call carries both the bearer token and the complete ruleset, so
 # disabling verification is a deliberate, visible choice rather than a
-# hardcoded default. See limitation 7 in
-# docs/product/themis-product-limitations.md.
+# hardcoded default. See "Control plane TLS is self-signed" under Observations
+# in docs/product/themis-product-limitations.md - an observation, not a
+# limitation, but kept explicit so the exception does not silently propagate
+# into an environment where it would matter.
 INSECURE_FLAG=()
 if [[ "${THEMIS_ALLOW_INSECURE_TLS:-0}" == "1" ]]; then
   INSECURE_FLAG=(--insecure)
