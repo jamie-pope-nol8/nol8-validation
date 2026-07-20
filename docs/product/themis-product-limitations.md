@@ -279,9 +279,20 @@ unable to do the one thing it exists to do.
 
 ### Why it matters
 
-There is no health, readiness, or status endpoint. The only way to discover
-that the engine is down is to send real traffic and have it fail. That has
-three consequences:
+There is no health, readiness, or status endpoint. This was verified rather
+than assumed. The data plane host publishes exactly one TCP port (443) - no
+metrics port, no admin port - and on it, `/v1/process` is the only route that
+exists. Every one of `/health`, `/healthz`, `/ready`, `/readyz`, `/live`,
+`/livez`, `/status`, `/metrics`, `/version`, their `/v1/` variants, and `/`
+returns 404. `GET /v1/process` returns 405, confirming the route is present and
+the 404s are genuine absence rather than a routing quirk.
+
+Those 404s and the 405 are served promptly and correctly *while the engine is
+down*, which is the heart of the problem: the edge is healthy and answering, so
+nothing short of real traffic distinguishes a working system from a broken one.
+
+The only way to discover that the engine is down is to send real traffic and
+have it fail. That has three consequences:
 
 - **Work is started against a dead backend.** A long validation run begins
   normally and produces nothing but execution failures. Nothing can be checked
@@ -312,8 +323,22 @@ most of the remainder.
 
 The framework treats a 503 with no processed message as `EXECUTION_FAILURE`,
 not as a pass, so an outage produces honest evidence of an outage rather than a
-green report. It does not yet pre-flight the endpoint before a run; that is
-worth adding, and is the only mitigation available without a health endpoint.
+green report.
+
+It does not yet pre-flight the endpoint before a run. That is worth adding and
+is the only mitigation available, but note what it has to be: since no cheap
+liveness route exists, the probe must be a real `POST /v1/process` with a
+throwaway payload. A customer's monitoring faces the same constraint - the only
+way to health-check this service is to put traffic through it.
+
+### Note on topology
+
+The data plane and control plane are provisioned differently. The processing
+endpoint resolves to a local network address (10.8.11.x, adjacent to the client
+subnet) while both control plane hosts resolve to EC2 internal addresses
+(10.10.1.x, `*.ec2.internal`). This is the same split that produced the
+certificate difference recorded under Observations, and supports reading that
+as a provisioning artifact rather than a deliberate choice.
 
 ---
 
