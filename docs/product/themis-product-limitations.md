@@ -23,10 +23,15 @@ Framework issues are tracked separately in `docs/issues/`.
 | 4 | Overlapping matches corrupt output | High | Silent data destruction (ISSUE-003) |
 | 5 | Replacements truncate at 15 characters | Medium | Constrains redaction token design (KB-001) |
 | 6 | Evaluation environment is unreachable externally | High | Agent integrations cannot be demonstrated |
+| 7 | No way to check whether the runtime is healthy | Medium | Work is started against a dead backend |
 
 Items 1 to 3 concern the policy lifecycle and share one root cause: **a policy
 is not a first-class object.** It has no identity, no version, and no
 addressable existence after it is posted.
+
+Items 1 to 3 and 7 are all facets of the same gap: **the runtime cannot be
+asked about its own state.** Not what policy is loaded, not whether the policy
+has converged, not whether the engine is running.
 
 Item 6 is not a defect but an environment configuration choice. It is included
 because it currently prevents demonstrating the product to the audience most
@@ -250,6 +255,68 @@ is currently configured for the latter.
 
 ---
 
+## 7. There is no way to check whether the runtime is healthy
+
+### Observed
+
+On 2026-07-20 the processing endpoint began returning HTTP 503 to every
+request:
+
+```json
+{"error": {"code": "ARGUS_UPSTREAM_UNAVAILABLE",
+ "message": "stream submit: ARGUS_UPSTREAM_UNAVAILABLE: backend send failed:
+  dispatcher: iris send: ARGUS_UPSTREAM_TIMEOUT: iris quic: upstream error:
+  RESPONSE_WAIT: request timed out (no apollo response in >2s)"}}
+```
+
+The edge accepted the request, authenticated it, and routed it. The rules
+engine behind it - `apollo`, the same component named in the policy-load
+response - did not answer within the 2-second budget. The control plane
+remained responsive throughout, answering in under 10 ms.
+
+So the product was partly alive: reachable, authenticating, routing, and
+unable to do the one thing it exists to do.
+
+### Why it matters
+
+There is no health, readiness, or status endpoint. The only way to discover
+that the engine is down is to send real traffic and have it fail. That has
+three consequences:
+
+- **Work is started against a dead backend.** A long validation run begins
+  normally and produces nothing but execution failures. Nothing can be checked
+  beforehand.
+- **Outage duration is unknowable.** With no health signal and no timestamped
+  status, there is no way to establish when the engine stopped responding or
+  whether it has recovered, other than by probing it.
+- **An operator cannot distinguish causes.** A 503 could be the engine, the
+  transport, the tenant, or the credential. Only the error string separates
+  them, and only because it happens to name its internal components. That is
+  incidental detail, not a contract, and it should not be what operators rely
+  on.
+
+The diagnosis above was possible only because the error message exposed the
+internal call chain. A less chatty error - or a future release that redacts it,
+which would be a reasonable thing to do - would leave an operator with an
+unexplained 503 and nothing to act on.
+
+### What is needed
+
+A health endpoint reporting engine reachability and policy-load state,
+unauthenticated or cheaply authenticated, so it can be polled before starting
+work and used by any monitoring the customer already runs. A distinguishable
+error taxonomy for "engine unavailable" versus "request rejected" would close
+most of the remainder.
+
+### Framework handling
+
+The framework treats a 503 with no processed message as `EXECUTION_FAILURE`,
+not as a pass, so an outage produces honest evidence of an outage rather than a
+green report. It does not yet pre-flight the endpoint before a run; that is
+worth adding, and is the only mitigation available without a health endpoint.
+
+---
+
 ## Observations to confirm - not limitations
 
 ### Control plane TLS is self-signed, the data plane is not
@@ -291,10 +358,10 @@ silently propagate into an environment where it would matter.
 
 ## Note on how these were found
 
-All six were surfaced by building a validation capability against a live
-Themis instance. Items 1 to 5 are reproducible outside this repository, and
-items 4 and 5 with curl alone.
+All seven were surfaced by building a validation capability against a live
+Themis instance. Items 1 to 5 and 7 are reproducible outside this repository,
+and items 4, 5, and 7 with curl alone.
 
-Items 1 to 3 and 6 were not found by testing Themis. They were found by trying
-to operate and demonstrate it repeatedly - which is what a customer and a sales
-engineer will do.
+Items 1 to 3, 6, and 7 were not found by testing Themis. They were found by
+trying to operate and demonstrate it repeatedly - which is what a customer and
+a sales engineer will do.

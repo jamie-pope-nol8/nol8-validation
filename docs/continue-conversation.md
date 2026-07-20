@@ -35,6 +35,9 @@ verified at scale.
 Current status: **the framework produces trustworthy evidence.** A clean
 5,000 rule / 10,000 record qualification passes 100%.
 
+**As of 2026-07-20 the Themis processing endpoint is DOWN.** See "Runtime
+outage" below. No execution is possible until it returns.
+
 ---
 
 # CRITICAL CONTEXT - who wrote what
@@ -91,6 +94,18 @@ one line per ten percent with no escapes when redirected.
 EC2 is a **test and demo environment**, not production. Overwriting a policy is
 not an emergency.
 
+## Permissions
+
+`.claude/settings.json` allows `Bash(*)` with a deny list for destructive
+commands (sudo, `rm -rf /`, force push, curl-pipe-to-shell, reading `.env` and
+private keys).
+
+This replaced a per-command allow list that did not work: nearly every real
+command is compound (`source .venv/bin/activate && python -m ...`) or uses a
+pipe or heredoc, so it matched no single-command rule and prompted anyway. The
+constant prompting blocked unattended long runs, which was the whole point.
+Revisit if this stops being a personal sandbox.
+
 ---
 
 # CLI
@@ -122,6 +137,36 @@ Expect 50/50 succeeded, `PASS: 50`, `CONTENT_MISMATCH: 0`, banner `PASS`.
 
 # Current State - 2026-07-20
 
+## Runtime outage - processing endpoint DOWN
+
+Every request to `/v1/process` returns HTTP 503:
+
+```
+ARGUS_UPSTREAM_UNAVAILABLE: backend send failed: dispatcher: iris send:
+ARGUS_UPSTREAM_TIMEOUT: iris quic: upstream error: RESPONSE_WAIT:
+request timed out (no apollo response in >2s)
+```
+
+Reproduced with plain curl from EC2 - **not caused by our code**. The control
+plane is healthy throughout, answering in under 10 ms. The edge (`argus`) and
+transport (`iris`) are up; the rules engine (`apollo`) is not answering.
+
+First observed failing in 3-4s per request, later failing in ~12ms, which
+suggests it stopped waiting on apollo entirely rather than recovering.
+
+Nothing to fix on our side. **Re-probe before attempting any run:**
+
+```bash
+ssh nol8-demo 'cd /opt/nol8/nol8-validation && set -a && source .env && \
+  source config/demo.env && set +a && curl -sS --max-time 20 -o /dev/null \
+  -w "HTTP %{http_code}\n" -X POST "$THEMIS_PROCESS_ENDPOINT" \
+  -H "Authorization: Bearer $THEMIS_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"message\":\"hello\"}"'
+```
+
+This became **limitation 7**: there is no health endpoint, so the only way to
+learn the engine is down is to send real traffic and have it fail.
+
 ## Clean qualification - 20260719T230452981053Z (AUTHORITATIVE)
 
 ```
@@ -135,6 +180,11 @@ Latency p50/p95/p99: 12.492 / 14.214 / 16.686 ms
 
 Like-for-like with the original failing run. **Proves ISSUE-003 was the sole
 cause of the original 272 failures**, and that it is not a marginal edge case.
+
+Caveat now closed: this run used `--replacement-max-length 15`, and three
+`[BUSINESS_TERMS:*]` tokens collapsed to one string under truncation. `compare`
+would now report those records INCONCLUSIVE rather than PASS. **Worth re-running
+once the endpoint returns** to get a qualification with no inconclusive records.
 
 ## ISSUE-003 - OPEN, handover drafted but NOT SENT
 
@@ -164,7 +214,7 @@ Empirically established:
 email versions, plus the reasoning behind each choice. Reproduction is inline
 curl, no repository needed.
 
-## Themis product limitations - six findings
+## Themis product limitations - seven findings
 
 `docs/product/themis-product-limitations.md`.
 
@@ -175,8 +225,12 @@ curl, no repository needed.
 5. Replacements truncate at 15 characters (KB-001)
 6. Evaluation environment unreachable externally - VPN and SSH only, so agent
    integrations cannot be demonstrated
+7. No way to check whether the runtime is healthy (added 2026-07-20 from the
+   outage above)
 
-1 to 3 share a root cause: **a policy is not a first-class object.**
+1 to 3 and 7 share a root cause: **the runtime cannot be asked about its own
+state** - not what policy is loaded, not whether it converged, not whether the
+engine is running.
 
 Item 6 was added because agent-mediated demos are the fastest-growing buyer
 interest and currently cannot be shown at all. Framed as demonstrability, not
@@ -263,7 +317,7 @@ Expected output is computed by scanning the **full catalog** via Aho-Corasick
 Check `overlapping_match_documents` in the generation manifest before treating
 any run as a qualification.
 
-## Replacement token budget - DESIGNED, NOT BUILT
+## Replacement token budget
 
 Tokens exceed the 15-character runtime limit (`[PII:PERSON_NAME]` is 17), so
 Themis truncates them all. Running `compare` without
@@ -281,20 +335,43 @@ Three modes are wanted deliberately:
 | long tokens, compare flag | today's qualification - works, but normalized |
 | short tokens, no flag needed | **cleanest evidence** - exact byte comparison |
 
-Planned, in order:
+**Item 2 is now DONE** (commit `ca5c377`): `compare` detects replacements that
+become identical under truncation, and reports affected would-be passes as
+`INCONCLUSIVE` rather than `PASS`. See the next section.
+
+Still to do:
 
 1. A generation-side option constraining tokens to the runtime budget, so a
    qualification needs no normalization. Opt-in - emitting oversized tokens
    deliberately is how the demo works.
-2. **Make `compare` refuse or warn when the requested normalization collapses
-   two distinct tokens.** This is the blind spot that made the first clean
-   qualification not airtight: three `[BUSINESS_TERMS:*]` tokens collapsed to
-   one string across 4,755 transformations, so a wrong-rule application would
-   have scored PASS. **Higher value than (1).**
-3. A generation-time warning naming oversized tokens, as a backstop.
+2. A generation-time warning naming oversized tokens, as a backstop.
 
 `--replacement-max-length` stays. It is the demo switch and remains useful for
 modelling documented runtime behaviour even after Themis is fixed.
+
+## INCONCLUSIVE verdict - new, 2026-07-20
+
+The blind spot: `[FINANCIAL:CREDIT_CARD_NUMBER]` and
+`[FINANCIAL:CREDIT_ROUTING]` both truncate to `[FINANCIAL:CRED`. A record where
+the wrong rule fired was byte-identical to one where the right rule fired, and
+`compare` scored it PASS.
+
+Now:
+
+- `compare` builds a collision map of replacements sharing a prefix within the
+  limit, and downgrades affected would-be passes to `INCONCLUSIVE`.
+- **Mismatches are deliberately left alone.** Truncation can only make two
+  messages look more alike, never less, so an inequality is still genuine
+  evidence of a product failure.
+- The manifest records `records_inconclusive` and `replacement_collisions`
+  (count plus up to 20 examples, with a `truncated` flag).
+- The report counts inconclusive records as **neither passes nor failures** -
+  blaming the product for a limit of our own comparison would be as wrong as
+  certifying a pass. It withholds an overall PASS while any exist, styles the
+  pass rate amber, and names the responsible tokens.
+
+The tests were verified to fail against the pre-fix code (they returned
+`['PASS', 'PASS']`) before being trusted.
 
 ## Idea under discussion - pre-generated demo datasets
 
@@ -321,10 +398,17 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Close the `compare` normalization blind spot** (token budget item 2).
-   Highest-value remaining framework work.
+2. **Re-probe the processing endpoint.** Nothing can execute until apollo
+   returns. Command in the outage section above.
 
-3. **Tier 2 security remainder.** Both transports `source config/demo.env`,
+3. **Pre-flight check before a run.** Given limitation 7, `validate run` should
+   probe the endpoint before generating load rather than discovering the outage
+   one execution failure at a time. Small, and directly motivated by today.
+
+4. **Re-run the qualification** once the endpoint is back, to get a result with
+   zero inconclusive records.
+
+5. **Tier 2 security remainder.** Both transports `source config/demo.env`,
    which is committed, so anyone who can land a change to it gets code
    execution plus the tokens sourced next.
 
@@ -334,10 +418,10 @@ Design constraints:
    had no effect. Same root cause as the transport tests running against a
    developer's real token.
 
-4. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
+6. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
    blocks with no diff, grouping, or root-cause classification.
 
-5. **T1-6:** generation depends on YAML key order, not only the seed.
+7. **T1-6:** generation depends on YAML key order, not only the seed.
 
 ---
 
@@ -349,7 +433,8 @@ Design constraints:
 - Do NOT adjust validation expectations to make ISSUE-003 pass.
 - A run where every request fails is deliberately NOT raised as a stage
   failure - that would block compare and report, leaving an exception instead
-  of evidence.
+  of evidence. **Today's outage is exactly this case working as intended.**
+- An unconfirmable record is INCONCLUSIVE, never PASS and never FAIL.
 - `artifacts/runs/` is not tracked. Anything that must survive cleanup goes in
   `artifacts/evidence/`.
 
@@ -370,7 +455,7 @@ dead but were not removed unilaterally).
 
 `docs/product/validation-framework-overview.md` is a 0-byte placeholder.
 
-Tests: 191, all passing.
+Tests: 201, all passing.
 
 ```bash
 source .venv/bin/activate && python -m unittest discover -s tests -q
