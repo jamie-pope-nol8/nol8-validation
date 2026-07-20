@@ -178,22 +178,29 @@ curl, no repository needed.
 
 1 to 3 share a root cause: **a policy is not a first-class object.**
 
-**TLS was investigated and downgraded.** The policy control plane presents a
-self-signed certificate (`CN=ip-172-31-40-100`) while the processing endpoint
-has a valid Amazon-issued one, so `--insecure` is required to deploy. This was
-briefly written up as a limitation and should NOT be: the sandbox is
-provisioned for one team and reachable only from inside the VPC, so the absence
-of server identity proof carries no practical risk. Recorded as an observation
-only - the question worth asking is why the two endpoints were provisioned
-differently, not whether the sandbox needs a public certificate.
-
-`load-policy.sh` still verifies by default and requires
-`THEMIS_ALLOW_INSECURE_TLS=1` (set in `config/demo.env`), so the exception stays
-visible rather than propagating silently into an environment where it matters.
-
 Item 6 was added because agent-mediated demos are the fastest-growing buyer
 interest and currently cannot be shown at all. Framed as demonstrability, not
 as criticism of the security posture.
+
+### TLS - investigated and deliberately NOT a limitation
+
+The policy control plane presents a self-signed certificate
+(`CN=ip-172-31-40-100`) while the processing endpoint has a valid
+Amazon-issued one, so `--insecure` is required to deploy.
+
+This was briefly written up as a high-severity limitation. **That was wrong**
+and it was withdrawn. The sandbox is provisioned for one team and reachable
+only from inside the VPC. A certificate proves server identity; anyone able to
+exploit its absence is already inside that network. No customer traffic passes
+through it. Self-signed is a reasonable choice here.
+
+Do not re-promote it. The only open question is why the two endpoints were
+provisioned differently, which is a question about production intent.
+
+`load-policy.sh` still verifies by default and requires
+`THEMIS_ALLOW_INSECURE_TLS=1` (set in `config/demo.env`), kept so the exception
+stays visible rather than propagating silently into an environment where it
+would matter.
 
 ## Open question for engineering - the data path
 
@@ -327,10 +334,10 @@ Design constraints:
    had no effect. Same root cause as the transport tests running against a
    developer's real token.
 
-5. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
+4. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
    blocks with no diff, grouping, or root-cause classification.
 
-6. **T1-6:** generation depends on YAML key order, not only the seed.
+5. **T1-6:** generation depends on YAML key order, not only the seed.
 
 ---
 
