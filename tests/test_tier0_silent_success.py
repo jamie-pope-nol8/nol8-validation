@@ -148,6 +148,72 @@ def _failing(index: int) -> dict:
     }
 
 
+def _inconclusive(index: int) -> dict:
+    return {
+        "record_id": f"i{index}",
+        "status": "INCONCLUSIVE",
+        "kind": "dirty",
+        "latency_ms": 1.0,
+        "expected_match_count": 1,
+    }
+
+
+class InconclusiveReportTests(unittest.TestCase):
+    """A record the comparison could not confirm is neither pass nor failure."""
+
+    def _render_with_collisions(self, rows: list[dict]) -> str:
+        manifest = _manifest()
+        manifest["stages"]["comparison"] = {
+            "status": "completed",
+            "replacement_max_length": 15,
+            "replacement_collisions": {
+                "count": 1,
+                "examples": {
+                    "[FINANCIAL:CRED": [
+                        "[FINANCIAL:CREDIT_CARD_NUMBER]",
+                        "[FINANCIAL:CREDIT_ROUTING]",
+                    ]
+                },
+                "truncated": False,
+            },
+        }
+        return render_report_html(aggregate_evidence(manifest, {}, rows))
+
+    def test_inconclusive_records_are_not_counted_as_passes(self) -> None:
+        evidence = aggregate_evidence(_manifest(), {}, [_passing(1), _inconclusive(1)])
+        self.assertEqual(evidence["passed"], 1)
+        self.assertEqual(evidence["inconclusive"], 1)
+        self.assertEqual(evidence["failed"], 0)
+
+    def test_inconclusive_records_are_not_counted_as_failures(self) -> None:
+        # Blaming the product for a limit of the comparison would be as wrong
+        # as certifying a pass that was never established.
+        evidence = aggregate_evidence(_manifest(), {}, [_inconclusive(1)])
+        self.assertEqual(evidence["failed"], 0)
+        self.assertEqual(evidence["failures"], [])
+
+    def test_zero_failures_with_inconclusive_records_is_not_a_pass(self) -> None:
+        html = self._render_with_collisions([_passing(1), _inconclusive(1)])
+        self.assertIn('<span class="status">INCONCLUSIVE</span>', html)
+        self.assertNotIn('<span class="status">PASS</span>', html)
+        self.assertNotIn('class="metric status-pass"', html)
+
+    def test_report_names_the_colliding_tokens(self) -> None:
+        html = self._render_with_collisions([_inconclusive(1)])
+        self.assertIn("could not be confirmed as passes", html)
+        self.assertIn("[FINANCIAL:CRED", html)
+        self.assertIn("[FINANCIAL:CREDIT_CARD_NUMBER]", html)
+        self.assertIn("not an observed product failure", html)
+
+    def test_a_real_failure_outranks_inconclusive(self) -> None:
+        html = self._render_with_collisions([_inconclusive(1), _failing(1)])
+        self.assertIn('<span class="status">FAIL</span>', html)
+
+    def test_no_note_when_nothing_is_inconclusive(self) -> None:
+        html = _render([_passing(1)])
+        self.assertNotIn("could not be confirmed as passes", html)
+
+
 class ReportHonestyTests(unittest.TestCase):
     """T0-2 and T0-3: the report must not overstate the outcome."""
 

@@ -46,6 +46,62 @@ def _distribution_table(title: str, values: Mapping[str, Any]) -> str:
     )
 
 
+def _inconclusive_note(
+    evidence: Mapping[str, Any],
+    comparison: Mapping[str, Any],
+) -> str:
+    """Explain inconclusive records, and name the tokens responsible."""
+
+    if not evidence.get("inconclusive"):
+        return ""
+
+    collisions = comparison.get("replacement_collisions")
+    limit = comparison.get("replacement_max_length")
+
+    detail = ""
+    if isinstance(collisions, Mapping):
+        examples = collisions.get("examples")
+        if isinstance(examples, Mapping) and examples:
+            rows = "".join(
+                "<tr>"
+                f"<td><code>{escape(str(prefix))}</code></td>"
+                f"<td>{escape(', '.join(str(value) for value in replacements))}</td>"
+                "</tr>"
+                for prefix, replacements in examples.items()
+                if isinstance(replacements, Sequence)
+                and not isinstance(replacements, (str, bytes))
+            )
+            truncated = (
+                f"<p class=\"muted\">Showing {len(examples)} of "
+                f"{collisions.get('count')} colliding tokens.</p>"
+                if collisions.get("truncated")
+                else ""
+            )
+            detail = (
+                "<table><thead><tr><th>Truncated to</th>"
+                "<th>Produced by these replacements</th></tr></thead>"
+                f"<tbody>{rows}</tbody></table>{truncated}"
+            )
+
+    return (
+        '<div class="status-warning" '
+        'style="padding:10px 16px;border:1px solid var(--warning);'
+        'border-radius:4px;margin:16px 0;">'
+        f"<p><strong>{evidence['inconclusive']} record(s) could not be "
+        "confirmed as passes.</strong> Their output matched what was expected, "
+        f"but two or more replacement tokens become identical once truncated "
+        f"to {escape(_text(limit))} characters. Where that happens, a record "
+        "in which the wrong rule fired is indistinguishable from one in which "
+        "the right rule fired, so a pass cannot be established.</p>"
+        "<p>This is a limit of the comparison, not an observed product "
+        "failure. Give the affected rules replacements that differ within the "
+        "first "
+        f"{escape(_text(limit))} characters and re-run to resolve it.</p>"
+        f"{detail}"
+        "</div>"
+    )
+
+
 def aggregate_evidence(
     manifest: Mapping[str, Any],
     generation: Mapping[str, Any],
@@ -62,7 +118,7 @@ def aggregate_evidence(
     failures: list[Mapping[str, Any]] = []
 
     for row in comparison_rows:
-        if row.get("status") != "PASS":
+        if row.get("status") not in ("PASS", "INCONCLUSIVE"):
             failures.append(row)
         latency = row.get("latency_ms")
         if isinstance(latency, (int, float)):
@@ -85,10 +141,17 @@ def aggregate_evidence(
 
     total = len(comparison_rows)
     passed = outcomes["PASS"]
+    # An inconclusive record is neither a pass nor a product failure: the
+    # output matched, but truncation made the comparison unable to tell which
+    # rule produced it. Counting it as failed would blame the product for a
+    # limit of the comparison; counting it as passed would certify what was
+    # never established.
+    inconclusive = outcomes["INCONCLUSIVE"]
     return {
         "total": total,
         "passed": passed,
-        "failed": total - passed,
+        "inconclusive": inconclusive,
+        "failed": total - passed - inconclusive,
         "pass_rate": passed / total * 100 if total else 0.0,
         "outcomes": outcomes,
         "kinds": kinds,
@@ -225,10 +288,14 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
     # is reported as INCONCLUSIVE rather than as a pass.
     if evidence["total"] == 0:
         overall = "INCONCLUSIVE"
-    elif evidence["failed"] == 0:
-        overall = "PASS"
-    else:
+    elif evidence["failed"] > 0:
         overall = "FAIL"
+    elif evidence["inconclusive"] > 0:
+        # Zero failures, but not every record could be confirmed. Reporting
+        # PASS here would overstate what the evidence supports.
+        overall = "INCONCLUSIVE"
+    else:
+        overall = "PASS"
 
     pass_rate = float(evidence["pass_rate"])
     # Never let a rounded rate read as 100% while failures exist, and never
@@ -238,6 +305,9 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
         pass_rate_display = "&lt;100.00%"
     if evidence["total"] == 0:
         pass_rate_class = "status-fail"
+    elif evidence["inconclusive"] > 0:
+        # Green is reserved for a run where every record was confirmed.
+        pass_rate_class = "status-warning"
     elif evidence["failed"] == 0:
         pass_rate_class = "status-pass"
     elif pass_rate >= 95.0:
@@ -271,8 +341,9 @@ pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); pa
 <h2>Run identity</h2>
 {_table((("Run ID", manifest.get("run_id")), ("Run type", manifest.get("run_type")), ("Workload", workload_name), ("Configuration snapshot", configuration.get("snapshot") if isinstance(configuration, Mapping) else None), ("Created at", manifest.get("created_at")), ("Updated at", manifest.get("updated_at")), ("Deployment target", policy.get("target")), ("Replacement maximum length", comparison.get("replacement_max_length"))))}
 <h2>Validation outcome</h2>
-<div class="grid"><div class="metric"><strong>{evidence['total']}</strong>Evaluated</div><div class="metric metric-passed"><strong>{evidence['passed']}</strong>Passed</div><div class="metric metric-failed"><strong>{evidence['failed']}</strong>Failed</div><div class="metric {pass_rate_class}"><strong>{pass_rate_display}</strong>Pass rate</div></div>
+<div class="grid"><div class="metric"><strong>{evidence['total']}</strong>Evaluated</div><div class="metric metric-passed"><strong>{evidence['passed']}</strong>Passed</div><div class="metric metric-failed"><strong>{evidence['failed']}</strong>Failed</div>{f'<div class="metric status-warning"><strong>{evidence["inconclusive"]}</strong>Inconclusive</div>' if evidence['inconclusive'] else ''}<div class="metric {pass_rate_class}"><strong>{pass_rate_display}</strong>Pass rate</div></div>
 {'<p class="status-warning" style="padding:10px;border:1px solid var(--warning);border-radius:4px;">No records were evaluated. This report does not establish that the product was validated.</p>' if evidence['total'] == 0 else ''}
+{_inconclusive_note(evidence, comparison)}
 {_distribution_table("Outcome breakdown", evidence["outcomes"])}
 {_distribution_table("Record kinds", evidence["kinds"])}
 <h2>Workload composition</h2>

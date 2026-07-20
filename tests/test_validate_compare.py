@@ -300,6 +300,156 @@ class ValidateCompareTests(unittest.TestCase):
             manifest["stages"]["comparison"]["replacement_max_length"], 15
         )
 
+    def _colliding_replacement_run(self) -> Path:
+        """Two rules whose replacements are identical once truncated to 15.
+
+        Both collapse to "[FINANCIAL:CRED", so an output produced by the wrong
+        rule is byte-identical to one produced by the right rule.
+        """
+
+        input_rows = [
+            {"record_id": "record-1", "kind": "dirty", "message": "Card 4111"},
+            {"record_id": "record-2", "kind": "dirty", "message": "Route 0210"},
+        ]
+        expected_rows = [
+            {
+                "record_id": "record-1",
+                "kind": "dirty",
+                "expected_message": "Card [FINANCIAL:CREDIT_CARD_NUMBER]",
+                "expected_match_count": 1,
+                "expected_matches": [
+                    {
+                        "category_id": "financial",
+                        "case_id": "credit_card_number",
+                        "variant": "4111",
+                        "replacement": "[FINANCIAL:CREDIT_CARD_NUMBER]",
+                    }
+                ],
+            },
+            {
+                "record_id": "record-2",
+                "kind": "dirty",
+                "expected_message": "Route [FINANCIAL:CREDIT_ROUTING]",
+                "expected_match_count": 1,
+                "expected_matches": [
+                    {
+                        "category_id": "financial",
+                        "case_id": "credit_routing",
+                        "variant": "0210",
+                        "replacement": "[FINANCIAL:CREDIT_ROUTING]",
+                    }
+                ],
+            },
+        ]
+        return self.create_run(
+            [
+                {
+                    "request_index": 1,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "Card [FINANCIAL:CRED"},
+                },
+                {
+                    "request_index": 2,
+                    "http_status": 200,
+                    "latency_ms": 1.0,
+                    "success": True,
+                    "response": {"message": "Route [FINANCIAL:CRED"},
+                },
+            ],
+            input_rows=input_rows,
+            expected_rows=expected_rows,
+        )
+
+    def test_colliding_truncated_replacements_are_not_reported_as_passes(
+        self,
+    ) -> None:
+        run_directory = self._colliding_replacement_run()
+
+        compare_run(run_directory, replacement_max_length=15)
+        rows = self.read_comparison(run_directory)
+
+        # Byte-equal to expected, so the old comparison called these passes.
+        # They cannot be: nothing in the output identifies which rule fired.
+        self.assertEqual([row["status"] for row in rows], ["INCONCLUSIVE"] * 2)
+        for row in rows:
+            self.assertIn("indistinguishable", row["error"])
+
+        stage = json.loads((run_directory / "manifest.json").read_text())[
+            "stages"
+        ]["comparison"]
+        self.assertEqual(stage["records_passed"], 0)
+        self.assertEqual(stage["records_inconclusive"], 2)
+        self.assertEqual(stage["content_mismatches"], 0)
+        self.assertEqual(stage["replacement_collisions"]["count"], 1)
+        self.assertEqual(
+            stage["replacement_collisions"]["examples"]["[FINANCIAL:CRED"],
+            ["[FINANCIAL:CREDIT_CARD_NUMBER]", "[FINANCIAL:CREDIT_ROUTING]"],
+        )
+
+    def test_colliding_replacements_do_not_downgrade_a_real_mismatch(self) -> None:
+        """A mismatch stays a mismatch.
+
+        Truncation can only make two messages look more alike, never less, so
+        an inequality is still genuine evidence of a product failure.
+        """
+
+        run_directory = self._colliding_replacement_run()
+        output_path = run_directory / "generated/output.jsonl"
+        rows = [json.loads(line) for line in output_path.read_text().splitlines()]
+        rows[0]["response"]["message"] = "Card 4111"
+        output_path.write_text(
+            "".join(f"{json.dumps(row)}\n" for row in rows), encoding="utf-8"
+        )
+
+        compare_run(run_directory, replacement_max_length=15)
+        statuses = [row["status"] for row in self.read_comparison(run_directory)]
+        self.assertEqual(statuses, ["CONTENT_MISMATCH", "INCONCLUSIVE"])
+
+    def test_no_collision_when_replacements_differ_within_the_limit(self) -> None:
+        run_directory = self._colliding_replacement_run()
+        expected_path = run_directory / "generated/expected.jsonl"
+        rows = [json.loads(line) for line in expected_path.read_text().splitlines()]
+        rows[1]["expected_message"] = "Route [FINANCIAL:ROUTING_NUMBER]"
+        rows[1]["expected_matches"][0]["replacement"] = "[FINANCIAL:ROUTING_NUMBER]"
+        expected_path.write_text(
+            "".join(f"{json.dumps(row)}\n" for row in rows), encoding="utf-8"
+        )
+        output_path = run_directory / "generated/output.jsonl"
+        output_rows = [
+            json.loads(line) for line in output_path.read_text().splitlines()
+        ]
+        output_rows[1]["response"]["message"] = "Route [FINANCIAL:ROUT"
+        output_path.write_text(
+            "".join(f"{json.dumps(row)}\n" for row in output_rows), encoding="utf-8"
+        )
+
+        compare_run(run_directory, replacement_max_length=15)
+        statuses = [row["status"] for row in self.read_comparison(run_directory)]
+        self.assertEqual(statuses, ["PASS", "PASS"])
+        stage = json.loads((run_directory / "manifest.json").read_text())[
+            "stages"
+        ]["comparison"]
+        self.assertNotIn("replacement_collisions", stage)
+        self.assertEqual(stage["records_inconclusive"], 0)
+
+    def test_collisions_are_ignored_without_a_replacement_limit(self) -> None:
+        """Without truncation the tokens are distinct, so nothing is ambiguous."""
+
+        run_directory = self._colliding_replacement_run()
+        output_path = run_directory / "generated/output.jsonl"
+        rows = [json.loads(line) for line in output_path.read_text().splitlines()]
+        rows[0]["response"]["message"] = "Card [FINANCIAL:CREDIT_CARD_NUMBER]"
+        rows[1]["response"]["message"] = "Route [FINANCIAL:CREDIT_ROUTING]"
+        output_path.write_text(
+            "".join(f"{json.dumps(row)}\n" for row in rows), encoding="utf-8"
+        )
+
+        compare_run(run_directory)
+        statuses = [row["status"] for row in self.read_comparison(run_directory)]
+        self.assertEqual(statuses, ["PASS", "PASS"])
+
     def test_short_replacement_is_unchanged_by_maximum_length(self) -> None:
         input_rows = [
             {

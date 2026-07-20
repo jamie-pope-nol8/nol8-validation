@@ -999,6 +999,59 @@ def _normalize_expected_replacements(
     return normalized
 
 
+def _replacement_collisions(
+    expected_rows: list[dict[str, Any]],
+    replacement_max_length: int | None,
+) -> dict[str, list[str]]:
+    """Find replacements that become indistinguishable once truncated.
+
+    Truncating expected replacements to the runtime's limit is what lets a
+    comparison succeed against a product that truncates (KB-001). But if two
+    distinct replacements share a prefix within that limit, truncation maps
+    them onto the same token - and a record where the wrong rule fired then
+    compares equal to one where the right rule fired.
+
+    That is a pass the comparison cannot actually justify, so the affected
+    records are reported as INCONCLUSIVE rather than PASS.
+    """
+
+    if replacement_max_length is None:
+        return {}
+
+    by_prefix: dict[str, set[str]] = {}
+    for row in expected_rows:
+        matches = row.get("expected_matches")
+        if not isinstance(matches, list):
+            continue
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            replacement = match.get("replacement")
+            if not isinstance(replacement, str) or not replacement:
+                continue
+            by_prefix.setdefault(replacement[:replacement_max_length], set()).add(
+                replacement
+            )
+
+    return {
+        prefix: sorted(replacements)
+        for prefix, replacements in sorted(by_prefix.items())
+        if len(replacements) > 1
+    }
+
+
+def _row_has_ambiguous_replacement(
+    expected_matches: Any,
+    ambiguous_replacements: set[str],
+) -> bool:
+    if not ambiguous_replacements or not isinstance(expected_matches, list):
+        return False
+    return any(
+        isinstance(match, dict) and match.get("replacement") in ambiguous_replacements
+        for match in expected_matches
+    )
+
+
 def compare_run(
     run_directory: Path,
     *,
@@ -1116,11 +1169,19 @@ def compare_run(
                 "alignment", "Input and expected record_id sets must match."
             )
 
+        collisions = _replacement_collisions(expected_rows, replacement_max_length)
+        ambiguous_replacements = {
+            replacement
+            for replacements in collisions.values()
+            for replacement in replacements
+        }
+
         comparison_rows: list[dict[str, Any]] = []
         status_counts = {
             "PASS": 0,
             "CONTENT_MISMATCH": 0,
             "EXECUTION_FAILURE": 0,
+            "INCONCLUSIVE": 0,
         }
         for request_index, output_row in enumerate(output_rows, start=1):
             input_row = input_rows[request_index - 1]
@@ -1149,6 +1210,19 @@ def compare_run(
             elif actual_message != expected_message:
                 status = "CONTENT_MISMATCH"
                 error = "Processed message did not match expected output."
+            elif _row_has_ambiguous_replacement(
+                expected_matches, ambiguous_replacements
+            ):
+                # Only a would-be PASS is downgraded. Truncation can only make
+                # two messages look more alike, never less, so a mismatch is
+                # still a genuine mismatch and is left alone.
+                status = "INCONCLUSIVE"
+                error = (
+                    "Output matched, but at least one expected replacement is "
+                    f"indistinguishable from another once truncated to "
+                    f"{replacement_max_length} characters. This record cannot "
+                    "be confirmed as a pass."
+                )
             else:
                 status = "PASS"
                 error = None
@@ -1187,8 +1261,18 @@ def compare_run(
                 "records_passed": status_counts["PASS"],
                 "content_mismatches": status_counts["CONTENT_MISMATCH"],
                 "execution_failures": status_counts["EXECUTION_FAILURE"],
+                "records_inconclusive": status_counts["INCONCLUSIVE"],
             }
         )
+        if collisions:
+            # Truncated to keep the manifest readable; the count is what tells
+            # an operator whether the sample is the whole story.
+            examples = dict(list(collisions.items())[:20])
+            comparison_stage["replacement_collisions"] = {
+                "count": len(collisions),
+                "examples": examples,
+                "truncated": len(collisions) > len(examples),
+            }
         manifest["status"] = "comparison_completed"
         manifest["updated_at"] = completed_at
         write_manifest_atomic(manifest_path, manifest)
@@ -1893,6 +1977,8 @@ def main(argv: list[str] | None = None) -> int:
             comparison_stage["content_mismatches"]
             + comparison_stage["execution_failures"]
         )
+        inconclusive = comparison_stage.get("records_inconclusive", 0)
+        collisions = comparison_stage.get("replacement_collisions")
         comparison_latencies = [
             float(row["latency_ms"])
             for row in comparison_rows
@@ -1911,8 +1997,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Records evaluated:  {records_total}")
         print(f"Records passed:     {comparison_stage['records_passed']}")
         print(f"Records failed:     {total_failures}")
+        if inconclusive:
+            print(f"Inconclusive:       {inconclusive}")
         print(f"Pass rate:          {pass_rate:.3f}%")
         print()
+        if collisions:
+            print(
+                f"WARNING: {collisions['count']} replacement token(s) become "
+                f"indistinguishable when truncated to "
+                f"{comparison_stage.get('replacement_max_length')} characters."
+            )
+            print(
+                f"{inconclusive} record(s) matched but cannot be confirmed as "
+                "passes, and are reported as INCONCLUSIVE."
+            )
+            print("Use distinct replacement prefixes to resolve this.")
+            print()
         print("Record breakdown:")
         print(f"- Clean records: {clean_records}")
         print(f"- Dirty records: {dirty_records}")
@@ -1935,6 +2035,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"- EXECUTION_FAILURE: {comparison_stage['execution_failures']}"
         )
+        if inconclusive:
+            print(f"- INCONCLUSIVE: {inconclusive}")
         print()
         print("Latency:")
         print(f"- Average latency: {average_comparison_latency:.3f} ms")
