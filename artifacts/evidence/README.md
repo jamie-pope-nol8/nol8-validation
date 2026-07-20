@@ -11,10 +11,10 @@ Everything here is tracked deliberately. Do not add whole run directories.
 ## tenant-restore-policy.nol
 
 The 5,000 rule policy currently deployed on the `tenant001-v1demo` Themis
-tenant, from the authoritative qualification run `20260720T193444152733Z`.
+tenant, from the authoritative qualification run `20260720T221534714262Z`.
 
 ```
-SHA256  c3b763aa38b33e270557a7ec2921978bfc4765ba3b64e1f1adc5b5ffc8b72ca2
+SHA256  27fe47dbcdffd8fc4e8a51f81b41673735161e72587f753c7c81f636ec1f854e
 ```
 
 **This is the only copy.** Themis provides no way to read back the deployed
@@ -34,9 +34,14 @@ ISSUE-003, and its replacement tokens remain distinct after the runtime's
 Both properties are now enforced at generation time - a catalog lacking either
 is refused rather than emitted.
 
-> Superseded `20260719T161514709224Z`, whose catalog contained 31 overlapping
-> literal pairs and three `[BUSINESS_TERMS:*]` tokens that collapsed under
-> truncation. Kept in history only; do not deploy it.
+> Superseded `20260720T193444152733Z` (SHA `c3b763aa...`), the prior
+> authoritative policy. It was generated under the pre-FW-7 generator; after
+> FW-7 canonicalised weighted-selection order, seed 42 produces this catalog
+> instead. The old policy remains valid evidence but is no longer what
+> `validate generate ... seed 42` yields. Earlier still,
+> `20260719T161514709224Z` contained 31 overlapping literal pairs and three
+> `[BUSINESS_TERMS:*]` tokens that collapsed under truncation. Kept in history
+> only; do not deploy either.
 
 ## issue-003-failure-sample.jsonl
 
@@ -51,29 +56,33 @@ corroborating evidence rather than the primary proof.
 
 ## qualification-passing-report.html
 
-The passing report from run `20260720T193444152733Z`:
+The passing report from run `20260720T221534714262Z`:
 
 ```
 5,000 rules / 10,000 records / customer-record-csv / seed 42
 10,000 PASS · 0 CONTENT_MISMATCH · 0 EXECUTION_FAILURE · 0 INCONCLUSIVE
-p50 12.618 ms · p95 14.383 ms · p99 17.032 ms
+p50 12.643 ms · p95 14.358 ms · p99 16.814 ms
 ```
 
 Retained as the reference for what a clean qualification looks like.
 
-This supersedes the report from `20260719T230452981053Z`. That run also showed
-10,000 PASS, but it predated collision detection and its catalog contained
-three `[BUSINESS_TERMS:*]` tokens that became identical under truncation -
-covering 4,755 transformations that could not, strictly, be confirmed. Under
-current logic those records would be reported INCONCLUSIVE rather than PASS.
+This supersedes the report from `20260720T193444152733Z`, the prior
+authoritative run, which was equally airtight (10,000 PASS, 0 inconclusive) but
+generated before FW-7 canonicalised weighted-selection order. It in turn
+superseded `20260719T230452981053Z`, which predated collision detection and had
+three `[BUSINESS_TERMS:*]` tokens that became identical under truncation across
+4,755 transformations - records that under current logic would be INCONCLUSIVE.
 
 ---
 
 ## Reproducing rather than retaining
 
-Any run can be regenerated deterministically from its configuration and seed.
-Verified: two generations from seed 42 produced byte-identical policy, input,
-and expected artifacts. Prefer regenerating over keeping artifacts:
+Any run can be regenerated deterministically from its configuration and seed,
+and - since FW-7 - independently of YAML key order. Verified: two generations
+from seed 42 produce byte-identical policy, input, and expected artifacts. This
+policy was generated under the current (post-FW-7) generator, so it regenerates
+from seed 42; the superseded policies were not and do not. Prefer regenerating
+over keeping artifacts:
 
 ```bash
 validate generate --config config/workloads/customer-record-csv.yaml \

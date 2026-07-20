@@ -333,14 +333,16 @@ specific first-record case set, and `2000-01-01` appearing as a catalog DOB
 literal) were generalized to assert their real invariants - the latter now
 exercises the metadata/policy separation mechanism by forcing the collision.
 
-**Reproducibility consequence (deliberate, see continue-conversation.md).** The
-canonical sort changes what seed 42 produces. The deployed 5,000-rule policy
-(`artifacts/evidence/tenant-restore-policy.nol`) and the authoritative
-qualification `20260720T193444152733Z` were generated under the pre-FW-7
-generator and no longer regenerate byte-identically from seed 42. They remain
-valid frozen evidence. Restoring "reproducible from the seed" for the deployed
-policy needs a fresh qualification run and a re-deploy to the tenant - a
-separate, explicit step, not done as part of this fix.
+**Reproducibility consequence (deliberate) - resolved by re-qualifying.** The
+canonical sort changes what seed 42 produces, which briefly left the deployed
+policy and the then-authoritative qualification `20260720T193444152733Z`
+unreproducible from seed 42. Resolved the same session: a fresh 5,000/10,000
+seed-42 bundle was generated under the current generator
+(`overlapping_match_documents: 0`), deployed to Themis, and verified airtight
+(10,000 PASS, 0 inconclusive) as the new authoritative run
+`20260720T221534714262Z` (policy SHA `27fe47db...`). Evidence in
+`artifacts/evidence/` is promoted; the prior policy `c3b763aa...` is superseded
+history. The deployed policy again regenerates from seed 42.
 
 ## FW-8 - Policy tests polluted the real deployment ledger (FIXED)
 

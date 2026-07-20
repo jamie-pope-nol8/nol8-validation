@@ -5,25 +5,25 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-> **Handoff at 2026-07-20 (third handoff).** Clean tree (latest commit
-> `53ea077`, or this doc if later), 228 tests passing. **FW-6 (report
-> usability) and FW-7 (YAML key-order determinism) are both done and committed
-> this session.** Endpoint was last known healthy with the 5,000-rule policy
-> deployed. Nothing is mid-edit.
+> **Handoff at 2026-07-20 (third handoff).** Clean tree (latest commit this
+> doc, or the newest re-qualification commit if later), 228 tests passing.
+> **FW-6 (report usability) and FW-7 (YAML key-order determinism) are both done
+> and committed this session, and the tenant was re-qualified under the
+> post-FW-7 generator.** Endpoint healthy; the new 5,000-rule policy is deployed
+> and verified. Nothing is mid-edit.
 >
-> **Read this first - a deliberate reproducibility change landed.** The FW-7 fix
-> canonicalises selection order, which *changes what seed 42 produces*. The
-> deployed 5,000-rule policy and the authoritative qualification
-> `20260720T193444152733Z` were generated under the pre-FW-7 generator and **no
-> longer regenerate byte-identically from seed 42**. They are still valid frozen
-> evidence. Restoring "reproducible from the seed" for the deployed policy needs
-> a fresh qualification run and a re-deploy to the tenant - a separate, explicit
-> step, NOT yet done. See "Reproducibility after FW-7" below.
+> **The FW-7 reproducibility gap is now CLOSED.** FW-7 canonicalised selection
+> order, changing what seed 42 produces. Rather than leave the deployed policy
+> unreproducible, a fresh qualification `20260720T221534714262Z` was generated,
+> deployed to Themis, and verified airtight (10,000 PASS, 0 inconclusive). The
+> deployed policy again regenerates from seed 42. Evidence in
+> `artifacts/evidence/` is promoted to the new run; the two prior qualifications
+> are superseded history. See "Clean qualification" and "Reproducibility after
+> FW-7" below.
 >
-> **Next work items:** (1) Send ISSUE-003 to engineering - drafts ready. (2)
-> Decide whether to re-qualify + re-deploy to restore reproducibility (needs the
-> tenant). (3) Continue the review: Tier 2 (security) and Tier 5 (structure and
-> tests) are NOT STARTED.
+> **Next work items:** (1) Send ISSUE-003 to engineering - drafts ready, still
+> the one that matters to the product. (2) Continue the review: Tier 2
+> (security) and Tier 5 (structure and tests) are NOT STARTED.
 
 This file is project *state*: where things stand and what to do next. Three
 companions carry the rest, and they are the ones to reach for first:
@@ -228,7 +228,7 @@ containers, no Themis processes. Pure client box, holds our checkout.
 deploys via the API are fine and are the recovery path; service restarts and
 system changes are not ours to make.
 
-## Clean qualification - 20260720T193444152733Z (AUTHORITATIVE)
+## Clean qualification - 20260720T221534714262Z (AUTHORITATIVE)
 
 ```
 5,000 rules / 10,000 records / customer-record-csv / seed 42
@@ -237,49 +237,49 @@ overlapping_match_documents: 0    intended_clean_with_literals: 0
 PASS: 10,000        CONTENT_MISMATCH: 0
 EXECUTION_FAILURE: 0    INCONCLUSIVE: 0
 Pre-flight: healthy    Pass rate: 100.000%
-Latency p50/p95/p99: 12.618 / 14.383 / 17.032 ms
-policy SHA256: c3b763aa...
+Latency p50/p95/p99: 12.643 / 14.358 / 16.814 ms
+policy SHA256: 27fe47db...
 ```
 
-This is the **airtight** qualification: 0 inconclusive, verified against the
-manifest and by an independent recount of `comparison.jsonl`, report banner
-PASS. Its policy and report are promoted into `artifacts/evidence/`, and the
-policy is the one deployed on the tenant.
+This is the **airtight** qualification: 0 inconclusive, 0 replacement
+collisions, report banner PASS. Generated under the **current (post-FW-7)**
+generator, so it regenerates byte-identically from seed 42. Its policy and
+report are promoted into `artifacts/evidence/`, and the policy is the one
+deployed on the tenant (deployed 2026-07-20 as `cmd-479`, apollo confirmed
+`loaded 5000 rule(s) ... REPLACE`). 7,504 dirty / 2,496 clean records.
 
-It remains valid, frozen evidence. **But note it was generated under the
-pre-FW-7 generator - see "Reproducibility after FW-7" immediately below.**
-
-## Reproducibility after FW-7 - IMPORTANT, new this session
+## Reproducibility after FW-7 - resolved this session
 
 FW-7 canonicalised the order in which weighted selections are drawn (previously
-they depended on YAML key order). This **changes what seed 42 produces**.
-Consequences:
+they depended on YAML key order), which **changed what seed 42 produces**. That
+briefly left the deployed policy and the then-authoritative qualification
+(`20260720T193444152733Z`) unreproducible from seed 42. **Resolved by
+re-qualifying:** generated a fresh 5,000/10,000 seed-42 bundle under the current
+generator (`overlapping_match_documents: 0` verified), deployed it to Themis,
+ran/compared/reported to 10,000 PASS / 0 inconclusive, and promoted it as the
+new authoritative run `20260720T221534714262Z`.
 
-- The authoritative qualification `20260720T193444152733Z` and the deployed
-  5,000-rule policy `artifacts/evidence/tenant-restore-policy.nol` **no longer
-  regenerate byte-identically from seed 42.** They are still valid as frozen
-  evidence and the deployed policy is unchanged on the tenant.
-- Fresh generation with the same config + seed is once again fully deterministic
-  and now also independent of key order - it just produces a *different*
-  (equally valid) catalog than the frozen one.
-- To restore "the deployed policy is reproducible from its seed", **re-run the
-  qualification under the current generator and re-deploy that policy to the
-  tenant.** This needs endpoint access and is a deliberate outward-facing step -
-  get explicit go-ahead before touching the tenant. It was intentionally NOT
-  done as part of the FW-7 code change.
+State now:
 
-If you re-qualify: regenerate at 5,000/10,000, confirm
-`overlapping_match_documents: 0`, run/compare/report to a 100% PASS with 0
-inconclusive, then promote the new policy+report into `artifacts/evidence/` and
-deploy. Update this section and the qualification block with the new run ID and
-SHA.
+- The deployed policy again **regenerates from seed 42** under the current
+  generator. Reproducible-from-seed is restored.
+- Determinism is guaranteed and tested
+  (`tests/test_generation_determinism.py`): same config + seed -> identical
+  output, now regardless of key order.
+- The prior authoritative policy `c3b763aa...` and its run are superseded but
+  kept as valid frozen evidence in history.
 
-Determinism itself is still guaranteed and tested
-(`tests/test_generation_determinism.py`): same config + seed -> identical
-output, now regardless of key order.
+If you ever re-qualify again: regenerate at 5,000/10,000, confirm
+`overlapping_match_documents: 0`, run/compare/report to 100% PASS with 0
+inconclusive, promote the new policy+report into `artifacts/evidence/`, deploy,
+and update this section, the qualification block, and the evidence README with
+the new run ID and SHA.
 
-Supersedes two earlier runs, kept only as history:
+Supersedes three earlier runs, kept only as history:
 
+- `20260720T193444152733Z` - the prior authoritative run. Equally airtight
+  (10,000 PASS, 0 inconclusive), but generated under the pre-FW-7 generator, so
+  it no longer matches what seed 42 yields. Policy SHA `c3b763aa...`.
 - `20260719T230452981053Z` - also 10,000 PASS, but predated collision detection
   and had three `[BUSINESS_TERMS:*]` tokens collapsing under truncation across
   4,755 transformations. Under current logic those would be INCONCLUSIVE. This
@@ -287,7 +287,7 @@ Supersedes two earlier runs, kept only as history:
 - `20260719T161514709224Z` - the original 272-failure run whose catalog had 31
   overlapping pairs; the source of `issue-003-failure-sample.jsonl`.
 
-Together they **prove ISSUE-003 was the sole cause of the original 272
+The last two together **prove ISSUE-003 was the sole cause of the original 272
 failures**, and that it is not a marginal edge case.
 
 ## ISSUE-003 - OPEN, handover drafted but NOT SENT
@@ -531,21 +531,17 @@ Design constraints:
    Claude craft the message from these docs - written to be self-contained for
    exactly that reason. This is the one that matters to the product.
 
-2. **Decide on re-qualification.** FW-7 means the deployed policy no longer
-   reproduces from seed 42 (see "Reproducibility after FW-7"). Either re-run the
-   qualification under the current generator and re-deploy to the tenant to
-   restore reproducibility, or explicitly accept the frozen artifacts as-is.
-   Needs the tenant - get go-ahead before deploying.
-
-3. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
+2. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
    tests) are NOT STARTED; re-read `docs/CODE_REVIEW_PLAN.md` against current
    code first, since FW-4/FW-5/FW-6/FW-8 have already moved several items.
 
 Done since last update:
 - **FW-6** report usability (commit `4cc2185`) - grouped, compact failure
   details. See the FW-6 section.
-- **FW-7** generation independent of YAML key order (commit `53ea077`) - with
-  the deliberate reproducibility consequence documented above.
+- **FW-7** generation independent of YAML key order (commit `53ea077`).
+- **Re-qualification** of the tenant under the post-FW-7 generator - new
+  authoritative run `20260720T221534714262Z`, deployed and verified airtight,
+  evidence promoted. The FW-7 reproducibility gap is closed (see above).
 
 ---
 
@@ -571,9 +567,10 @@ Done since last update:
 
 Tracked evidence in `artifacts/evidence/` with a README explaining provenance:
 
-- `tenant-restore-policy.nol` - the deployed 5,000 rule policy. Themis cannot
-  read back what is deployed, so this is the only copy. Generated under the
-  pre-FW-7 generator; no longer reproducible byte-identically from seed 42.
+- `tenant-restore-policy.nol` - the deployed 5,000 rule policy (run
+  `20260720T221534714262Z`, SHA `27fe47db...`). Themis cannot read back what is
+  deployed, so this is the only copy. Generated under the current post-FW-7
+  generator; reproducible from seed 42.
 - `issue-003-failure-sample.jsonl` - 12 representative failures.
 - `qualification-passing-report.html` - reference for a clean result.
 
