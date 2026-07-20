@@ -1,15 +1,8 @@
 {
-  "//": "Permissions for this repo. Deny rules take precedence over allow.",
-  "//1": "Bash is allowed broadly and narrowed by the deny list below. The",
-  "//2": "earlier per-command allow list did not work in practice: almost every",
-  "//3": "real command is compound (source .venv/bin/activate && python -m ...),",
-  "//4": "or uses a pipe or heredoc, and so matched no single-command rule. The",
-  "//5": "result was constant prompting, which blocks unattended long runs.",
-  "//6": "This is a personal sandbox: .env is gitignored and the EC2 host is a",
-  "//7": "disposable test environment. Revisit if either stops being true.",
+  "//": "Personal sandbox: Bash allowed broadly, narrowed by deny. .env is gitignored; EC2 is disposable. Revisit if either stops being true. NOTE: project allow rules only take effect after the VS Code workspace-trust dialog is accepted.",
   "permissions": {
     "allow": [
-      "Bash(*)",
+      "Bash",
       "Read(//private/tmp/**)",
       "Read(//Users/jamiepope/.claude/**)",
       "Write(//private/tmp/**)"
