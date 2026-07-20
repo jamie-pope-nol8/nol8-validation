@@ -382,11 +382,15 @@ The framework treats a 503 with no processed message as `EXECUTION_FAILURE`,
 not as a pass, so an outage produces honest evidence of an outage rather than a
 green report.
 
-It does not yet pre-flight the endpoint before a run. That is worth adding and
-is the only mitigation available, but note what it has to be: since no cheap
-liveness route exists, the probe must be a real `POST /v1/process` with a
-throwaway payload. A customer's monitoring faces the same constraint - the only
-way to health-check this service is to put traffic through it.
+`validate run` pre-flights the endpoint before generating load: it sends one
+throwaway record and aborts if the engine does not process it. Since no cheap
+liveness route exists, the probe has to be a real `POST /v1/process`. A
+customer's monitoring faces the same constraint - the only way to health-check
+this service is to put traffic through it.
+
+The failure message does not claim to distinguish a paused data plane from an
+unavailable engine, because from the client they are identical. It names both
+and leads with the cheap, non-destructive fix.
 
 Recovery is a single call and needs nothing kept on hand:
 

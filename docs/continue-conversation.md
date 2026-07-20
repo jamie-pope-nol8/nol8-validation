@@ -118,7 +118,7 @@ Revisit if this stops being a personal sandbox.
 ```bash
 validate generate --config <yaml> [--rules N] [--records M]
 validate policy   --run <RUN_ID> | --file <path.nol> | --status
-validate run      --run <RUN_ID> [--limit N]
+validate run      --run <RUN_ID> [--limit N] [--skip-preflight]
 validate compare  --run <RUN_ID> [--replacement-max-length 15]
 validate report   --run <RUN_ID>
 ```
@@ -463,14 +463,9 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Pre-flight check before a run.** `validate run` should probe the endpoint
-   before generating load rather than discovering an outage one execution
-   failure at a time. Today's outage makes the case, and the probe has to be a
-   real `POST /v1/process` since no liveness route exists. Ideally it also
-   distinguishes "paused awaiting policy" so the message names the fix.
-
-3. **Re-run the qualification** to get a result with zero inconclusive records
-   now that `compare` can detect token collisions. The endpoint is live again.
+2. **Re-run the qualification** to get a result with zero inconclusive records
+   now that `compare` can detect token collisions. The endpoint is live again
+   and the 5,000-rule policy is restored (SHA256 `0902f0e1...`).
 
 5. **Tier 2 security remainder.** Both transports `source config/demo.env`,
    which is committed, so anyone who can land a change to it gets code

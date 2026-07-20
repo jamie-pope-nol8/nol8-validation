@@ -161,6 +161,11 @@ call from working**, and no signal said so - see OPS-1 to OPS-3 for why the
 tooling actively misled. A health endpoint reporting *policy-load state*, not
 just liveness, would have made it a thirty-second fix.
 
+**Mitigated our side:** `validate run` now pre-flights with one throwaway
+record and aborts with the remedy rather than generating a full run of
+failures. It cannot distinguish paused from dead - nothing client-side can - so
+it names both and leads with the cheap fix.
+
 ---
 
 # OPS - Operator tooling

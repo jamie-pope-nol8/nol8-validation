@@ -295,7 +295,7 @@ every record.
 
 ```bash
 validate run --run <RUN_ID> [--target themis] [--limit N] \
-  [--progress-interval N]
+  [--progress-interval N] [--skip-preflight]
 ```
 
 Execution is sequential at roughly 24 requests/second, so 10,000 records takes
@@ -304,6 +304,22 @@ retains everything completed so far.
 
 `--limit N` executes only the first N records. Note that `validate compare`
 currently requires a complete corpus, so a limited run cannot be compared.
+
+**Pre-flight.** Before sending the corpus, `run` puts one throwaway record
+through the endpoint and aborts if it is not processed, so an unavailable
+engine costs one request instead of a whole run of failures. The runtime
+publishes no health route, so this has to be a real request rather than a cheap
+liveness check.
+
+The most common cause of a failed pre-flight is not an outage: Apollo boots
+with its data plane paused and un-pauses only when a policy commits, so a
+restarted host sits idle until one is deployed. Deploying any policy fixes it:
+
+```bash
+validate policy --file artifacts/evidence/tenant-restore-policy.nol --target themis
+```
+
+`--skip-preflight` opts out.
 
 ### `validate compare`
 
