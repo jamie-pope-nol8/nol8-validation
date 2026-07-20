@@ -178,6 +178,19 @@ curl, no repository needed.
 
 1 to 3 share a root cause: **a policy is not a first-class object.**
 
+**TLS was investigated and downgraded.** The policy control plane presents a
+self-signed certificate (`CN=ip-172-31-40-100`) while the processing endpoint
+has a valid Amazon-issued one, so `--insecure` is required to deploy. This was
+briefly written up as a limitation and should NOT be: the sandbox is
+provisioned for one team and reachable only from inside the VPC, so the absence
+of server identity proof carries no practical risk. Recorded as an observation
+only - the question worth asking is why the two endpoints were provisioned
+differently, not whether the sandbox needs a public certificate.
+
+`load-policy.sh` still verifies by default and requires
+`THEMIS_ALLOW_INSECURE_TLS=1` (set in `config/demo.env`), so the exception stays
+visible rather than propagating silently into an environment where it matters.
+
 Item 6 was added because agent-mediated demos are the fastest-growing buyer
 interest and currently cannot be shown at all. Framed as demonstrability, not
 as criticism of the security posture.
@@ -301,17 +314,18 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **`curl -k` in `scripts/load-policy.sh`.** TLS verification is disabled on
-   the one call carrying both the bearer token and the complete ruleset.
-   Establish empirically whether it is necessary - `run-validation.sh` does not
-   use it, suggesting a certificate problem on the control plane, which would
-   be limitation 7 and should go in the doc before it is shared.
+2. **Close the `compare` normalization blind spot** (token budget item 2).
+   Highest-value remaining framework work.
 
-3. **Close the `compare` normalization blind spot** (token budget item 2).
-
-4. **Tier 2 security remainder.** Both transports `source config/demo.env`,
+3. **Tier 2 security remainder.** Both transports `source config/demo.env`,
    which is committed, so anyone who can land a change to it gets code
    execution plus the tokens sourced next.
+
+   Related, found while testing TLS: **a caller's environment variables are
+   silently overridden by the sourced config file**, because the scripts source
+   it after startup. Setting `THEMIS_ALLOW_INSECURE_TLS=0` on the command line
+   had no effect. Same root cause as the transport tests running against a
+   developer's real token.
 
 5. **Tier 4 report usability.** Failing reports are 2.6 MB of undifferentiated
    blocks with no diff, grouping, or root-cause classification.
