@@ -69,6 +69,11 @@ Long-running commands over SSH must be detached (`nohup setsid ... &`), or an
 SSH drop kills them. When polling for completion, grep a log for a completion
 marker - `pgrep -f "validate run"` matches its own command line and hangs.
 
+Progress output adapts to its destination: an in-place bar on a terminal, and
+roughly one line per ten percent with no terminal escapes when redirected. Logs
+from detached runs are therefore readable directly and do not need escape
+stripping.
+
 The EC2 environment is a **test and demo environment**, not production.
 Overwriting a policy is not an emergency.
 
@@ -258,7 +263,7 @@ dead but were not removed unilaterally).
 
 Note: `docs/product/validation-framework-overview.md` is a 0-byte placeholder.
 
-Tests: 189, all passing. Run with:
+Tests: 191, all passing. Run with:
 
 ```bash
 source .venv/bin/activate && python -m unittest discover -s tests -q
