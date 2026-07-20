@@ -34,8 +34,10 @@ reconstructing context from chat history.
 >    `docs/CODE_REVIEW_PLAN.md` (re-read against current code first; FW-4/FW-5
 >    already hardened the env-file transport).
 > 2. **Tier 5 - structure and tests.** NOT STARTED.
-> 3. **Then: demonstrations.** Once the tiers are sorted, the user wants to work
->    on **demonstrations and demonstration stories** - see "Next horizon" below.
+> 3. **Then: demo environment.** Likely a NEW repo, reusing the reviewed
+>    `preindex-benchmark-kit` (three use cases, datasets, Go harness, reports -
+>    ~80% built) and a second **agentic insurance-claims** repo that is **not on
+>    this machine yet** (clone + review first). See "Next horizon - demonstrations".
 >
 > Still open but not blocking: send ISSUE-004 to engineering (register + comms
 > are ready; the user handles the actual send).
@@ -564,32 +566,85 @@ Design:
 
 ## Next horizon - demonstrations and demonstration stories
 
-**After Tier 2 and Tier 5.** The user wants to work on demonstrations and demo
-stories next - how to show Themis to a buyer compellingly. Not started as a
-work item, but several threads already in this doc feed it; start by pulling
-them together rather than from scratch:
+**After Tier 2 and Tier 5.** The user wants to build a demo environment and demo
+stories - how to show Themis (FPGA) and Aergia (RE2) to a buyer compellingly.
+There is a big head start: an existing benchmark repo reviewed 2026-07-20 that
+is most of the narrative and tooling already built. **Likely plan: create a NEW
+repo for the demo environment and move over what we need from that kit.**
 
-- **Agent-mediated integration is the fastest-growing buyer interest** (ISSUE-006 /
-  THM-6), and currently cannot be demonstrated because the eval environment is
-  VPC-only. A reachable endpoint is the unlock. A compelling angle: Themis as a
-  **prompt-injection / data-loss filter in front of a model** - e.g. a rule like
-  `"ignore previous instructions" -> "[BLOCKED]"` plus PII redaction on the
-  model's input/output. Ties the product to the agent story buyers care about.
-- **"How do I do this with my data?"** is the question a demo audience asks. The
-  honest answer ("you don't, the oracle is ours - this proves the engine works")
-  is weak alone. The two product-capable answers to build toward are in
-  "Conceptual clarification - the oracle is ours": **invariants** ("no unredacted
-  SSN pattern appears in output", checkable with no oracle) and **synthetic
-  canaries in a live stream** (inject known values, verify they come back
-  redacted - continuous assurance).
-- **Pre-generated demo datasets** (the "Idea under discussion" section) remove the
-  dead air of generation during a live demo. Bundles of input+expected+policy in
-  t-shirt sizes; collides with THM-2 (one policy at a time).
-- **The data-path question** (OBS-2) matters here too: the intended production
-  integration mode (inline/proxy/streaming?) shapes what a realistic demo looks
-  like. Worth engineering's answer before building the integration demo.
+### Asset 1 - `preindex-benchmark-kit` (REVIEWED, reusable)
 
-Treat this section as the seed, not the plan; the plan gets built when we start.
+Path (this machine): `~/Code/nol8/preindex-benchmark-kit`. A "benchmark
+workbench" with three use cases that map exactly to the demo horizon:
+
+- **datapoint1 - Pre-Index Optimization:** govern what gets embedded before RAG
+  indexing.
+- **datapoint2 - Pre/Post-Inference Control:** govern what reaches the model and
+  what leaves it (the model-boundary / prompt-injection filter angle).
+- **datapoint3 - Agent-to-Agent Control:** govern messages/handoffs/tool-calls
+  across an agent mesh (the ISSUE-006 agent-integration story).
+
+Each pack ships synthetic datasets, reference lists (compromised accounts, bad
+IPs, denied entities, payment cards...), a Go benchmark harness, Python analysis,
+a polished data-driven HTML report, an AI-summary generator, and extensive
+sales/talking-point docs. The datapoint-1 report is excellent (branded,
+metric-driven: token reduction, prevented-from-embedding, governed share,
+"listmatch CPU vs re2").
+
+**~80% built; the one real gap is a contract mismatch.** `go/nol8_client.go`
+already has a pluggable `nol8_api` mode that POSTs to `NOL8_ENDPOINT` with a
+bearer token - the "live Nol8 validation pending" gap is exactly what our live
+endpoints now close. But:
+- Benchmark expects `{"text":...}` -> `{"action":"keep|mask|drop|route","text":...}`.
+- Themis speaks `{"message":...}` -> `{"result":{"message":...}}` (redaction only,
+  no action classification).
+- Needs a thin adapter (~30-50 lines) mapping the fields and *deriving* the
+  action (unchanged->keep, changed->mask; drop/route via policy sentinel tokens).
+  That derivation - governance decisions as policy - is where our nol8-validation
+  policy work applies directly. Check whether **Aergia (RE2)** is a closer fit;
+  the report already benchmarks "vs re2".
+
+**Terraform can be retired.** `aws_benchmark_harness` provisions one EC2 box to
+*run the benchmark* (not to stand up Nol8). We already have the live endpoints
+and the `data-streamer` EC2 with a checkout, so point `NOL8_ENDPOINT` at
+Themis/Aergia and run the harness locally or on that box - no Terraform. Dropping
+it also sheds 648 MB of cached provider binaries (the actual code/data is ~1 MB).
+
+**Honesty caveat:** current reports show a simulated `nol8sim` placeholder, not
+real measured results (the README is honest about this). A credible demo must
+replace the placeholder with real measured `nol8_api` numbers and never present
+simulated figures as real - same discipline as our validation work.
+
+**Complementary to nol8-validation:** validation proves "the engine redacts
+correctly" (correctness evidence); the kit proves "here is the value and the
+performance story" (positioning). Together: correctness -> value -> narrative.
+
+### Asset 2 - agentic (agent-to-agent) insurance-claims demo (NOT YET REVIEWED)
+
+A second repo the user built: a **multi-agent (agent-to-agent) demo for insurance
+claims**. Believed to have good work in it. **It is NOT on this MacBook Air yet** -
+must be cloned/pulled down before it can be reviewed. Do that at the start of the
+demo work, review it the same way, and see what to reuse (it likely overlaps
+datapoint3's agent-mesh story).
+
+### Conceptual threads that still feed the demo
+
+- **"How do I do this with my data?"** - the honest answer ("the oracle is ours")
+  is weak alone. Build toward **invariants** ("no unredacted SSN pattern appears
+  in output", checkable with no oracle) and **synthetic canaries in a live
+  stream**. See "Conceptual clarification - the oracle is ours".
+- **Agent-mediated integration** is the fastest-growing buyer interest (ISSUE-006)
+  and currently undemonstrable because the eval env is VPC-only; a reachable
+  endpoint is the unlock.
+- **The data-path question** (OBS-2): the intended production integration mode
+  (inline/proxy/streaming?) shapes what a realistic demo looks like - worth
+  engineering's answer before building the integration demo.
+- **Pre-generated demo datasets** (the "Idea under discussion" section) remove
+  generation dead-air during a live demo.
+
+**Suggested first spike:** wire datapoint-1 (or datapoint-2) to the live Themis
+endpoint through the adapter and produce one real report. Treat this whole
+section as the seed; the plan gets built when we start.
 
 ---
 
@@ -605,8 +660,11 @@ Treat this section as the seed, not the plan; the plan gets built when we start.
 
 2. **Tier 5 - structure and tests.** NOT STARTED. After Tier 2.
 
-3. **Then: demonstrations and demonstration stories.** See "Next horizon" above -
-   pull the existing demo threads together rather than starting cold.
+3. **Then: build the demo environment.** Likely a new repo. Start by (a) cloning
+   the **agentic insurance-claims** repo (not on this machine yet) and reviewing
+   it, and (b) reusing `~/Code/nol8/preindex-benchmark-kit` - move over what we
+   need, wire datapoint-1/2 to the live Themis/Aergia endpoints via an adapter,
+   retire its Terraform. See "Next horizon - demonstrations" for the full review.
 
 **In the background (user handles the send):** ISSUE-004 and the rest of the
 issue register are ready in `docs/issues/`, with Slack comms drafted in
