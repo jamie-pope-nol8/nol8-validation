@@ -28,3 +28,9 @@ venv/
 .vscode/
 .DS_Store
 **/.DS_Store
+
+# PDF renders of docs (yzane.markdown-pdf), generated on demand to share with
+# engineering. Regenerated when needed, so not versioned. The extension is
+# configured (in .vscode/settings.json) to write them to handoff/.
+*.pdf
+handoff/
