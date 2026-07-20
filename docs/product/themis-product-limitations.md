@@ -176,8 +176,8 @@ Until it is fixed, customers must be told: no two literals in a policy may
 produce overlapping matches. That constraint is awkward to satisfy and
 impossible to verify without tooling.
 
-Reproduce with `scripts/repro-issue-003-curl.sh`, which uses plain curl and
-needs no part of this repository.
+Reproduces with curl alone against any tenant - two rules and one record, no
+tooling required. Commands are in the ISSUE-003 write-up.
 
 ---
 

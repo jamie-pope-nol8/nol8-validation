@@ -3,14 +3,29 @@
 Drafts for sending ISSUE-003 to Themis engineering. Adjust names and links
 before sending.
 
+## IMPORTANT - what engineering has and has not seen
+
+Engineering did **not** write this validation framework, did not commission it,
+and has never seen it. They handed over the v1.0 sandbox with documentation and
+an invitation to use the system. This repository is ours.
+
+Therefore, in anything sent to them:
+
+- **Never reference a path in this repository.** `scripts/repro-issue-003-curl.sh`
+  means nothing to someone who does not have the repository, and asking them to
+  clone unfamiliar tooling to reproduce a defect in their own product is a
+  reason to deprioritise it.
+- **Inline the reproduction as literal curl commands** against their own
+  endpoints with their own token. It must be copy-pasteable into a terminal
+  with nothing installed.
+- Mention the framework only as provenance for how the defect was found at
+  scale, never as a dependency.
+
 Guidance behind the wording:
 
-- Lead with the defect, not the project that found it. Engineering has never
-  seen the validation framework and does not need to.
+- Lead with the defect, not the project that found it.
 - Three points have to land before anyone stops reading: it is **silent**, it
   **destroys data**, and it is triggered by **ordinary policy authoring**.
-- Point at the curl reproduction, not the framework. It runs with none of our
-  code present, which removes the easiest reason to dismiss it.
 - Keep the product limitations separate. Mixing "please fix this bug" with
   "these shape what we can sell" risks the defect being triaged as feedback.
 
@@ -49,9 +64,11 @@ Guidance behind the wording:
 > and rule order does not matter. Adjacent matches that do not share bytes are
 > correct.
 >
-> Reproduction is two rules and one record, plain curl, no tooling of ours
-> required: `scripts/repro-issue-003-curl.sh` (needs the policy endpoint,
-> process endpoint, and a token). Full write-up: <link to ISSUE-003>
+> Reproduces with two rules and one record, straight curl against your own
+> tenant - full commands in the thread. Note the policy load replaces the
+> active policy, so use a tenant where that is fine.
+>
+> Happy to walk through it or run it live.
 >
 > Happy to walk through it or run it live against any tenant.
 
@@ -110,29 +127,67 @@ alongside "1234-5678", where neither literal contains the other.
 
 **Reproducing it**
 
-Two rules and one record. No large workload, and nothing from our tooling:
+Two rules and one record, straight curl against your own tenant. Nothing to
+install.
+
+Note the policy load replaces the active policy, so please use a tenant where
+that is acceptable.
 
 ```bash
-./scripts/repro-issue-003-curl.sh
+POLICY_ENDPOINT="https://<host>:8444/policy"
+PROCESS_ENDPOINT="https://<tenant>/v1/process"
+TOKEN="<token>"
 ```
 
-It uses plain curl, reads the policy endpoint, process endpoint and token from
-the environment, and prints the unmodified response body. It covers the
-containment case, the partial-overlap case, and controls that should pass. Five
-of its eleven cases currently corrupt.
+Step 1 - load a policy with two rules whose matches overlap:
 
-Note that deploying a policy replaces the active one, so please point it at a
-tenant where that is acceptable.
+```bash
+printf '"ABCD" -> "[P]";\n"DEFG" -> "[Q]";\n' | curl -sS \
+  -X POST "$POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-binary @-
+```
+
+Step 2 - send one record containing `ABCDEFG`:
+
+```bash
+curl -sS -X POST "$PROCESS_ENDPOINT" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"message":"x ABCDEFG y"}'
+```
+
+Correct output is `x [P]EFG y`. Observed output is `x [P[Q] y`.
+
+Step 3 - the control. Load either rule on its own and repeat step 2:
+
+```bash
+printf '"ABCD" -> "[P]";\n' | curl -sS \
+  -X POST "$POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-binary @-
+```
+
+That returns `x [P]EFG y` correctly, which is what isolates the fault to the
+combination rather than either rule.
+
+A larger overlap destroys more. With `"ABCDEF" -> "[P]"` and
+`"DEFGHI" -> "[Q]"` against `x ABCDEFGHI y`, the output is `x [Q] y` - the `AB`
+is gone.
+
+If your endpoint presents a self-signed certificate you may need `-k`. We
+mention it only because we hit it; it is not required by the reproduction.
 
 **Scale of impact**
 
-A 10,000-record run against a 5,000-rule policy returned 272 corrupted records
-with a 100% HTTP success rate. Removing the overlapping rule pairs and
-re-running produced 10,000 passes and zero mismatches, so this accounted for
-every failure we saw.
+We built internal tooling to exercise the sandbox with generated workloads. A
+10,000-record run against a 5,000-rule policy returned 272 corrupted records
+with a 100% HTTP success rate - nothing in any response indicated a problem.
+Removing the overlapping rule pairs and re-running produced 10,000 passes and
+zero mismatches, so this accounted for every failure we saw.
 
-Full write-up, including the evidence and the narrowing steps:
-<link to ISSUE-003>
+The tooling is only how we found it at volume. Everything above reproduces
+without it.
 
 Separately, we have a short list of product observations about the policy
 lifecycle - identity, versioning, and deployment readiness. I will send those

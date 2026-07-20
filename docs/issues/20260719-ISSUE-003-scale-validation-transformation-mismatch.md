@@ -90,7 +90,46 @@ Control cases, same input:
 | both rules, replacement `[NAME]`      | `na[NAME], done`                   |
 | both rules, replacements `[FULL]`/`[PFX]` | `n[FULL], done`                |
 
-Reproduction script: `scripts/repro-issue-003.py`
+### Reproducing without any of our tooling
+
+If you are reading this outside the validation framework repository, the
+defect reproduces with curl alone against your own tenant. Nothing to install.
+
+The policy load REPLACES the active policy, so use a tenant where that is
+acceptable.
+
+```bash
+POLICY_ENDPOINT="https://<host>:8444/policy"
+PROCESS_ENDPOINT="https://<tenant>/v1/process"
+TOKEN="<token>"
+
+# 1. Load two rules whose matches overlap
+printf '"ABCD" -> "[P]";\n"DEFG" -> "[Q]";\n' | curl -sS \
+  -X POST "$POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $TOKEN" --data-binary @-
+
+# 2. Send one record containing ABCDEFG
+curl -sS -X POST "$PROCESS_ENDPOINT" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"message":"x ABCDEFG y"}'
+#    correct:  x [P]EFG y
+#    observed: x [P[Q] y
+
+# 3. Control - load either rule alone and repeat step 2
+printf '"ABCD" -> "[P]";\n' | curl -sS \
+  -X POST "$POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $TOKEN" --data-binary @-
+#    returns x [P]EFG y correctly
+```
+
+Add `-k` if the endpoint presents a self-signed certificate.
+
+### Scripted reproductions (validation framework repository only)
+
+`scripts/repro-issue-003-curl.sh` and `scripts/repro-issue-003.py` cover the
+full case matrix including controls. These belong to the validation framework
+and are not needed to reproduce the defect.
 
 ## Why it matters
 
@@ -148,10 +187,14 @@ literal. Removing only those rules (5,000 -> 4,969):
 Every affected literal has exactly one prefix rule in the catalog. Neither
 control literal has one.
 
-### 3. Only prefix containment triggers the defect
+### 3. Among containment classes, only prefix corrupts
 
-Three containment classes were tested against Themis with curl. Only the
-prefix case corrupts output.
+**Read this together with the handover summary.** Containment is not the only
+trigger - non-containment overlaps such as `"ABCD"` with `"DEFG"` also corrupt.
+This section narrows the containment case specifically; it does not establish
+that non-containment literals are safe.
+
+Three containment classes were tested against Themis with curl:
 
 | policy                                               | input                         | output                    |
 |------------------------------------------------------|-------------------------------|---------------------------|
@@ -160,11 +203,13 @@ prefix case corrupts output.
 | `"XX Elena Chen YY"`, `"Elena Chen"` (middle)        | `name: XX Elena Chen YY, done` | `name: [MID], done` correct |
 | `"Elena Chen 1327"`, `"Robert Smith 9999"` (disjoint)| `name: Elena Chen 1327, done` | `name: [NAME], done` correct |
 
-The trigger is specifically a literal that is a strict PREFIX of another
-literal. General substring containment is handled correctly.
+Within containment, only a strict PREFIX corrupts. Suffix and middle
+containment render correctly, because in those cases the two matches begin at
+different offsets and the runtime resolves them without displacing the start.
 
-This matters for the customer-facing constraint: policies may contain literals
-that overlap in the middle or at the end without risk.
+The unifying condition remains overlapping matches. A prefix literal produces a
+totally overlapping match; suffix and middle containment in these tests did not
+produce overlapping selected matches.
 
 ### 4. Replacement length is not a factor
 
@@ -508,9 +553,9 @@ The execution path is stable, but transformation correctness must reach 100% bef
 
 ### Themis engineering
 
-Investigate match start offset computation where two matches overlap.
-Reproduce with `scripts/repro-issue-003.py`, which covers both the containment
-case and the partial-overlap case.
+Investigate match start offset computation where two matches overlap. See
+"Reproducing without any of our tooling" above for copy-pasteable curl covering
+both the containment case and the partial-overlap case.
 
 The end offset is correct in every observed case; the start is displaced. Note
 that adjacent non-overlapping matches are handled correctly, so the fault is
