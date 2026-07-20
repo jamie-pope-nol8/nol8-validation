@@ -94,19 +94,26 @@ class CustomerRecordCsvTests(unittest.TestCase):
                         match["replacement"], expected_row["expected_message"]
                     )
 
-            first_record = self._csv_row(inputs[0]["message"])
-            first_matches = {
-                match["case_id"]: match["variant"]
-                for match in expected[0]["expected_matches"]
-            }
-            self.assertEqual(
-                first_record["email_address"], first_matches["email_address"]
+            # A dirty record's match variants must sit in the correctly named
+            # CSV column, not merely somewhere in the row. Which cases fire is
+            # seed-derived, so assert the invariant over whichever matches the
+            # first dirty record actually has rather than pinning case names.
+            first_dirty_input, first_dirty_expected = next(
+                (input_row, expected_row)
+                for input_row, expected_row in zip(inputs, expected)
+                if expected_row["expected_matches"]
             )
-            self.assertEqual(
-                first_record["phone_number"], first_matches["phone_number"]
-            )
-            self.assertEqual(
-                first_record["street_address"], first_matches["street_address"]
+            first_record = self._csv_row(first_dirty_input["message"])
+            asserted_columns = 0
+            for match in first_dirty_expected["expected_matches"]:
+                case_id = match["case_id"]
+                if case_id in first_record:
+                    self.assertEqual(first_record[case_id], match["variant"])
+                    asserted_columns += 1
+            self.assertGreater(
+                asserted_columns,
+                0,
+                "no match landed in a named CSV column - spot check was vacuous",
             )
 
     def test_realistic_routing_is_limited_to_csv_small(self) -> None:
@@ -187,22 +194,45 @@ class CustomerRecordCsvTests(unittest.TestCase):
         date_values = {
             rule.variant for rule in catalog if rule.pattern_id == "date_of_birth"
         }
-        self.assertIn("2000-01-01", date_values)
+        # The policy redacts date-of-birth literals, so a record's fixed
+        # metadata timestamp must not look like one. Which specific dates land
+        # in the catalog is seed-derived; assert the catalog produces DOB dates
+        # at all rather than pinning one value.
+        self.assertTrue(date_values)
 
+        fields = list(
+            workload["documents"]["scenarios"]["customer_record"]["fields"]
+        )
+
+        # Safety invariant: against the real catalog, a record's fixed metadata
+        # must never contain a policy literal, which would be an untracked
+        # match. The fixed sentinel timestamp is allowed to survive when no
+        # policy literal equals it - it is only a problem if it collides.
         record = _build_realistic_customer_record(
             "document-000001",
-            list(
-                workload["documents"]["scenarios"]["customer_record"]["fields"]
-            ),
+            fields,
             [],
             catalog_values,
             random.Random(int(workload["seed"])),
         )
-
-        self.assertNotEqual(record["generated_at"], "2000-01-01T00:00:00Z")
         self.assertFalse(
             any(value in record["generated_at"] for value in catalog_values)
         )
+
+        # Mechanism: when a policy literal DOES equal the fixed metadata
+        # timestamp, the record is moved off it rather than emitting an
+        # untracked match. Force the collision so this is exercised regardless
+        # of whether the seed-derived catalog happens to contain the sentinel.
+        colliding_values = set(catalog_values) | {"2000-01-01"}
+        separated = _build_realistic_customer_record(
+            "document-000002",
+            fields,
+            [],
+            colliding_values,
+            random.Random(int(workload["seed"])),
+        )
+        self.assertNotIn("2000-01-01", separated["generated_at"])
+        self.assertNotEqual(separated["generated_at"], "2000-01-01T00:00:00Z")
 
 
 if __name__ == "__main__":

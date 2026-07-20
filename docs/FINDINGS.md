@@ -51,7 +51,7 @@ Findings are split by who owns the fix.
 | FW-4 | Transports source a committed config file (Tier 2) | Medium | **Fixed** |
 | FW-5 | Caller environment silently overridden by config | Medium | **Fixed** |
 | FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Fixed |
-| FW-7 | Generation depends on YAML key order (T1-6) | Low | Open |
+| FW-7 | Generation depends on YAML key order (T1-6) | Low | Fixed |
 | FW-8 | Policy tests polluted the real deployment ledger | Low | **Fixed** |
 
 ### Observations - OBS
@@ -312,10 +312,35 @@ full-dump renderer. Divergence offset is computed from the live
 rows do not carry `divergence_offset`/`byte_delta` (only the curated
 `issue-003-failure-sample.jsonl` does).
 
-## FW-7 - Generation depends on YAML key order (OPEN)
+## FW-7 - Generation depends on YAML key order (FIXED)
 
-Reordering keys in a workload config changes output for a fixed seed. Weakens
-the determinism guarantee.
+Reordering keys in a workload config changed output for a fixed seed, because
+`_weighted_item` (`framework/workload/generate_workload.py`) fed
+`list(items.keys())` straight into `random.choices` - the draw walked the names
+in dict insertion order, i.e. YAML key order. Any re-serialization with sorted
+keys would have silently invalidated reproducibility.
+
+Fixed by sorting the names into a canonical order before the draw
+(`names = sorted(items.keys())`), so a catalog depends on the seed and the map
+contents alone. Single-point fix; scale generation shares `_weighted_item` by
+import, so both paths are covered.
+
+Tests in `tests/test_generation_determinism.py`: reordered-but-identical config
+now produces identical artifacts, with a non-vacuous guard that patches back the
+old insertion-order draw and proves it diverged. Two brittle tests in
+`tests/test_customer_record_csv.py` that pinned seed-42 incidental values (a
+specific first-record case set, and `2000-01-01` appearing as a catalog DOB
+literal) were generalized to assert their real invariants - the latter now
+exercises the metadata/policy separation mechanism by forcing the collision.
+
+**Reproducibility consequence (deliberate, see continue-conversation.md).** The
+canonical sort changes what seed 42 produces. The deployed 5,000-rule policy
+(`artifacts/evidence/tenant-restore-policy.nol`) and the authoritative
+qualification `20260720T193444152733Z` were generated under the pre-FW-7
+generator and no longer regenerate byte-identically from seed 42. They remain
+valid frozen evidence. Restoring "reproducible from the seed" for the deployed
+policy needs a fresh qualification run and a re-deploy to the tenant - a
+separate, explicit step, not done as part of this fix.
 
 ## FW-8 - Policy tests polluted the real deployment ledger (FIXED)
 

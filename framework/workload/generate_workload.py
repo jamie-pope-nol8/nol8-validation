@@ -222,7 +222,13 @@ def _weighted_item(
     items: Mapping[str, Mapping[str, Any]],
     random_source: random.Random,
 ) -> tuple[str, Mapping[str, Any]]:
-    names = list(items.keys())
+    # Sort the names into a canonical order before drawing (FW-7). random.choices
+    # walks names in the order given, so a bare list(items.keys()) makes the
+    # selection depend on YAML key order: two semantically identical configs
+    # that differ only in key order, or one re-serialized with sorted keys,
+    # would yield a different catalog for the same seed. Sorting makes the draw
+    # depend on the seed and the map's contents alone.
+    names = sorted(items.keys())
     weights = [int(items[name]["weight"]) for name in names]
 
     selected_name = random_source.choices(names, weights=weights, k=1)[0]

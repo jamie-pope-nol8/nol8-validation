@@ -7,13 +7,46 @@ produced different corpora while the test passed.
 """
 from __future__ import annotations
 
+import copy
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
 from framework.workload.generate_scale_artifacts import generate_scale_artifacts
+
+
+def _reorder_selection_maps(workload: dict) -> dict:
+    """A semantically identical config with weighted-map keys reversed.
+
+    Only key order changes; the contents and weights are untouched, so the
+    generated corpus must be identical once selection is order-independent.
+    """
+
+    reordered = copy.deepcopy(workload)
+
+    def reverse_keys(mapping: dict) -> dict:
+        return {key: mapping[key] for key in reversed(list(mapping.keys()))}
+
+    reordered["policy"]["families"] = reverse_keys(reordered["policy"]["families"])
+    reordered["documents"]["scenarios"] = reverse_keys(
+        reordered["documents"]["scenarios"]
+    )
+    reordered["documents"]["match_distribution"] = reverse_keys(
+        reordered["documents"]["match_distribution"]
+    )
+    return reordered
+
+
+def _insertion_order_weighted_item(items, random_source):
+    """The pre-FW-7 behaviour: draw in dict insertion order."""
+
+    names = list(items.keys())
+    weights = [int(items[name]["weight"]) for name in names]
+    selected = random_source.choices(names, weights=weights, k=1)[0]
+    return selected, items[selected]
 
 
 BASE_WORKLOAD = {
@@ -92,6 +125,44 @@ class GenerationDeterminismTests(unittest.TestCase):
             self.assertNotIn(
                 f"{year}-", text, f"wall-clock year {year} leaked into output"
             )
+
+    def test_generation_is_independent_of_yaml_key_order(self) -> None:
+        # FW-7: reordering the keys of a weighted selection map must not change
+        # the catalog. Output depends on the seed and the map contents, never on
+        # serialization order.
+        base = self.write_config(BASE_WORKLOAD, "order-base.yaml")
+        reordered = self.write_config(
+            _reorder_selection_maps(BASE_WORKLOAD), "order-reordered.yaml"
+        )
+        # The two configs are genuinely different on disk (keys reordered)...
+        self.assertNotEqual(base.read_bytes(), reordered.read_bytes())
+        # ...but semantically identical, so every artifact must match.
+        first = self.generate(base, "order-first")
+        second = self.generate(reordered, "order-second")
+        for filename, content in first.items():
+            self.assertEqual(
+                content, second[filename], f"{filename} depends on key order"
+            )
+
+    def test_key_order_would_matter_without_the_canonical_sort(self) -> None:
+        # Non-vacuous guard: prove the sort is load-bearing. With the pre-FW-7
+        # insertion-order selection restored, the same two configs diverge -
+        # so the test above is checking the fix, not a coincidence.
+        base = self.write_config(BASE_WORKLOAD, "nv-base.yaml")
+        reordered = self.write_config(
+            _reorder_selection_maps(BASE_WORKLOAD), "nv-reordered.yaml"
+        )
+        with mock.patch(
+            "framework.workload.generate_scale_artifacts._weighted_item",
+            _insertion_order_weighted_item,
+        ):
+            first = self.generate(base, "nv-first")
+            second = self.generate(reordered, "nv-second")
+        self.assertNotEqual(
+            first["input.jsonl"],
+            second["input.jsonl"],
+            "expected insertion-order selection to depend on key order",
+        )
 
     def test_differing_seeds_produce_differing_corpora(self) -> None:
         # Guards against the fix over-correcting into a constant.
