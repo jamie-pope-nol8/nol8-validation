@@ -259,8 +259,49 @@ is currently configured for the latter.
 
 ### Observed
 
-On 2026-07-20 the processing endpoint began returning HTTP 503 to every
-request:
+On 2026-07-20 the processing endpoint returned HTTP 503 to every request for
+roughly an hour. **The root cause was not a defect.** Apollo boots with its data
+plane paused and un-pauses only when a policy commits - by design, visible in
+the orchestrator source:
+
+```bash
+# plane paused via g_pending_rule_update{true} until a policy commits
+grep -q "Rules committed" "$APLOG" && committed=1
+[ "$committed" = 1 ] || echo "WARN: rules not committed (data plane may stay paused)"
+```
+
+No policy had been deployed since the last restart, so it sat paused. Posting a
+single-rule policy restored service immediately, confirmed end to end.
+
+That makes this a diagnosability finding rather than a reliability one, and a
+sharper one for it: **the system was one API call from working, and every
+available signal pointed somewhere else.**
+
+| signal | what it said | true? |
+|---|---|---|
+| Error message | `ARGUS_UPSTREAM_UNAVAILABLE ... no apollo response` | misleading - apollo was up and healthy |
+| Troubleshooting guide | "most probably Apollo encountered a severe bug"; restart services | wrong; restart had already been tried three times |
+| `systemctl` | `ares-apollo.service=active` | true but useless - active and paused are indistinguishable |
+| `nolctl doctor` | `FAIL preflight: missing hugepages/isolcpus/...` | **false positive**, see below |
+| Status string | `data plane PAUSED` | correct while broken, **still says PAUSED after recovery** |
+
+The only accurate signal was a `WARN` line in the journal - not surfaced by
+`nolctl status`, not surfaced by `nolctl doctor`, and not mentioned in the
+troubleshooting guide.
+
+Two tooling defects made it worse:
+
+1. **`nolctl doctor` reports a false `FAIL` on kernel parameters.** It expects
+   the literal strings `hugepages=4, isolcpus=0-11, nohz_full=0-11,
+   rcu_nocbs=0-11`, while the host is correctly configured as `hugepages=16,
+   isolcpus=2-13, nohz_full=2-13, rcu_nocbs=2-13`. It is string-matching one
+   topology instead of checking the parameters are present and sane, so it
+   fails on a correct machine and points the operator at GRUB and a reboot.
+2. **The service status string is set once at startup and never updated.** It
+   still read `data plane PAUSED` after the data plane was verified working.
+   An operator trusting it would restart a healthy service.
+
+The original 503 text, for the record:
 
 ```json
 {"error": {"code": "ARGUS_UPSTREAM_UNAVAILABLE",
@@ -269,13 +310,15 @@ request:
   RESPONSE_WAIT: request timed out (no apollo response in >2s)"}}
 ```
 
-The edge accepted the request, authenticated it, and routed it. The rules
-engine behind it - `apollo`, the same component named in the policy-load
-response - did not answer within the 2-second budget. The control plane
-remained responsive throughout, answering in under 10 ms.
+The edge accepted the request, authenticated it, and routed it. Apollo did not
+answer within the 2-second budget - because it was paused, not because it was
+unhealthy. The control plane remained responsive throughout, answering in under
+10 ms. Failure timing was consistent to within 3 ms across 12 probes (4.130s,
+about two 2-second timeouts plus overhead).
 
 So the product was partly alive: reachable, authenticating, routing, and
-unable to do the one thing it exists to do.
+unable to do the one thing it exists to do - while reporting every component
+as active.
 
 ### Why it matters
 
@@ -291,8 +334,8 @@ Those 404s and the 405 are served promptly and correctly *while the engine is
 down*, which is the heart of the problem: the edge is healthy and answering, so
 nothing short of real traffic distinguishes a working system from a broken one.
 
-The only way to discover that the engine is down is to send real traffic and
-have it fail. That has three consequences:
+The only way to discover that the engine is not serving is to send real traffic
+and have it fail. That has three consequences:
 
 - **Work is started against a dead backend.** A long validation run begins
   normally and produces nothing but execution failures. Nothing can be checked
@@ -301,23 +344,37 @@ have it fail. That has three consequences:
   status, there is no way to establish when the engine stopped responding or
   whether it has recovered, other than by probing it.
 - **An operator cannot distinguish causes.** A 503 could be the engine, the
-  transport, the tenant, or the credential. Only the error string separates
-  them, and only because it happens to name its internal components. That is
-  incidental detail, not a contract, and it should not be what operators rely
-  on.
+  transport, the tenant, the credential - or, as here, a healthy engine
+  awaiting a policy. Only the error string separates them, and only because it
+  happens to name its internal components. That is incidental detail, not a
+  contract, and it should not be what operators rely on.
 
 The diagnosis above was possible only because the error message exposed the
 internal call chain. A less chatty error - or a future release that redacts it,
 which would be a reasonable thing to do - would leave an operator with an
 unexplained 503 and nothing to act on.
 
+**"Paused awaiting policy" deserves its own signal.** It is a normal,
+recoverable, expected state that is currently indistinguishable from a crashed
+backend, and the documented remedy for what it looks like - restart everything -
+does not fix it and returns the system to the same state. That combination is
+what turned a one-call fix into an hour.
+
 ### What is needed
 
-A health endpoint reporting engine reachability and policy-load state,
+A health endpoint reporting engine reachability **and policy-load state**,
 unauthenticated or cheaply authenticated, so it can be polled before starting
-work and used by any monitoring the customer already runs. A distinguishable
-error taxonomy for "engine unavailable" versus "request rejected" would close
-most of the remainder.
+work and used by any monitoring the customer already runs. Had it existed here,
+it would have said "up, no policy loaded" and the fix would have been immediate.
+
+Beyond that:
+
+- An error code distinguishing "awaiting policy" from "engine unavailable".
+- A status string that reflects live state rather than startup state.
+- `nolctl doctor` to check kernel parameters are present and sane rather than
+  string-matching one expected topology.
+- The troubleshooting guide to cover this case, since it is the one an
+  evaluator hits most: a fresh or restarted host has no policy yet.
 
 ### Framework handling
 
@@ -330,6 +387,20 @@ is the only mitigation available, but note what it has to be: since no cheap
 liveness route exists, the probe must be a real `POST /v1/process` with a
 throwaway payload. A customer's monitoring faces the same constraint - the only
 way to health-check this service is to put traffic through it.
+
+Recovery is a single call and needs nothing kept on hand:
+
+```bash
+printf '%s\n' '"SSN" -> "[REDACTED]";' > /tmp/minimal.nol
+curl -sS --insecure -X POST "$THEMIS_POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $THEMIS_TOKEN" --data-binary @/tmp/minimal.nol
+```
+
+Any policy un-pauses the data plane. Restoring the specific ruleset a
+qualification ran against is a separate concern, and that is where keeping
+`artifacts/evidence/tenant-restore-policy.nol` matters - not for recovery, but
+for like-for-like comparability, since limitation 1 means a deployed policy
+cannot be read back.
 
 ### Note on topology
 

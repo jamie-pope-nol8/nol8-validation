@@ -35,8 +35,8 @@ verified at scale.
 Current status: **the framework produces trustworthy evidence.** A clean
 5,000 rule / 10,000 record qualification passes 100%.
 
-**As of 2026-07-20 the Themis processing endpoint is DOWN.** See "Runtime
-outage" below. No execution is possible until it returns.
+The 2026-07-20 outage is **RESOLVED**. Root cause and the lesson from it are
+under "Runtime outage" below - worth reading before touching the environment.
 
 ---
 
@@ -137,39 +137,95 @@ Expect 50/50 succeeded, `PASS: 50`, `CONTENT_MISMATCH: 0`, banner `PASS`.
 
 # Current State - 2026-07-20
 
-## Runtime outage - processing endpoint DOWN
+## Runtime outage 2026-07-20 - RESOLVED, and how to fix it next time
 
-Every request to `/v1/process` returns HTTP 503:
+Every request to `/v1/process` returned HTTP 503 for about an hour:
 
 ```
-ARGUS_UPSTREAM_UNAVAILABLE: backend send failed: dispatcher: iris send:
-ARGUS_UPSTREAM_TIMEOUT: iris quic: upstream error: RESPONSE_WAIT:
-request timed out (no apollo response in >2s)
+ARGUS_UPSTREAM_UNAVAILABLE ... RESPONSE_WAIT: request timed out
+(no apollo response in >2s)
 ```
 
-Reproduced with plain curl from EC2 - **not caused by our code**. The control
-plane is healthy throughout, answering in under 10 ms. The edge (`argus`) and
-transport (`iris`) are up; the rules engine (`apollo`) is not answering.
-
-Failure timing is highly consistent: 12 consecutive probes returned in
-4.130s +/- 3ms. That is close to 2 x the 2-second apollo timeout plus
-overhead - one retry, both legs timing out. One probe returned in 12ms; a
-follow-up series did not reproduce it, so treat that as a brief circuit-break
-window rather than a change of state. (An earlier revision of this file read
-that single sample as apollo being dropped entirely. It did not support that.)
-
-Nothing to fix on our side. **Re-probe before attempting any run:**
+**Root cause: apollo boots with its data plane PAUSED and un-pauses only when a
+policy commits.** No policy had been deployed since the last restart. Not a
+crash, not a bug - the documented-in-source startup behaviour:
 
 ```bash
-ssh nol8-demo 'cd /opt/nol8/nol8-validation && set -a && source .env && \
-  source config/demo.env && set +a && curl -sS --max-time 20 -o /dev/null \
-  -w "HTTP %{http_code}\n" -X POST "$THEMIS_PROCESS_ENDPOINT" \
-  -H "Authorization: Bearer $THEMIS_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"message\":\"hello\"}"'
+# /opt/ares/bin/apollo-orchestrator.sh
+# plane paused via g_pending_rule_update{true} until a policy commits
+grep -q "Rules committed" "$APLOG" && committed=1
 ```
 
-This became **limitation 7**: there is no health endpoint, so the only way to
-learn the engine is down is to send real traffic and have it fail.
+**The fix is to deploy any policy.** One rule is enough:
+
+```bash
+printf '%s\n' '"SSN" -> "[REDACTED]";' > /tmp/minimal.nol
+curl -sS --insecure -X POST "$THEMIS_POLICY_ENDPOINT" \
+  -H "Authorization: Bearer $THEMIS_TOKEN" --data-binary @/tmp/minimal.nol
+```
+
+Then restore the working ruleset:
+
+```bash
+validate policy --file artifacts/evidence/tenant-restore-policy.nol --target themis
+```
+
+Both were done; the 5,000-rule policy is live again and verified.
+
+**Do NOT restart services for this.** The troubleshooting guide says to, and
+the journal shows apollo was restarted three times (17:05, 17:20, 17:27), each
+time emitting `WARN: rules not committed (data plane may stay paused)`.
+Restarting is the loop, not the exit.
+
+### Every diagnostic signal pointed the wrong way
+
+Worth internalising, because it will happen again:
+
+| signal | said | reality |
+|---|---|---|
+| error message | "no apollo response" | apollo was up and healthy |
+| troubleshooting doc | "severe Apollo bug", restart | wrong, and restart had already failed 3x |
+| `systemctl` | `active` | true and useless - active and paused look identical |
+| `nolctl doctor` | `FAIL` on kernel params | **false positive**, see below |
+| status string | `data plane PAUSED` | correct while broken, **still says PAUSED after recovery** |
+
+Only a `WARN` line in the journal was accurate, and nothing surfaces it.
+
+Two tooling defects, both now in the limitations doc:
+
+- **`nolctl doctor` false positive.** Expects literal `hugepages=4,
+  isolcpus=0-11, nohz_full=0-11, rcu_nocbs=0-11`; the host correctly has
+  `hugepages=16, isolcpus=2-13, ...`. It string-matches one topology, so it
+  fails on a correct machine and sends you to GRUB.
+- **Status string is set once at startup**, never updated. Trusting it means
+  restarting a healthy service.
+
+### Where the services actually live
+
+`nol8-demo` (hostname `data-streamer`, 10.8.10.40) runs **none** of it - no
+containers, no Themis processes. Pure client box.
+
+| | address |
+|---|---|
+| themis host (`themis-demo`, ssh) | 10.10.1.254, runs iris + apollo + policyd |
+| data plane endpoint | 10.8.11.254, publishes port 443 only |
+| aergia control plane | 10.10.1.127 |
+
+Useful read-only commands on `themis-demo`:
+
+```bash
+nolctl status
+nolctl doctor --full
+systemctl show ares-apollo -p StatusText --value
+sudo grep -c "Rules committed" /var/lib/ares/apollo/apollo.log   # 0 = paused
+sudo journalctl -u ares-apollo -n 30 --no-pager
+```
+
+The last two are the ones that actually tell you the truth.
+
+**Treat `themis-demo` with care** - the user asked for no harm there. Policy
+deploys via the API are fine and are the recovery path; service restarts and
+system changes are not ours to make.
 
 ## Clean qualification - 20260719T230452981053Z (AUTHORITATIVE)
 
@@ -402,15 +458,14 @@ Design constraints:
    parallel Claude craft the message from these docs - the docs are written to
    be self-contained for exactly that reason.
 
-2. **Re-probe the processing endpoint.** Nothing can execute until apollo
-   returns. Command in the outage section above.
+2. **Pre-flight check before a run.** `validate run` should probe the endpoint
+   before generating load rather than discovering an outage one execution
+   failure at a time. Today's outage makes the case, and the probe has to be a
+   real `POST /v1/process` since no liveness route exists. Ideally it also
+   distinguishes "paused awaiting policy" so the message names the fix.
 
-3. **Pre-flight check before a run.** Given limitation 7, `validate run` should
-   probe the endpoint before generating load rather than discovering the outage
-   one execution failure at a time. Small, and directly motivated by today.
-
-4. **Re-run the qualification** once the endpoint is back, to get a result with
-   zero inconclusive records.
+3. **Re-run the qualification** to get a result with zero inconclusive records
+   now that `compare` can detect token collisions. The endpoint is live again.
 
 5. **Tier 2 security remainder.** Both transports `source config/demo.env`,
    which is committed, so anyone who can land a change to it gets code
