@@ -52,6 +52,7 @@ Findings are split by who owns the fix.
 | FW-5 | Caller environment silently overridden by config | Medium | **Fixed** |
 | FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Open |
 | FW-7 | Generation depends on YAML key order (T1-6) | Low | Open |
+| FW-8 | Policy tests polluted the real deployment ledger | Low | **Fixed** |
 
 ### Observations - OBS
 
@@ -292,6 +293,21 @@ classification.
 
 Reordering keys in a workload config changes output for a fixed seed. Weakens
 the determinism guarantee.
+
+## FW-8 - Policy tests polluted the real deployment ledger (FIXED)
+
+`ValidatePolicyTests` ran the CLI policy-deploy path with a mocked transport but
+did not isolate the ledger, so every suite run appended fixture deployments
+(6 rules, targets themis/aergia) to the real `artifacts/policy-deployments.jsonl`.
+On a development machine `validate policy --status` then listed those as if they
+were real operator actions - the same class of dishonesty as the report bugs,
+in the audit trail rather than the report.
+
+Found while smoke-testing permissions. No real deployment ever occurred (the dev
+machine cannot reach the VPC-internal control plane); it was purely a polluted
+local ledger. Now: `setUp` patches `_policy_ledger_path` to a temp file, matching
+the isolation the dedicated ledger test already used. Verified load-bearing - with
+the patch removed, one suite run repolluted the real file.
 
 ---
 

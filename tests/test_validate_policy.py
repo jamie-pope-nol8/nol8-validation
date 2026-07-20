@@ -24,6 +24,18 @@ class ValidatePolicyTests(unittest.TestCase):
         self.addCleanup(self.temporary_directory.cleanup)
         self.root = Path(self.temporary_directory.name)
 
+        # Isolate the deployment ledger. Without this, any test that runs the
+        # CLI policy-deploy path records into the real
+        # artifacts/policy-deployments.jsonl, so `validate policy --status`
+        # later shows fixture deployments (6 rules, target themis/aergia) as if
+        # they were real operator actions.
+        ledger_patcher = patch(
+            "framework.cli.main._policy_ledger_path",
+            return_value=self.root / "artifacts" / "policy-deployments.jsonl",
+        )
+        ledger_patcher.start()
+        self.addCleanup(ledger_patcher.stop)
+
     def create_run(
         self,
         *,
