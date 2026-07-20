@@ -5,22 +5,25 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-> **Handoff at 2026-07-20 (second handoff).** Clean tree (latest commit
-> `e216b42`, or this doc if later), both hosts synced, 213 tests passing,
-> endpoint healthy with the 5,000-rule policy deployed (SHA256 `c3b763aa`).
-> Nothing is mid-edit.
+> **Handoff at 2026-07-20 (third handoff).** Clean tree (latest commit
+> `53ea077`, or this doc if later), 228 tests passing. **FW-6 (report
+> usability) and FW-7 (YAML key-order determinism) are both done and committed
+> this session.** Endpoint was last known healthy with the 5,000-rule policy
+> deployed. Nothing is mid-edit.
 >
-> **Why a fresh session:** Bash permission prompts have been relentless. We
-> tried, in order: a `Bash` allow-all rule, reopening the folder for
-> workspace-trust, and `bypassPermissions` in `.claude/settings.local.json`
-> reloaded via `/config`. None reliably stopped the prompts. The user is now
-> installing a pending **VS Code update** and restarting, which drops this chat.
-> See Permissions below for the full state and what to try next.
+> **Read this first - a deliberate reproducibility change landed.** The FW-7 fix
+> canonicalises selection order, which *changes what seed 42 produces*. The
+> deployed 5,000-rule policy and the authoritative qualification
+> `20260720T193444152733Z` were generated under the pre-FW-7 generator and **no
+> longer regenerate byte-identically from seed 42**. They are still valid frozen
+> evidence. Restoring "reproducible from the seed" for the deployed policy needs
+> a fresh qualification run and a re-deploy to the tenant - a separate, explicit
+> step, NOT yet done. See "Reproducibility after FW-7" below.
 >
-> **Last completed:** FW-4/FW-5 transport security, FW-8 ledger isolation, the
-> airtight qualification (0 inconclusive), and repo hygiene (PDFs untracked,
-> export redirected to `handoff/`). **Next work item: FW-6** (report usability) -
-> design is written under "FW-6 design" below; start there. Then FW-7.
+> **Next work items:** (1) Send ISSUE-003 to engineering - drafts ready. (2)
+> Decide whether to re-qualify + re-deploy to restore reproducibility (needs the
+> tenant). (3) Continue the review: Tier 2 (security) and Tier 5 (structure and
+> tests) are NOT STARTED.
 
 This file is project *state*: where things stand and what to do next. Three
 companions carry the rest, and they are the ones to reach for first:
@@ -124,11 +127,16 @@ one line per ten percent with no escapes when redirected.
 EC2 is a **test and demo environment**, not production. Overwriting a policy is
 not an emergency.
 
-## Permissions - UNRESOLVED, actively frustrating the user
+## Permissions - previously the top quality-of-life issue
 
-The single most important quality-of-life issue. Bash prompts keep
-interrupting; the user cannot walk away during long runs. Do NOT relitigate the
-mechanics from scratch - here is exactly what was tried and what is left.
+Bash prompts had been relentless across earlier sessions and the user could not
+walk away during long runs. The full history of what was tried is below. The
+last step before this session was a **VS Code / extension update, then restart**.
+
+**This (post-restart) session ran the entire FW-6 and FW-7 work cycle - many
+Bash commands, edits, commits - without the user reporting interruptions.** That
+is a tentative signal the update+restart cured it. If prompts recur, the state
+and remaining options are preserved here:
 
 **Committed baseline (`.claude/settings.json`, safe, shareable):** allows all
 Bash (bare `Bash`) with a deny list (sudo, `rm -rf /`, force push,
@@ -138,28 +146,19 @@ curl-pipe-to-shell, reading `.env` and private keys).
 `permissions.defaultMode: "bypassPermissions"`. Delete this file to return to
 the safe allow+deny baseline.
 
-**Tried, in order, none reliably worked:**
-1. Per-command allow list - failed: real commands are compound/piped, matched
-   no single-command rule.
+**Tried across earlier sessions, in order, none reliably worked at the time:**
+1. Per-command allow list - failed: real commands are compound/piped.
 2. Bare `Bash` allow-all in project settings - still prompted.
 3. Reopening the folder for the VS Code workspace-trust dialog - still prompted.
-4. `bypassPermissions` in local settings, reloaded via `/config` - the user
-   reported it did NOT fix it and possibly made it worse.
+4. `bypassPermissions` in local settings reloaded via `/config` - reportedly did
+   NOT fix it (a mid-session-created settings file is not picked up by the
+   watcher until a full restart; the update+restart should have cured that).
 
-**Next thing being tried:** a pending **VS Code / extension update**, then
-restart. If prompts persist after that:
-- Confirm the running extension actually loaded `settings.local.json`
-  (`bypassPermissions`). A mid-session-created settings file is not picked up by
-  the watcher until a full restart - the update+restart should cure that.
-- Check the VS Code setting `claudeCode.initialPermissionMode` is not forcing an
-  ask mode.
-- As a last resort, launching the CLI with `--dangerously-skip-permissions`
-  bypasses everything (sandbox only).
-- Consider whether the extension version honors `defaultMode` from
-  `.claude/settings.local.json` at all; if not, the same setting in user
-  settings (`~/.claude/settings.json`) is not repo-scoped but is more reliable.
-
-Revisit the whole scheme if this stops being a personal sandbox.
+If prompts return: confirm the running extension actually loaded
+`settings.local.json`; check the VS Code setting
+`claudeCode.initialPermissionMode` is not forcing an ask mode; as a last resort
+launch the CLI with `--dangerously-skip-permissions` (sandbox only). Revisit the
+whole scheme if this stops being a personal sandbox.
 
 ---
 
@@ -247,8 +246,37 @@ manifest and by an independent recount of `comparison.jsonl`, report banner
 PASS. Its policy and report are promoted into `artifacts/evidence/`, and the
 policy is the one deployed on the tenant.
 
-Determinism verified: two generations from seed 42 gave byte-identical policy,
-input, and expected artifacts.
+It remains valid, frozen evidence. **But note it was generated under the
+pre-FW-7 generator - see "Reproducibility after FW-7" immediately below.**
+
+## Reproducibility after FW-7 - IMPORTANT, new this session
+
+FW-7 canonicalised the order in which weighted selections are drawn (previously
+they depended on YAML key order). This **changes what seed 42 produces**.
+Consequences:
+
+- The authoritative qualification `20260720T193444152733Z` and the deployed
+  5,000-rule policy `artifacts/evidence/tenant-restore-policy.nol` **no longer
+  regenerate byte-identically from seed 42.** They are still valid as frozen
+  evidence and the deployed policy is unchanged on the tenant.
+- Fresh generation with the same config + seed is once again fully deterministic
+  and now also independent of key order - it just produces a *different*
+  (equally valid) catalog than the frozen one.
+- To restore "the deployed policy is reproducible from its seed", **re-run the
+  qualification under the current generator and re-deploy that policy to the
+  tenant.** This needs endpoint access and is a deliberate outward-facing step -
+  get explicit go-ahead before touching the tenant. It was intentionally NOT
+  done as part of the FW-7 code change.
+
+If you re-qualify: regenerate at 5,000/10,000, confirm
+`overlapping_match_documents: 0`, run/compare/report to a 100% PASS with 0
+inconclusive, then promote the new policy+report into `artifacts/evidence/` and
+deploy. Update this section and the qualification block with the new run ID and
+SHA.
+
+Determinism itself is still guaranteed and tested
+(`tests/test_generation_determinism.py`): same config + seed -> identical
+output, now regardless of key order.
 
 Supersedes two earlier runs, kept only as history:
 
@@ -372,10 +400,16 @@ data?" and "you don't, this proves the engine works" is a weak answer alone.
 `docs/CODE_REVIEW_PLAN.md` - full review of ~7,800 lines, tiered by risk.
 
 - **Tier 0 COMPLETE** - the framework could report success it had not verified.
-- **Tier 1 COMPLETE** except T1-6.
-- **Tier 2 NOT STARTED** - security.
+- **Tier 1 COMPLETE** - T1-6 (YAML key order) closed this session as FW-7. The
+  only remaining Tier 1 item historically deferred was T1-6; confirm nothing
+  else is outstanding when you next open the plan.
+- **Tier 2 NOT STARTED** - security. T2-1..T2-4 are catalogued in the plan
+  (TLS-on-control-plane, git-tracked env sourcing, token on the command line,
+  plaintext content in artifacts). Note FW-4/FW-5 already hardened the env-file
+  transport; re-read the plan against current code before acting.
 - **Tier 3** - product limitations, written up.
-- **Tier 4 NOT STARTED** - evidence quality and report usability.
+- **Tier 4** - evidence quality and report usability. **FW-6 (report usability)
+  done this session.** Re-scan the plan for any remaining Tier 4 items.
 - **Tier 5 NOT STARTED** - structure and tests.
 
 ## Generator guarantees
@@ -386,6 +420,8 @@ Generation REFUSES to produce a catalog that would make results meaningless:
   fixed-width. The guard caught a fifth (`internal_product_name`) a manual
   sweep missed.
 - **Replacement tokens stay distinct under 15-character truncation.**
+- **Selection is independent of YAML key order** (FW-7). Weighted draws sort
+  their keys, so a catalog depends on the seed and the map contents alone.
 
 Expected output is computed by scanning the **full catalog** via Aho-Corasick
 (`framework/policy/matching.py`), not only injected rules.
@@ -411,9 +447,9 @@ Three modes are wanted deliberately:
 | long tokens, compare flag | today's qualification - works, but normalized |
 | short tokens, no flag needed | **cleanest evidence** - exact byte comparison |
 
-**Item 2 is now DONE** (commit `ca5c377`): `compare` detects replacements that
-become identical under truncation, and reports affected would-be passes as
-`INCONCLUSIVE` rather than `PASS`. See the next section.
+`compare` detects replacements that become identical under truncation and
+reports affected would-be passes as `INCONCLUSIVE` rather than `PASS` (commit
+`ca5c377`). See the INCONCLUSIVE section.
 
 Still to do:
 
@@ -425,7 +461,7 @@ Still to do:
 `--replacement-max-length` stays. It is the demo switch and remains useful for
 modelling documented runtime behaviour even after Themis is fixed.
 
-## INCONCLUSIVE verdict - new, 2026-07-20
+## INCONCLUSIVE verdict
 
 The blind spot: `[FINANCIAL:CREDIT_CARD_NUMBER]` and
 `[FINANCIAL:CREDIT_ROUTING]` both truncate to `[FINANCIAL:CRED`. A record where
@@ -442,12 +478,32 @@ Now:
 - The manifest records `records_inconclusive` and `replacement_collisions`
   (count plus up to 20 examples, with a `truncated` flag).
 - The report counts inconclusive records as **neither passes nor failures** -
-  blaming the product for a limit of our own comparison would be as wrong as
-  certifying a pass. It withholds an overall PASS while any exist, styles the
-  pass rate amber, and names the responsible tokens.
+  withholds an overall PASS while any exist, styles the pass rate amber, and
+  names the responsible tokens.
 
-The tests were verified to fail against the pre-fix code (they returned
-`['PASS', 'PASS']`) before being trusted.
+## Report failure details (FW-6) - done this session
+
+Failing reports were one full-document `<article>` per failing row - at scale,
+~2.6 MB of undifferentiated blocks with no diff, grouping, or classification.
+Now `framework/reporting/generate_report.py`:
+
+- `classify_failure` labels each failure by an explainable *diff-shape*
+  signature (prefix-of-expected/truncation, actual longer, content lost,
+  same-length-differs, `Execution failure (HTTP 503)`, ...). Shape, not cause.
+- `group_failures` groups by signature, ordered by count then name.
+- `render_failure_section` renders a summary table (signature | count | first
+  example) then <=3 compact representatives per group. Each shows a windowed
+  diff anchored on the first divergence byte; full messages stay in a collapsed
+  `<details>`. Drops are stated ("Showing 3 of 187") with every remaining
+  record ID listed - never silent.
+
+Divergence offset is **computed** from the live `expected_message` /
+`actual_message`; live comparison rows do NOT carry `divergence_offset` /
+`byte_delta` (only the curated `issue-003-failure-sample.jsonl` does). On a
+252-failure / 3-signature render the failure section is ~15 KB with 9 examples,
+versus 252 full dumps before. INCONCLUSIVE rows never appear here. Tests:
+`tests/test_report_failure_grouping.py`, proven non-vacuous against the old
+full-dump renderer.
 
 ## Idea under discussion - pre-generated demo datasets
 
@@ -470,67 +526,26 @@ Design constraints:
 
 # Immediate Next Actions
 
-1. **Send ISSUE-003 to engineering.** Drafts ready. The user may have a
-   parallel Claude craft the message from these docs - the docs are written to
-   be self-contained for exactly that reason.
+1. **Send ISSUE-003 to engineering.** Drafts ready in
+   `docs/issues/ISSUE-003-handover-message.md`. The user may have a parallel
+   Claude craft the message from these docs - written to be self-contained for
+   exactly that reason. This is the one that matters to the product.
 
-2. **Tier 4 report usability (FW-6) - START HERE.** Failing reports are 2.6 MB
-   of undifferentiated blocks with no diff, grouping, or root-cause
-   classification. Design is written below; nothing started in code yet.
+2. **Decide on re-qualification.** FW-7 means the deployed policy no longer
+   reproduces from seed 42 (see "Reproducibility after FW-7"). Either re-run the
+   qualification under the current generator and re-deploy to the tenant to
+   restore reproducibility, or explicitly accept the frozen artifacts as-is.
+   Needs the tenant - get go-ahead before deploying.
 
-3. **T1-6 (FW-7):** generation depends on YAML key order, not only the seed.
+3. **Continue the code review.** Tier 2 (security) and Tier 5 (structure and
+   tests) are NOT STARTED; re-read `docs/CODE_REVIEW_PLAN.md` against current
+   code first, since FW-4/FW-5/FW-6/FW-8 have already moved several items.
 
 Done since last update:
-- The airtight qualification (0 inconclusive) - see the qualification section.
-- FW-4 and FW-5 (transport security): env files are parsed not executed, with
-  an allowlist and caller precedence. `scripts/lib/env-config.sh`, commit
-  `e7bdac5`. Verified live on EC2.
-- FW-8 (ledger isolation): policy tests no longer pollute the real
-  `artifacts/policy-deployments.jsonl`. Commit `e216b42`.
-
-## FW-6 design - report usability (not yet started)
-
-**Problem.** In `framework/reporting/generate_report.py`, the "Failure details"
-section builds one `<article>` per failing row containing the FULL expected
-message, the FULL actual message, and a full match-evidence table. At scale
-(hundreds of failures over large documents) that is ~2.6 MB of undifferentiated
-blocks with no way to see the shape of what failed.
-
-Relevant code:
-- `aggregate_evidence()` produces `evidence["failures"]` (rows with status not
-  in PASS/INCONCLUSIVE).
-- The failure loop is around lines 226-268; it is joined into the HTML at the
-  "Failure details" heading (~line 373).
-- The comparison row schema carries `status`, `expected_message`,
-  `actual_message`, `expected_matches`, `http_status`, `error`, `record_id`,
-  `kind`. The preserved failure sample
-  (`artifacts/evidence/issue-003-failure-sample.jsonl`) also shows
-  `divergence_offset` and `byte_delta` fields worth reusing as the diff anchor.
-
-**Planned approach (confirm scope with user first if they want less):**
-1. Classify each failure by a robust, explainable signature:
-   - EXECUTION_FAILURE -> sub-key by http_status / error category.
-   - CONTENT_MISMATCH -> a factual diff-shape label: "actual is a prefix of
-     expected (consistent with truncation)", "actual shorter (content lost)",
-     "actual longer", "same length differs". Do NOT over-claim root cause; label
-     the shape, let the reader infer.
-2. Group failures by signature. Render a summary table at the top of Failure
-   details: signature | count | first example record_id.
-3. Per group, show at most ~3 representative COMPACT diffs: a window around the
-   first divergence offset (short common prefix, then expected vs actual tails,
-   each capped), not the whole document. Keep full expected/actual only inside a
-   collapsed `<details>` for those few representatives.
-4. Cap examples per group and STATE what was dropped ("showing 3 of 187") -
-   never silently truncate.
-
-**Testing discipline (has held all session):** add tests in
-`tests/test_tier0_silent_success.py` or a new file using the existing
-`aggregate_evidence` / `render_report_html` helpers. Prove non-vacuous by
-checking behaviour changes vs the current full-dump rendering. Build a fixture
-from the real failure-sample schema, not invented fields.
-
-Watch: keep INCONCLUSIVE handling intact (it is neither pass nor failure and
-must not appear in Failure details as a product failure).
+- **FW-6** report usability (commit `4cc2185`) - grouped, compact failure
+  details. See the FW-6 section.
+- **FW-7** generation independent of YAML key order (commit `53ea077`) - with
+  the deliberate reproducibility consequence documented above.
 
 ---
 
@@ -542,10 +557,13 @@ must not appear in Failure details as a product failure).
 - Do NOT adjust validation expectations to make ISSUE-003 pass.
 - A run where every request fails is deliberately NOT raised as a stage
   failure - that would block compare and report, leaving an exception instead
-  of evidence. **Today's outage is exactly this case working as intended.**
+  of evidence. **The 2026-07-20 outage is exactly this case working as intended.**
 - An unconfirmable record is INCONCLUSIVE, never PASS and never FAIL.
 - `artifacts/runs/` is not tracked. Anything that must survive cleanup goes in
   `artifacts/evidence/`.
+- **Generation is canonicalised** (FW-7): weighted selection sorts its keys, so
+  output depends on the seed and config semantics, not serialization order.
+  Accepting that this changed seed-42 output was a deliberate choice.
 
 ---
 
@@ -554,7 +572,8 @@ must not appear in Failure details as a product failure).
 Tracked evidence in `artifacts/evidence/` with a README explaining provenance:
 
 - `tenant-restore-policy.nol` - the deployed 5,000 rule policy. Themis cannot
-  read back what is deployed, so this is the only copy.
+  read back what is deployed, so this is the only copy. Generated under the
+  pre-FW-7 generator; no longer reproducible byte-identically from seed 42.
 - `issue-003-failure-sample.jsonl` - 12 representative failures.
 - `qualification-passing-report.html` - reference for a clean result.
 
@@ -572,7 +591,7 @@ to `handoff/`. Three PDFs were once committed by accident via `git add -A` -
 **do not use `git add -A`; stage specific files** so generated artifacts never
 ride along again.
 
-Tests: 213, all passing.
+Tests: 228, all passing.
 
 ```bash
 source .venv/bin/activate && python -m unittest discover -s tests -q
