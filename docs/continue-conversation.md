@@ -5,10 +5,18 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-**For "what have we found?" read `docs/FINDINGS.md`** - the register of every
-finding with stable IDs (THM-n Themis, OPS-n their tooling, FW-n ours, OBS-n
-deliberately-not-findings). `docs/README.md` maps every document. This file is
-project *state*: where things stand and what to do next.
+This file is project *state*: where things stand and what to do next. Three
+companions carry the rest, and they are the ones to reach for first:
+
+| question | document |
+|---|---|
+| Something is broken right now | `docs/TROUBLESHOOTING.md` |
+| What have we found? | `docs/FINDINGS.md` - every finding, stable IDs (THM-n Themis, OPS-n their tooling, FW-n ours, OBS-n deliberately-not-findings) |
+| Where is any other document? | `docs/README.md` |
+
+**Keep them in step.** When a finding's status changes, update FINDINGS.md.
+When a new failure mode is diagnosed, add it to TROUBLESHOOTING.md. Both are
+indexes, not archives - they must not be allowed to drift.
 
 ## Maintaining this file
 
@@ -142,91 +150,38 @@ Expect 50/50 succeeded, `PASS: 50`, `CONTENT_MISMATCH: 0`, banner `PASS`.
 
 # Current State - 2026-07-20
 
-## Runtime outage 2026-07-20 - RESOLVED, and how to fix it next time
+## Runtime outage 2026-07-20 - RESOLVED
 
-Every request to `/v1/process` returned HTTP 503 for about an hour:
+Every request 503'd for about an hour. **Root cause: apollo boots with its data
+plane PAUSED and un-pauses only when a policy commits.** None had been deployed
+since the last restart. Not a crash - documented-in-source startup behaviour.
+Deploying a single-rule policy restored it; the 5,000-rule policy is live again
+and verified (SHA256 `0902f0e1...`).
 
-```
-ARGUS_UPSTREAM_UNAVAILABLE ... RESPONSE_WAIT: request timed out
-(no apollo response in >2s)
-```
+**Full runbook: `docs/TROUBLESHOOTING.md`.** Not repeated here - it must not
+drift. Two things to carry in your head:
 
-**Root cause: apollo boots with its data plane PAUSED and un-pauses only when a
-policy commits.** No policy had been deployed since the last restart. Not a
-crash, not a bug - the documented-in-source startup behaviour:
+- **Do not restart services for a 503.** Deploy a policy first. The journal
+  shows apollo was restarted three times that hour, each returning to the same
+  paused state. Restarting is the loop, not the exit.
+- **Every convenient signal lied** - `systemctl` said active, `nolctl doctor`
+  reported a false FAIL on kernel params, and the status string still read
+  PAUSED after recovery. Only `grep -c "Rules committed" apollo.log` was
+  accurate. Recorded as OPS-1 to OPS-3.
 
-```bash
-# /opt/ares/bin/apollo-orchestrator.sh
-# plane paused via g_pending_rule_update{true} until a policy commits
-grep -q "Rules committed" "$APLOG" && committed=1
-```
-
-**The fix is to deploy any policy.** One rule is enough:
-
-```bash
-printf '%s\n' '"SSN" -> "[REDACTED]";' > /tmp/minimal.nol
-curl -sS --insecure -X POST "$THEMIS_POLICY_ENDPOINT" \
-  -H "Authorization: Bearer $THEMIS_TOKEN" --data-binary @/tmp/minimal.nol
-```
-
-Then restore the working ruleset:
-
-```bash
-validate policy --file artifacts/evidence/tenant-restore-policy.nol --target themis
-```
-
-Both were done; the 5,000-rule policy is live again and verified.
-
-**Do NOT restart services for this.** The troubleshooting guide says to, and
-the journal shows apollo was restarted three times (17:05, 17:20, 17:27), each
-time emitting `WARN: rules not committed (data plane may stay paused)`.
-Restarting is the loop, not the exit.
-
-### Every diagnostic signal pointed the wrong way
-
-Worth internalising, because it will happen again:
-
-| signal | said | reality |
-|---|---|---|
-| error message | "no apollo response" | apollo was up and healthy |
-| troubleshooting doc | "severe Apollo bug", restart | wrong, and restart had already failed 3x |
-| `systemctl` | `active` | true and useless - active and paused look identical |
-| `nolctl doctor` | `FAIL` on kernel params | **false positive**, see below |
-| status string | `data plane PAUSED` | correct while broken, **still says PAUSED after recovery** |
-
-Only a `WARN` line in the journal was accurate, and nothing surfaces it.
-
-Two tooling defects, both now in the limitations doc:
-
-- **`nolctl doctor` false positive.** Expects literal `hugepages=4,
-  isolcpus=0-11, nohz_full=0-11, rcu_nocbs=0-11`; the host correctly has
-  `hugepages=16, isolcpus=2-13, ...`. It string-matches one topology, so it
-  fails on a correct machine and sends you to GRUB.
-- **Status string is set once at startup**, never updated. Trusting it means
-  restarting a healthy service.
+Mitigated our side: `validate run` now pre-flights the endpoint and aborts with
+the remedy rather than generating a full run of failures.
 
 ### Where the services actually live
 
 `nol8-demo` (hostname `data-streamer`, 10.8.10.40) runs **none** of it - no
-containers, no Themis processes. Pure client box.
+containers, no Themis processes. Pure client box, holds our checkout.
 
 | | address |
 |---|---|
 | themis host (`themis-demo`, ssh) | 10.10.1.254, runs iris + apollo + policyd |
 | data plane endpoint | 10.8.11.254, publishes port 443 only |
 | aergia control plane | 10.10.1.127 |
-
-Useful read-only commands on `themis-demo`:
-
-```bash
-nolctl status
-nolctl doctor --full
-systemctl show ares-apollo -p StatusText --value
-sudo grep -c "Rules committed" /var/lib/ares/apollo/apollo.log   # 0 = paused
-sudo journalctl -u ares-apollo -n 30 --no-pager
-```
-
-The last two are the ones that actually tell you the truth.
 
 **Treat `themis-demo` with care** - the user asked for no harm there. Policy
 deploys via the API are fine and are the recovery path; service restarts and
@@ -514,7 +469,7 @@ dead but were not removed unilaterally).
 
 `docs/product/validation-framework-overview.md` is a 0-byte placeholder.
 
-Tests: 201, all passing.
+Tests: 208, all passing.
 
 ```bash
 source .venv/bin/activate && python -m unittest discover -s tests -q
