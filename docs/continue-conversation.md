@@ -5,6 +5,11 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
+**For "what have we found?" read `docs/FINDINGS.md`** - the register of every
+finding with stable IDs (THM-n Themis, OPS-n their tooling, FW-n ours, OBS-n
+deliberately-not-findings). `docs/README.md` maps every document. This file is
+project *state*: where things stand and what to do next.
+
 ## Maintaining this file
 
 When the user says **"update the project"**, rewrite this file to reflect
