@@ -139,7 +139,21 @@ business_terms would have scored PASS. Superseded - do not cite it.
 The original failing run (`20260719T161514709224Z`, 272 mismatches) is retained
 only as a sample in `artifacts/evidence/`.
 
-## ISSUE-003 - ready for handover
+## ISSUE-003 - OPEN, ready for handover
+
+**Do not record this as resolved.** A draft handover once described it as
+"resolved through policy quality validation". That is wrong and would cost the
+most valuable finding of this effort.
+
+What actually happened: the Themis defect is untouched. Our *generator* stopped
+producing catalogs that trip it. Those are different things.
+
+- **Themis defect** - open, unfixed, not yet reported to engineering.
+- **Framework workaround** - our catalogs no longer contain overlapping
+  literals, so our runs no longer trigger it.
+
+A customer redacting `"Acme Corp"` alongside `"Acme Corporation"` still gets
+silently corrupted output. Nothing shipped changes that.
 
 **Overlapping matches corrupt Themis output.** Two rules matching overlapping
 regions cause the runtime to compute the wrong match start offset and destroy
@@ -204,14 +218,69 @@ was false: 415 of 10,000 documents carried literals it missed.
 Check `overlapping_match_documents` in the generation manifest before treating
 any run as a qualification.
 
+## Replacement token budget - DESIGNED, NOT BUILT
+
+Generation emits replacement tokens longer than the 15-character runtime limit
+(`[PII:PERSON_NAME]` is 17, `[BIZ:PROJECT_CODENAME]` is 22), so Themis
+truncates every one of them. Running `compare` WITHOUT
+`--replacement-max-length 15` therefore reports mismatches - correctly, and by
+design. That is KB-001 behaving as documented, not a new defect.
+
+The gap is that generation permits tokens guaranteed to be truncated, and
+nothing says so.
+
+**Do NOT simply fail generation on tokens over 15 characters.** Almost every
+token in use today exceeds it, including the catalog behind the passing
+qualification. That change would make `enterprise-dlp.yaml` and
+`customer-record-csv.yaml` ungeneratable.
+
+Three modes are wanted, deliberately:
+
+| mode | purpose |
+|---|---|
+| long tokens, no compare flag | **the demo** - show the truncation limitation |
+| long tokens, compare flag | today's qualification - works, but normalized |
+| short tokens, no flag needed | **cleanest evidence** - exact byte comparison |
+
+Planned work, in order:
+
+1. **A generation-side option** constraining tokens to the runtime budget, so a
+   qualification can run with no normalization at all. Short names still read
+   well: `[PII:NAME]`, `[PII:EMAIL]`, `[FIN:CARD]`, `[BIZ:PROJECT]`. Opt-in,
+   because emitting oversized tokens deliberately is how the demo works.
+2. **Make `compare` refuse or loudly warn when the requested normalization
+   collapses two distinct tokens.** This is the blind spot that made the first
+   clean qualification not airtight: three `[BUSINESS_TERMS:*]` tokens
+   collapsed to one string across 4,755 transformations, so a wrong-rule
+   application would have scored PASS. Nothing currently prevents that
+   recurring. The collision set is already computed at generation.
+3. A generation-time warning naming oversized tokens, as a backstop.
+
+`--replacement-max-length` stays. It is the demo switch, and it remains a
+reasonable way to model documented runtime behaviour even after Themis is
+fixed - but only once (2) closes the hole in it.
+
+Note: run `20260719T234800417119Z`, cited in an earlier draft of this work, no
+longer exists. EC2 was cleaned down to the authoritative qualification. It is
+reproducible from configuration.
+
 ---
 
 # Immediate Next Actions
 
 1. **Hand ISSUE-003 to Themis engineering.** Ready, self-contained, highest
-   external value. Lead with the curl repro.
+   external value. Lead with `scripts/repro-issue-003-curl.sh`.
 
-2. **Tier 2 security.** `scripts/load-policy.sh` uses `curl -k`, disabling TLS
+   Outstanding: a short intro email or Slack message to accompany it. It needs
+   to land three points fast - it is silent (HTTP 200 every time), it destroys
+   data rather than merely mis-redacting, and it is triggered by ordinary
+   policy authoring, not an exotic edge case. The curl repro runs without this
+   repository, which matters because engineering has never seen this codebase.
+
+2. **Replacement token budget** - see the section above. Generation-side
+   constraint, then close the normalization blind spot in `compare`.
+
+3. **Tier 2 security.** `scripts/load-policy.sh` uses `curl -k`, disabling TLS
    verification on the one call carrying both the bearer token and the complete
    ruleset. First establish empirically whether `-k` is necessary -
    `run-validation.sh` does not use it, suggesting a certificate problem on the
@@ -219,13 +288,13 @@ any run as a qualification.
    transports `source config/demo.env`, which is committed, so anyone who can
    land a change to it gets code execution plus the tokens sourced next.
 
-3. **Tier 4 report usability.** Passing reports are fine. Failing reports are
+4. **Tier 4 report usability.** Passing reports are fine. Failing reports are
    2.6 MB of undifferentiated blocks with no diff, grouping, or root-cause
    classification. Highest-value addition: warn when the deployed policy
    contains overlapping literals, converting "272 records failed" into "your
    policy has overlapping literals, here they are".
 
-4. **T1-6: generation depends on YAML key order**, not only the seed.
+5. **T1-6: generation depends on YAML key order**, not only the seed.
    `_weighted_item` builds a list from `dict.keys()` and passes it to
    `random.choices`. Latent because the snapshot uses `sort_keys=False`.
 
