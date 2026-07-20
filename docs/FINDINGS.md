@@ -50,7 +50,7 @@ Findings are split by who owns the fix.
 | FW-3 | `compare` scored unverifiable records as PASS | High | **Fixed** |
 | FW-4 | Transports source a committed config file (Tier 2) | Medium | **Fixed** |
 | FW-5 | Caller environment silently overridden by config | Medium | **Fixed** |
-| FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Open |
+| FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Fixed |
 | FW-7 | Generation depends on YAML key order (T1-6) | Low | Open |
 | FW-8 | Policy tests polluted the real deployment ledger | Low | **Fixed** |
 
@@ -284,10 +284,33 @@ Fixing this exposed a latent bash 3.2 crash (an empty array expanded under
 the single `--insecure` flag is now a `${VAR:+"$VAR"}` string, safe on every
 bash.
 
-## FW-6 - Failing reports unusable at scale (OPEN)
+## FW-6 - Failing reports unusable at scale (FIXED)
 
-2.6 MB of undifferentiated blocks, no diff, grouping, or root-cause
-classification.
+Failing reports were 2.6 MB of undifferentiated blocks - one full-document
+`<article>` per failing row, no diff, no grouping, no classification.
+
+Now `framework/reporting/generate_report.py` classifies each failure by an
+explainable diff-shape signature (`classify_failure`), groups by signature
+(`group_failures`), and renders a summary table (signature | count | first
+example) followed by at most three compact representatives per group
+(`render_failure_section`). Each representative shows a windowed diff anchored
+on the first divergence byte - short shared prefix, then capped expected/actual
+tails - with the full messages kept only inside a collapsed `<details>`. Dropped
+records are never silent: the group states "Showing 3 of N" and lists every
+remaining record ID so traceability is complete.
+
+Signatures describe the observed shape ("actual is a prefix of expected
+(consistent with truncation)", "actual longer than expected", "execution
+failure (HTTP 503)", ...), not a diagnosed cause - the reader infers the cause.
+
+On a 252-failure / 3-signature render the failure section is ~15 KB with 9 full
+examples, versus 252 full-document dumps before. INCONCLUSIVE records are still
+excluded from failure details (neither pass nor product failure). Tests in
+`tests/test_report_failure_grouping.py`, proven non-vacuous against the old
+full-dump renderer. Divergence offset is computed from the live
+`expected_message`/`actual_message`, not read from a field - live comparison
+rows do not carry `divergence_offset`/`byte_delta` (only the curated
+`issue-003-failure-sample.jsonl` does).
 
 ## FW-7 - Generation depends on YAML key order (OPEN)
 

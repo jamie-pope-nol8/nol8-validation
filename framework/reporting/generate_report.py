@@ -102,6 +102,219 @@ def _inconclusive_note(
     )
 
 
+# Failure-detail rendering (FW-6). Failing reports used to be one full-document
+# <article> per failing row - at scale, megabytes of undifferentiated blocks
+# with no way to see the shape of what failed. Instead we classify each failure
+# by an explainable signature, group by signature, and show a few compact diffs
+# per group. Signatures describe the observed SHAPE of the divergence; they do
+# not assert a root cause, which the reader infers.
+
+# Representatives shown in full per signature group. The rest are named by
+# record_id (cheap, complete traceability) but not dumped.
+_MAX_REPRESENTATIVES = 3
+# Characters of shared context kept before the first divergence, and of each
+# side's tail kept after it, in a compact diff window.
+_DIFF_CONTEXT = 48
+_DIFF_TAIL = 96
+
+
+def _mismatch_shape(expected: Any, actual: Any) -> str:
+    """Label the factual shape of a content mismatch, not its cause."""
+
+    if not isinstance(expected, str) or not isinstance(actual, str):
+        return "Content mismatch (message unavailable)"
+    if expected == actual:
+        # Defensive: a mismatch row should differ, but never mislabel it.
+        return "Content mismatch (messages reported identical)"
+    length_expected, length_actual = len(expected), len(actual)
+    if length_actual < length_expected and expected.startswith(actual):
+        return "Actual is a prefix of expected (consistent with truncation)"
+    if length_expected < length_actual and actual.startswith(expected):
+        return "Actual extends expected (extra trailing content)"
+    if length_actual < length_expected:
+        return "Actual shorter than expected (content lost)"
+    if length_actual > length_expected:
+        return "Actual longer than expected"
+    return "Same length, content differs"
+
+
+def classify_failure(row: Mapping[str, Any]) -> str:
+    """Return an explainable signature grouping like failures together."""
+
+    status = str(row.get("status") or "unknown")
+    if status == "EXECUTION_FAILURE":
+        http_status = row.get("http_status")
+        if isinstance(http_status, int):
+            return f"Execution failure (HTTP {http_status})"
+        return "Execution failure (no response)"
+    if status == "CONTENT_MISMATCH":
+        return _mismatch_shape(row.get("expected_message"), row.get("actual_message"))
+    # Any other non-pass, non-inconclusive status we did not anticipate is kept
+    # as its own group rather than being silently folded in.
+    return status
+
+
+def group_failures(
+    failures: Sequence[Mapping[str, Any]],
+) -> list[tuple[str, list[Mapping[str, Any]]]]:
+    """Group failures by signature, ordered by size then name (deterministic)."""
+
+    groups: dict[str, list[Mapping[str, Any]]] = {}
+    for row in failures:
+        groups.setdefault(classify_failure(row), []).append(row)
+    return sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))
+
+
+def _first_divergence(expected: str, actual: str) -> int:
+    """Index of the first byte at which two strings differ."""
+
+    limit = min(len(expected), len(actual))
+    index = 0
+    while index < limit and expected[index] == actual[index]:
+        index += 1
+    return index
+
+
+def _compact_diff(expected: str, actual: str) -> str:
+    """A windowed diff around the first divergence, each side capped."""
+
+    offset = _first_divergence(expected, actual)
+    start = max(0, offset - _DIFF_CONTEXT)
+    common = expected[start:offset]
+    expected_tail = expected[offset : offset + _DIFF_TAIL]
+    actual_tail = actual[offset : offset + _DIFF_TAIL]
+    lead = "…" if start > 0 else ""
+    expected_more = "…" if len(expected) > offset + _DIFF_TAIL else ""
+    actual_more = "…" if len(actual) > offset + _DIFF_TAIL else ""
+    return (
+        "<div class='diff'>"
+        f"<p class='muted'>First difference at byte {offset} "
+        f"(expected {len(expected)} bytes, actual {len(actual)} bytes).</p>"
+        f"<pre class='diff-common'>{escape(lead + common)}</pre>"
+        "<pre class='diff-expected'><span class='diff-label'>expected</span>"
+        f"{escape(expected_tail + expected_more)}</pre>"
+        "<pre class='diff-actual'><span class='diff-label'>actual</span>"
+        f"{escape(actual_tail + actual_more)}</pre>"
+        "</div>"
+    )
+
+
+def _match_evidence_table(row: Mapping[str, Any]) -> str:
+    match_rows = []
+    matches = row.get("expected_matches")
+    if isinstance(matches, list):
+        for match in matches:
+            if not isinstance(match, Mapping):
+                continue
+            match_rows.append(
+                "<tr>"
+                f"<td>{escape(_text(match.get('category_id')))}</td>"
+                f"<td>{escape(_text(match.get('case_id')))}</td>"
+                f"<td><code>{escape(_text(match.get('variant')))}</code></td>"
+                f"<td><code>{escape(_text(match.get('replacement')))}</code></td>"
+                "</tr>"
+            )
+    if not match_rows:
+        return "<p>No expected matches.</p>"
+    return (
+        "<table><thead><tr><th>Category</th><th>Case</th><th>Variant</th>"
+        "<th>Replacement</th></tr></thead><tbody>"
+        + "".join(match_rows)
+        + "</tbody></table>"
+    )
+
+
+def _failure_representative(row: Mapping[str, Any]) -> str:
+    """Render one representative: compact diff where possible, then full detail."""
+
+    expected = row.get("expected_message")
+    actual = row.get("actual_message")
+    if isinstance(expected, str) and isinstance(actual, str) and expected != actual:
+        anchor = _compact_diff(expected, actual)
+    else:
+        # Execution failures (and any row without both messages) have no diff
+        # to anchor on; the facts table below carries the evidence.
+        anchor = ""
+    facts = _table(
+        (
+            ("Request index", row.get("request_index")),
+            ("Record kind", row.get("kind")),
+            ("HTTP status", row.get("http_status")),
+            ("Latency (ms)", row.get("latency_ms")),
+            ("Error", row.get("error")),
+        )
+    )
+    return (
+        "<article class='failure'>"
+        f"<h4>{escape(_text(row.get('record_id')))}</h4>"
+        + anchor
+        + facts
+        + "<details><summary>Full expected and actual messages</summary>"
+        f"<h5>Expected</h5><pre>{escape(_text(expected))}</pre>"
+        f"<h5>Actual</h5><pre>{escape(_text(actual))}</pre>"
+        "</details>"
+        "<details><summary>Expected match evidence</summary>"
+        + _match_evidence_table(row)
+        + "</details>"
+        "</article>"
+    )
+
+
+def render_failure_section(failures: Sequence[Mapping[str, Any]]) -> str:
+    """Grouped, compact failure details: a summary table then a few examples."""
+
+    if not failures:
+        return "<p>No comparison failures.</p>"
+
+    groups = group_failures(failures)
+    summary_rows = "".join(
+        "<tr>"
+        f"<td>{escape(signature)}</td>"
+        f"<td>{len(rows)}</td>"
+        f"<td>{escape(_text(rows[0].get('record_id')))}</td>"
+        "</tr>"
+        for signature, rows in groups
+    )
+    summary = (
+        f"<p>{len(failures)} failing record(s) across {len(groups)} signature(s). "
+        "Each signature describes the observed shape of the divergence, not a "
+        "diagnosed cause.</p>"
+        "<table><thead><tr><th>Signature</th><th>Count</th>"
+        "<th>First example</th></tr></thead>"
+        f"<tbody>{summary_rows}</tbody></table>"
+    )
+
+    sections = []
+    for signature, rows in groups:
+        representatives = "".join(
+            _failure_representative(row) for row in rows[:_MAX_REPRESENTATIVES]
+        )
+        if len(rows) > _MAX_REPRESENTATIVES:
+            remaining = rows[_MAX_REPRESENTATIVES:]
+            dropped = (
+                f"<p class='muted'>Showing {_MAX_REPRESENTATIVES} of {len(rows)} "
+                "in this group. Remaining record IDs are listed below; their full "
+                "detail is omitted to keep the report readable.</p>"
+                "<details><summary>"
+                f"{len(remaining)} further record ID(s)</summary><p><code>"
+                + escape(
+                    ", ".join(_text(row.get("record_id")) for row in remaining)
+                )
+                + "</code></p></details>"
+            )
+        else:
+            dropped = ""
+        sections.append(
+            "<section class='signature'>"
+            f"<h3>{escape(signature)} <span class='muted'>× {len(rows)}</span></h3>"
+            + representatives
+            + dropped
+            + "</section>"
+        )
+
+    return summary + "".join(sections)
+
+
 def aggregate_evidence(
     manifest: Mapping[str, Any],
     generation: Mapping[str, Any],
@@ -223,51 +436,6 @@ def render_report_html(evidence: Mapping[str, Any]) -> str:
         else "unavailable"
     )
 
-    failures_html: list[str] = []
-    for row in evidence["failures"]:
-        match_rows = []
-        matches = row.get("expected_matches")
-        if isinstance(matches, list):
-            for match in matches:
-                if not isinstance(match, Mapping):
-                    continue
-                match_rows.append(
-                    "<tr>"
-                    f"<td>{escape(_text(match.get('category_id')))}</td>"
-                    f"<td>{escape(_text(match.get('case_id')))}</td>"
-                    f"<td><code>{escape(_text(match.get('variant')))}</code></td>"
-                    f"<td><code>{escape(_text(match.get('replacement')))}</code></td>"
-                    "</tr>"
-                )
-        matches_html = (
-            "<table><thead><tr><th>Category</th><th>Case</th><th>Variant</th>"
-            "<th>Replacement</th></tr></thead><tbody>"
-            + "".join(match_rows)
-            + "</tbody></table>"
-            if match_rows
-            else "<p>No expected matches.</p>"
-        )
-        failures_html.append(
-            "<article class='failure'>"
-            f"<h3>{escape(_text(row.get('status')))} — "
-            f"{escape(_text(row.get('record_id')))}</h3>"
-            + _table(
-                (
-                    ("Request index", row.get("request_index")),
-                    ("Record kind", row.get("kind")),
-                    ("HTTP status", row.get("http_status")),
-                    ("Latency (ms)", row.get("latency_ms")),
-                    ("Error", row.get("error")),
-                )
-            )
-            + "<details><summary>Expected and actual messages</summary>"
-            f"<h4>Expected</h4><pre>{escape(_text(row.get('expected_message')))}</pre>"
-            f"<h4>Actual</h4><pre>{escape(_text(row.get('actual_message')))}</pre>"
-            "</details><h4>Expected match evidence</h4>"
-            + matches_html
-            + "</article>"
-        )
-
     artifacts = manifest.get("artifacts", {})
     artifact_rows = []
     if isinstance(artifacts, Mapping):
@@ -332,7 +500,13 @@ h1,h2,h3 {{ line-height:1.2; }} h2 {{ margin-top:36px; border-bottom:1px solid v
 .status-warning {{ color:var(--warning); background:var(--warning-bg); border-color:var(--warning); }}
 table {{ border-collapse:collapse; width:100%; margin:10px 0 20px; }} th,td {{ border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }} th {{ background:var(--panel); }}
 pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); padding:12px; border:1px solid var(--line); }} code {{ overflow-wrap:anywhere; }}
-.failure {{ border-left:4px solid var(--bad); padding:1px 16px; margin:20px 0; }} .muted {{ color:var(--muted); }}
+.signature {{ margin:24px 0; }} .signature > h3 {{ margin-bottom:4px; }}
+.failure {{ border-left:4px solid var(--bad); padding:1px 16px; margin:16px 0; }} .muted {{ color:var(--muted); }}
+.diff {{ margin:8px 0; }} .diff pre {{ margin:0; border-radius:0; }}
+.diff-common {{ border-bottom:none; color:var(--muted); }}
+.diff-expected {{ background:var(--ok-bg); border-color:var(--ok); border-bottom:none; }}
+.diff-actual {{ background:var(--bad-bg); border-color:var(--bad); }}
+.diff-label {{ display:inline-block; min-width:72px; font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.04em; color:var(--muted); user-select:none; }}
 @media print {{ body {{ max-width:none; padding:0; }} details {{ display:block; }} }}
 </style>
 </head>
@@ -371,7 +545,7 @@ pre {{ white-space:pre-wrap; overflow-wrap:anywhere; background:var(--panel); pa
 {_distribution_table("Expected matches by category", evidence["categories"])}
 {_distribution_table("Expected matches by case", evidence["cases"])}
 <h2>Failure details</h2>
-{''.join(failures_html) if failures_html else '<p>No comparison failures.</p>'}
+{render_failure_section(evidence["failures"])}
 <h2>Artifact provenance</h2>
 <table><thead><tr><th>Artifact</th><th>Path</th><th>SHA-256</th><th>Bytes</th></tr></thead><tbody>{''.join(artifact_rows)}</tbody></table>
 <p class="muted">Generated from durable Run artifacts. Validation stages were not rerun.</p>
