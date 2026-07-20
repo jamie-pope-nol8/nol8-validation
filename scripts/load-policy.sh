@@ -70,8 +70,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# TLS verification is ON by default. The policy control plane currently
+# presents a self-signed certificate named after an internal address
+# (CN=ip-172-31-40-100), so verification fails against its DNS name and
+# THEMIS_ALLOW_INSECURE_TLS must be set to reach it.
+#
+# This call carries both the bearer token and the complete ruleset, so
+# disabling verification is a deliberate, visible choice rather than a
+# hardcoded default. See limitation 7 in
+# docs/product/themis-product-limitations.md.
+INSECURE_FLAG=()
+if [[ "${THEMIS_ALLOW_INSECURE_TLS:-0}" == "1" ]]; then
+  INSECURE_FLAG=(--insecure)
+fi
+
 set +e
-HTTP_CODE="$(curl -skS \
+HTTP_CODE="$(curl -sS "${INSECURE_FLAG[@]}" \
   --connect-timeout 5 \
   --max-time 30 \
   -o "$RESPONSE_FILE" \
@@ -81,6 +95,14 @@ HTTP_CODE="$(curl -skS \
   --data-binary "@$POLICY_FILE")"
 CURL_STATUS=$?
 set -e
+
+if [[ "$CURL_STATUS" -eq 60 ]]; then
+  echo "Policy deployment failed TLS verification against $ENDPOINT." >&2
+  echo "The control plane certificate does not match its hostname." >&2
+  echo "To proceed anyway, set THEMIS_ALLOW_INSECURE_TLS=1 - note this sends" >&2
+  echo "the bearer token and the full ruleset over an unverified connection." >&2
+  exit 5
+fi
 
 if [[ "$CURL_STATUS" -ne 0 ]]; then
   echo "Policy deployment network request failed." >&2

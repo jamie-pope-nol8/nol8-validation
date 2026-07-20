@@ -23,6 +23,7 @@ Framework issues are tracked separately in `docs/issues/`.
 | 4 | Overlapping matches corrupt output | High | Silent data destruction (ISSUE-003) |
 | 5 | Replacements truncate at 15 characters | Medium | Constrains redaction token design (KB-001) |
 | 6 | Evaluation environment is unreachable externally | High | Agent integrations cannot be demonstrated |
+| 7 | Control plane TLS cannot be verified | High | Every client must disable certificate checking |
 
 Items 1 to 3 concern the policy lifecycle and share one root cause: **a policy
 is not a first-class object.** It has no identity, no version, and no
@@ -250,12 +251,82 @@ is currently configured for the latter.
 
 ---
 
+## 7. The policy control plane cannot be reached over verified TLS
+
+### Observed
+
+The policy endpoint presents a self-signed certificate named after an internal
+address:
+
+```
+subject = CN=ip-172-31-40-100
+issuer  = CN=ip-172-31-40-100
+valid   = Jun 24 2026 to Sep 26 2028
+```
+
+Verification therefore fails against its published hostname:
+
+```
+curl: (60) SSL: certificate subject name 'ip-172-31-40-100'
+      does not match target hostname 'themis.sales.nol8.cloud'
+```
+
+Every client must disable TLS verification to deploy a policy.
+
+The processing endpoint, by contrast, presents a valid certificate:
+
+```
+subject = CN=*.nol8.net
+issuer  = C=US, O=Amazon, CN=Amazon RSA 2048 M01
+```
+
+and verifies without exception. The data plane was configured correctly; the
+control plane was not.
+
+### Why it matters
+
+The affected call is the most sensitive in the system. It carries the bearer
+token **and** the customer's complete DLP ruleset - which is, in effect, their
+written definition of what they consider sensitive.
+
+With verification disabled the client cannot authenticate the server, so an
+attacker positioned on that path could capture the token, read the entire
+ruleset, and substitute a permissive policy. Validation would then report clean
+passes against attacker-supplied rules, and nothing in the response would
+indicate anything was wrong.
+
+The commercial cost is more immediate than the security one. Any enterprise
+buyer's security review will ask why integrating the product requires disabling
+certificate verification. "Because the vendor's control plane uses a
+self-signed certificate" is a difficult answer, and it invites questions about
+the rest of the deployment.
+
+It also spreads. Every integration, script, and sample that talks to the
+control plane must carry the exception, and exceptions of this kind tend to
+outlive the reason for them.
+
+### What is needed
+
+A certificate matching the published hostname, from any public CA. The
+processing endpoint already demonstrates this is straightforward in this
+environment.
+
+### Framework handling
+
+`scripts/load-policy.sh` verifies TLS by default and requires
+`THEMIS_ALLOW_INSECURE_TLS=1` to proceed without it. The exception is set in
+`config/demo.env` with a comment explaining why, so the choice is explicit and
+attributable rather than hardcoded and invisible. On a verification failure it
+reports the cause and what accepting it means.
+
+---
+
 ## Note on how these were found
 
-All six were surfaced by building a validation capability against a live Themis
-instance. Items 1 to 5 are reproducible outside this repository, and items 4
-and 5 with curl alone.
+All seven were surfaced by building a validation capability against a live
+Themis instance. Items 1 to 5 and 7 are reproducible outside this repository,
+and items 4, 5, and 7 with curl alone.
 
-Items 1 to 3 and 6 were not found by testing Themis. They were found by trying
-to operate and demonstrate it repeatedly - which is what a customer and a sales
-engineer will do.
+Items 1 to 3, 6, and 7 were not found by testing Themis. They were found by
+trying to operate and demonstrate it repeatedly - which is what a customer and
+a sales engineer will do.
