@@ -9,9 +9,9 @@ no repository, no tooling, and no internal references. Reproductions are literal
 curl against your own endpoints. You can attach any single file to an email and
 an engineer can read, understand, and reproduce it without anything installed.
 
-Send them individually. In particular, keep the data-corruption defect
+In particular, keep the data-corruption defect
 (ISSUE-004) separate from the lifecycle and environment items, so it is triaged
-as the defect it is rather than as product feedback.
+as the defect it is rather than as product feedback. This should have the priority. 
 
 | ID | Title | Type | Severity | Status |
 |---|---|---|---|---|

@@ -530,6 +530,23 @@ Design constraints:
   or S3, with configs and seeds in git so any bundle is reproducible.
 - Define sizes by what they demonstrate, not round numbers.
 
+## Deferred - emailable HTML render of docs, with copy buttons
+
+**Not started; do when there is slack, not urgent.** Markdown has no copy button
+on code blocks - that is a renderer feature (GitHub and VS Code preview give it
+free; raw `.md` and PDF exports do not). For docs we hand off - the `docs/issues/`
+register especially, where engineers copy-paste curl reproductions - render the
+markdown to **self-contained HTML with a small inline copy button** on each code
+block. No dependencies, opens offline in any browser, emailable.
+
+Design:
+- One HTML per issue (preserves "forward issues individually") is the default
+  shape; a combined single-page variant is a nice-to-have.
+- Markdown stays the source of truth; HTML is a generated, throwaway render.
+- Output to a gitignored `handoff/` dir (same place the PDF export already goes),
+  as a repeatable build step so re-running regenerates after any doc edit.
+- Reuse it going forward for anything we hand off, not just the current issues.
+
 ---
 
 # Immediate Next Actions
