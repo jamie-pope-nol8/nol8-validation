@@ -429,11 +429,19 @@ yet built - this is the active design conversation. What's already true:
 - **Same policy, both engines - CONFIRMED.** One `.nol` file deploys to Themis
   AND Aergia and gives identical literal masking. No separate policy source for
   literals. `demos/policies/build_policy.py` output is engine-agnostic.
-- **Remaining open item: Aergia RE2 pattern syntax.** Aergia is a superset - it
-  did native SSN regex before we overwrote it - so it can mask pattern classes
-  (any email/SSN/phone/card) that Themis (literal) structurally cannot. To use
-  that we need its RE2 rule syntax (how a pattern rule is written in the policy
-  file). Unknown; ask the user / engineering, or recover the prior Aergia policy.
+- **Remaining open item: Aergia RE2 pattern syntax - BLOCKED, needs engineering.**
+  Aergia is a superset (it did native SSN regex before we overwrote it), but the
+  `.nol` literal format CANNOT express a regex rule. Tested 2026-07-21:
+  - `"\d{3}-\d{2}-\d{4}" -> "[SSN]"` - loads, matched as a LITERAL (no SSN mask).
+  - `"\\d{3}-\\d{2}-\\d{4}"` (doubled backslash) - same, literal.
+  - `/\d{3}-\d{2}-\d{4}/ -> "[SSN]"` (slash-delimited) - deploy REJECTED, invalid
+    syntax ("target service rejected the policy deployment").
+  So the LHS is always a literal in this format. Aergia's pattern rules use a
+  different declaration that is undocumented in the repo + kit; the policy
+  endpoint won't read back a loaded policy (GET -> "method not allowed"). **Ask
+  engineering for the Aergia RE2 rule syntax (or a sample Aergia pattern policy /
+  the prior SSN policy we overwrote).** Until then the COVERAGE axis is blocked;
+  the PERFORMANCE axis (same literal policy, both engines) is not.
 - **Plan shape:** run BOTH engines over the same corpus via the adapter (point at
   :443, then :444) and emit ONE combined report. Two demo axes, both now real:
   1. **Performance:** same policy, same corpus, Themis (FPGA) vs Aergia (RE2) -
