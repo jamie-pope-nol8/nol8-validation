@@ -18,7 +18,7 @@ source .venv/bin/activate
 set -a; source config/demo.env; source .env; set +a
 export PATH="$HOME/.local/go/bin:$PATH"
 
-POLICY="demos/policies/starter-known-values.nol"
+POLICY="${POLICY:-demos/policies/starter-known-values.nol}"
 MODES="${MODES:-nofilter listmatch themis_api aergia_api}"
 export NOL8_TIMEOUT_MS="${NOL8_TIMEOUT_MS:-10000}"
 
