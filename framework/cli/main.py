@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from datetime import UTC, datetime
@@ -73,13 +74,51 @@ def isoformat_utc(value: datetime) -> str:
     )
 
 
-def write_manifest_atomic(path: Path, manifest: dict[str, Any]) -> None:
-    temporary_path = path.with_name(f".{path.name}.tmp")
-    temporary_path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` atomically and durably.
+
+    The single primitive for every atomic replace in this module. It fixes the
+    two problems the copies it replaces shared (T5-1): a **unique** temp name in
+    the target directory (the old fixed ``.{name}.tmp`` names collided between
+    concurrent writers), and an **fsync** of both the file and its directory
+    before/after the rename, so a crash cannot leave the target pointing at
+    partially-written or not-yet-durable data. The temp file shares the target's
+    directory so ``os.replace`` is atomic on the same filesystem.
+    """
+
+    directory = path.parent
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=directory
     )
-    os.replace(temporary_path, path)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(file_descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    # Best-effort: fsync the directory so the rename itself survives a crash.
+    try:
+        directory_descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    except OSError:
+        pass
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    _atomic_write_bytes(path, text.encode("utf-8"))
+
+
+def write_manifest_atomic(path: Path, manifest: dict[str, Any]) -> None:
+    _atomic_write_text(
+        path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    )
 
 
 def artifact_metadata(run_directory: Path, relative_path: Path) -> dict[str, Any]:
@@ -759,17 +798,13 @@ def preflight_probe(target: str) -> dict[str, Any]:
 
 
 def _write_jsonl_atomic(path: Path, rows: list[dict[str, Any]]) -> None:
-    temporary_path = path.with_name(f".{path.name}.tmp")
-    with temporary_path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    os.replace(temporary_path, path)
+    _atomic_write_text(
+        path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
+    )
 
 
 def _initialize_jsonl_atomic(path: Path) -> None:
-    temporary_path = path.with_name(f".{path.name}.tmp")
-    temporary_path.write_bytes(b"")
-    os.replace(temporary_path, path)
+    _atomic_write_bytes(path, b"")
 
 
 def _append_jsonl_durable(path: Path, row: dict[str, Any]) -> None:
@@ -787,9 +822,7 @@ def _repair_jsonl_tail(path: Path) -> None:
         return
     last_complete = data.rfind(b"\n")
     repaired = data[: last_complete + 1] if last_complete >= 0 else b""
-    temporary_path = path.with_name(f".{path.name}.repair")
-    temporary_path.write_bytes(repaired)
-    os.replace(temporary_path, path)
+    _atomic_write_bytes(path, repaired)
 
 
 def run_validation_corpus(
@@ -1885,11 +1918,30 @@ def _cli_percentile(values: list[float], percentage: float) -> float:
 
 
 def _read_cli_jsonl(path: Path) -> list[dict[str, Any]]:
-    return [
-        row
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if isinstance((row := json.loads(line)), dict)
-    ]
+    """Read a JSONL artifact into dict rows for the CLI summary paths.
+
+    The inline comprehension this replaces called ``json.loads`` with no guard,
+    so a single torn or malformed line surfaced a raw ``JSONDecodeError`` with no
+    artifact context - one of the crash paths noted in T5-1. This tolerates blank
+    lines, skips non-object lines, and raises a clear ``ValueError`` naming the
+    file and line on malformed JSON. Callers surface that as a clean message.
+    """
+
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"Invalid JSON in {path.name} at line {line_number}: {error}"
+            ) from error
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+    return rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2024,7 +2076,15 @@ def main(argv: list[str] | None = None) -> int:
 
         run_stage = manifest["stages"]["run"]
         succeeded = run_stage["requests_completed"] - run_stage["requests_failed"]
-        output_rows = _read_cli_jsonl(args.run / run_stage["output_path"])
+        try:
+            output_rows = _read_cli_jsonl(args.run / run_stage["output_path"])
+        except ValueError as error:
+            print(
+                f"Run completed, but the output artifact could not be read "
+                f"for the summary: {error}",
+                file=sys.stderr,
+            )
+            return 1
         latencies = [
             float(row["latency_ms"])
             for row in output_rows
@@ -2071,9 +2131,17 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         comparison_stage = manifest["stages"]["comparison"]
-        comparison_rows = _read_cli_jsonl(
-            args.run / comparison_stage["output_path"]
-        )
+        try:
+            comparison_rows = _read_cli_jsonl(
+                args.run / comparison_stage["output_path"]
+            )
+        except ValueError as error:
+            print(
+                f"Comparison completed, but the artifact could not be read "
+                f"for the summary: {error}",
+                file=sys.stderr,
+            )
+            return 1
         expected_replacements = sum(
             int(row.get("expected_match_count", 0))
             for row in comparison_rows
