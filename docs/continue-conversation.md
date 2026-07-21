@@ -27,8 +27,10 @@ can continue without reconstructing context from chat history.
 > && git pull` (`clean` without `-x` removes the rsynced source but keeps gitignored
 > `results/`+`report.html`; the pull restores the identical tracked source).
 >
-> **Next work:** wire and test **Aergia (RE2)** as a second engine and produce a
-> combined Themis+Aergia report - see "Next horizon - Aergia".
+> **Latest:** combined **Themis-vs-Aergia listMatch** benchmark is DONE - one
+> report, both engines, same literal policy, byte-identical output. Scope is
+> **listMatch only, no regex** ([[demo-scope-listmatch-only]]). See "Next horizon
+> - Aergia". Next: agentic repo review (when pushed), and drop/route via sentinels.
 >
 > **Sandbox note:** the Themis tenant is the user's disposable sandbox. Overwrite
 > its policy freely; do NOT reflexively restore.
@@ -435,13 +437,28 @@ yet built - this is the active design conversation. What's already true:
   (do not retry): the `.nol` LHS is always a literal - `"\d{3}-\d{2}-\d{4}"` and
   doubled-backslash both matched literally, `/\d/`-slash form was rejected on
   deploy. Ignore regex until the engine supports it.
-- **Plan shape (listMatch performance/behavior):** run BOTH engines over the same
-  corpus with the SAME literal starter policy, via the adapter (point at :443 for
-  Themis, :444 for Aergia), and emit ONE combined report. Both should mask
-  identically (proven), so the comparison is **performance** - Themis (FPGA) vs
-  Aergia - plus the local `nofilter`/`listmatch` software baselines. Run the Go
-  harness `nol8_api` mode twice with the endpoint swapped, relabel the two API
-  rows (themis/aergia), stitch into one report.
+- **Combined report - DONE (2026-07-21).** `demos/benchmark/run-live.sh` now
+  deploys the SAME literal starter policy to both engines, starts one adapter per
+  engine (8799->Themis:443, 8800->Aergia:444), runs the Go harness with per-engine
+  modes `themis_api`/`aergia_api` (added to our copy of `benchmark.go` +
+  `nol8_client.go`; report metadata in `generate_report.py`; adapter generalized
+  to `PROCESS_ENDPOINT`/`PROCESS_TOKEN`), and emits ONE combined report. Result
+  over 1,000 chunks:
+
+  | mode | kept | masked | fwd tokens | elapsed (1000 seq calls) |
+  |---|---|---|---|---|
+  | nofilter | 1000 | 0 | 43005 | 0.01s |
+  | listmatch (local sw) | 465 | 54* | 20445 | 0.12s |
+  | **themis_api** | 465 | 535 | 41910 | 7.29s |
+  | **aergia_api** | 465 | 535 | 41910 | 6.62s |
+
+  **Themis and Aergia produced BYTE-IDENTICAL output across all 1,000 records**
+  (verified) - same listMatch policy, same governance. The elapsed-time gap
+  (6.62 vs 7.29s) is single-threaded end-to-end HTTP round-trips (~7 ms each,
+  network-dominated), NOT a clean engine benchmark - do not quote it as one; for
+  a real latency comparison drive concurrency and measure server-side. Report
+  pulled to Mac: `demos/benchmark/datapoint1/report/report.html`.
+  (*listmatch's drop/route come from the kit's own local rules, not our policy.)
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.
