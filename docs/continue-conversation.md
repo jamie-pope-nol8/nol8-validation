@@ -133,9 +133,16 @@ our checkout, runs none of Themis.
 | | address |
 |---|---|
 | themis host (`themis-demo`, ssh) | 10.10.1.254, runs iris + apollo + policyd |
-| data plane endpoint (`tenant001-v1demo.nol8.net`) | valid Amazon cert, port 443 |
-| policy control plane (`themis.sales.nol8.cloud:8444`) | **self-signed cert** (CN=ip-172-31-40-100 - matches neither the DNS name nor the host 10.10.1.254), so `--insecure`/`-k` is required |
-| aergia control plane | 10.10.1.127 |
+| **Themis** data plane | `tenant001-v1demo.nol8.net:443/v1/process` - valid Amazon cert |
+| **Aergia** data plane | `tenant001-v1demo.nol8.net:444/v1/process` - valid Amazon cert, SAME contract |
+| Themis policy control plane (`themis.sales.nol8.cloud:8444/policy`) | **self-signed** (CN=ip-172-31-40-100 - matches neither DNS nor host 10.10.1.254), so `--insecure`/`-k` required |
+| Aergia policy control plane (`aergia.sales.nol8.cloud:8444/policy`) | **self-signed** (CN=ip-172-31-42-162 - a separate host), `--insecure` required |
+
+**Data-plane port map (confirmed 2026-07-21 by TLS probe + process call): 443 =
+Themis (FPGA), 444 = Aergia (RE2), both on `tenant001-v1demo.nol8.net`, both
+valid certs, both speaking `{"message"}->{"result":{"message"}}`.** Verified: the
+same string returned `[PROJECT]`/`[DENIED]` on :443 (Themis literal, starter
+policy live) and returned unchanged on :444 (Aergia, no RE2 policy deployed yet).
 
 **Treat `themis-demo` with care** - policy deploys via the API are fine (the
 recovery path); service restarts and system changes are not ours to make.
@@ -397,16 +404,20 @@ yet built - this is the active design conversation. What's already true:
   {themis,aergia}`, and EC2 env already defines `AERGIA_POLICY_ENDPOINT` +
   `AERGIA_TOKEN` (control plane at 10.10.1.127). So policy DEPLOY to Aergia is
   wired.
-- **Open unknowns to resolve before wiring traffic (ask/confirm):**
-  1. **Aergia data-plane (process) endpoint + contract.** We have a Themis
-     *process* endpoint (`THEMIS_PROCESS_ENDPOINT`); there is NO `AERGIA_PROCESS_
-     ENDPOINT` in env yet. Does Aergia expose a `/v1/process` and speak the same
-     `{"message"}->{"result":{"message"}}` envelope, or different? This is the
-     blocker (ties to OBS-2, the data-path question).
-  2. **Aergia policy format = RE2 patterns, NOT literals.** `demos/policies/
+- **Aergia data-plane endpoint - RESOLVED (2026-07-21).** It's
+  `https://tenant001-v1demo.nol8.net:444/v1/process` (port 444; 443 is Themis),
+  valid cert, and it speaks the **same** `{"message"}->{"result":{"message"}}`
+  contract as Themis. So the existing adapter works against Aergia unchanged -
+  just point the endpoint at :444. **Config gap to fix:** add
+  `AERGIA_PROCESS_ENDPOINT="https://tenant001-v1demo.nol8.net:444/v1/process"` to
+  `config/demo.env` (Themis' :443 endpoint is correct as-is). Auth: `AERGIA_TOKEN`
+  (already in `.env`).
+- **Remaining unknown before traffic is useful:**
+  1. **Aergia policy format = RE2 patterns, NOT literals.** `demos/policies/
      build_policy.py` emits Themis literal rules; Aergia needs regex/pattern
      rules (any-email, any-SSN, any-phone, card patterns). Needs a separate
-     pattern-policy source.
+     pattern-policy source, deployed via `--target aergia` (already wired). Until
+     an RE2 policy is deployed, :444 returns text unchanged.
 - **Plan shape (once endpoint known):** mirror the Themis adapter as an Aergia
   adapter (or a `--target`-style flag on one adapter), add an `aergia` benchmark
   mode (or reuse `nol8_api` pointed at the Aergia adapter), run BOTH engines over
