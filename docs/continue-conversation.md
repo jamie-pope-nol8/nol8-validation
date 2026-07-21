@@ -459,6 +459,20 @@ yet built - this is the active design conversation. What's already true:
   a real latency comparison drive concurrency and measure server-side. Report
   pulled to Mac: `demos/benchmark/datapoint1/report/report.html`.
   (*listmatch's drop/route come from the kit's own local rules, not our policy.)
+- **Latency decomposition - DONE (2026-07-21).** `demos/benchmark/latency-
+  decompose.py` mathematically isolates raw engine time by measuring the path in
+  layers (network RTT / warm-pooled / cold-per-call TLS) and subtracting
+  transport. Result (N=100, medians): **Themis engine processing <= 0.23 ms,
+  Aergia <= 0.00 ms** - both sub-millisecond, ~97% of the per-call latency is TLS
+  handshake + network RTT. Connection pooling alone is 3x (cold 7.17 -> warm 2.38
+  ms). Engine time is an UPPER BOUND (sits in network jitter; no server-side
+  timing hook). This is THE demo thesis for a network partner (Megaport): the
+  engine is free, latency is a path problem.
+- **Demo deliverables:** narrative + numbers in `demos/benchmark/DEMO-NOTES.md`;
+  shareable one-pager artifact (private) at
+  https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230 (governance
+  + latency decomposition, Megaport-tuned). Full report at
+  `demos/benchmark/datapoint1/report/report.html`.
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.
