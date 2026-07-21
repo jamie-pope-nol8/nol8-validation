@@ -1,0 +1,270 @@
+<title>NOL8 Pre-Index Governance — Benchmark & Latency</title>
+<style>
+  :root {
+    --ground:#F3F5F9; --surface:#FFFFFF; --surface-2:#EBEFF5;
+    --ink:#0F141E; --ink-soft:#54606F; --line:#D9DFE9;
+    --signal:#1E56F0; --transport:#B0742A; --network:#6A7789; --governed:#0C9A82;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+    --maxw: 980px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#0B101A; --surface:#111927; --surface-2:#18212F;
+      --ink:#E6ECF6; --ink-soft:#93A0B4; --line:#232F42;
+      --signal:#5E8CFF; --transport:#D69A4A; --network:#8A97AC; --governed:#2AC1A6;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#F3F5F9; --surface:#FFFFFF; --surface-2:#EBEFF5;
+    --ink:#0F141E; --ink-soft:#54606F; --line:#D9DFE9;
+    --signal:#1E56F0; --transport:#B0742A; --network:#6A7789; --governed:#0C9A82;
+  }
+  :root[data-theme="dark"] {
+    --ground:#0B101A; --surface:#111927; --surface-2:#18212F;
+    --ink:#E6ECF6; --ink-soft:#93A0B4; --line:#232F42;
+    --signal:#5E8CFF; --transport:#D69A4A; --network:#8A97AC; --governed:#2AC1A6;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--font-sans); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:clamp(28px,5vw,64px) clamp(20px,4vw,40px); }
+  .eyebrow { font-family:var(--font-mono); font-size:12px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-soft); }
+  h1 { font-size:clamp(28px,5vw,46px); line-height:1.06; letter-spacing:-.02em;
+    font-weight:800; margin:.35em 0 .3em; text-wrap:balance; }
+  h1 .hl { color:var(--signal); }
+  h2 { font-size:clamp(19px,3vw,25px); letter-spacing:-.01em; font-weight:700;
+    margin:0 0 .2em; text-wrap:balance; }
+  p { color:var(--ink-soft); max-width:64ch; }
+  .lede { font-size:clamp(16px,2.2vw,19px); color:var(--ink); max-width:62ch; }
+  .num { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+  header.hero { border-bottom:1px solid var(--line); padding-bottom:clamp(24px,4vw,40px); }
+  .statrow { display:flex; flex-wrap:wrap; gap:14px 40px; align-items:flex-end; margin-top:24px; }
+  .bigstat { display:flex; flex-direction:column; gap:3px; }
+  .bigstat .v { font-family:var(--font-mono); font-weight:700; letter-spacing:-.02em;
+    font-size:clamp(30px,5vw,46px); line-height:1; color:var(--signal); font-variant-numeric:tabular-nums; }
+  .bigstat.alt .v { color:var(--ink); }
+  .bigstat .k { font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em;
+    text-transform:uppercase; color:var(--ink-soft); max-width:22ch; }
+
+  section { margin-top:clamp(38px,6vw,62px); }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+  .sec-head .tag { font-family:var(--font-mono); font-size:12px; color:var(--signal); letter-spacing:.1em; }
+  .sec-sub { margin:0 0 22px; }
+
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:clamp(18px,3vw,24px); }
+
+  /* three approaches */
+  .approaches { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+  .appr { position:relative; overflow:hidden; }
+  .appr .rail { position:absolute; left:0; top:0; bottom:0; width:4px; }
+  .appr.nil .rail { background:var(--network); }
+  .appr.re2 .rail { background:var(--transport); }
+  .appr.nol8 .rail { background:var(--signal); }
+  .appr h3 { margin:0 0 3px; font-size:12px; font-family:var(--font-mono); letter-spacing:.06em;
+    text-transform:uppercase; color:var(--ink-soft); padding-left:12px; }
+  .appr .headline { font-size:15px; font-weight:700; color:var(--ink); margin:0 0 12px; padding-left:12px; }
+  .appr .metric { font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+    font-size:clamp(26px,4vw,34px); font-weight:700; line-height:1; padding-left:12px; }
+  .appr.nil .metric { color:var(--network); }
+  .appr.re2 .metric { color:var(--transport); }
+  .appr.nol8 .metric { color:var(--signal); }
+  .appr .metric small { font-size:.42em; color:var(--ink-soft); font-weight:600; letter-spacing:.02em; }
+  .appr .desc { font-size:13px; color:var(--ink-soft); margin:12px 0 0; padding-left:12px; }
+
+  /* redaction sample */
+  .redact { font-family:var(--font-mono); font-size:13.5px; line-height:1.7; }
+  .redact .tok { color:var(--governed); font-weight:600;
+    background:color-mix(in srgb, var(--governed) 12%, transparent);
+    padding:1px 5px; border-radius:4px; white-space:nowrap; }
+  .redact .muted { color:var(--ink-soft); }
+  .arrow { color:var(--ink-soft); font-family:var(--font-mono); margin:8px 0; font-size:11px;
+    letter-spacing:.12em; text-transform:uppercase; }
+  .both { display:inline-flex; gap:8px; align-items:center; font-family:var(--font-mono);
+    font-size:12px; color:var(--governed); margin-top:16px; }
+  .both .dot { width:7px; height:7px; border-radius:50%; background:var(--governed); }
+
+  /* waterfall */
+  .wf { margin-top:2px; }
+  .wf .lbl { display:flex; justify-content:space-between; font-family:var(--font-mono);
+    font-size:13px; margin-bottom:8px; }
+  .wf .lbl b { color:var(--ink); font-weight:600; }
+  .bar { display:flex; height:38px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--line); background:var(--surface-2); }
+  .seg { display:flex; align-items:center; justify-content:center; min-width:0;
+    font-family:var(--font-mono); font-size:11px; color:#fff; font-variant-numeric:tabular-nums;
+    white-space:nowrap; }
+  .seg.net { background:var(--network); }
+  .seg.tls { background:var(--transport); }
+  .seg.eng { background:var(--signal); box-shadow:inset 0 0 0 1px rgba(255,255,255,.4); min-width:3px; }
+  .legend { display:flex; flex-wrap:wrap; gap:16px; margin-top:16px;
+    font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+  .legend span { display:inline-flex; align-items:center; gap:7px; }
+  .legend i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .callout { margin-top:16px; padding:12px 16px; border-left:3px solid var(--signal);
+    background:color-mix(in srgb, var(--signal) 8%, transparent); border-radius:0 8px 8px 0;
+    font-size:14px; color:var(--ink); }
+
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:13.5px;
+    font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:11px 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; }
+  thead th { color:var(--ink-soft); font-weight:600; font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+  tbody tr:last-child td { border-bottom:none; }
+  td .eng { color:var(--signal); font-weight:700; }
+
+  ul.take { list-style:none; padding:0; margin:0; display:grid; gap:14px; }
+  ul.take li { display:flex; gap:14px; align-items:flex-start; }
+  ul.take .n { font-family:var(--font-mono); color:var(--signal); font-size:14px; padding-top:1px; min-width:18px; }
+  ul.take b { color:var(--ink); }
+  ul.take p { margin:2px 0 0; }
+
+  footer { margin-top:clamp(40px,6vw,64px); padding-top:22px; border-top:1px solid var(--line);
+    font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+  footer p { color:var(--ink-soft); max-width:none; }
+  @media (prefers-reduced-motion:no-preference){
+    .bar .seg { animation:grow .7s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes grow { from{ flex-basis:0 !important; } }
+  }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Data Point 1 · Pre-Index Optimization · Measured on live engines</div>
+    <h1>Deterministic governance before embedding —<br><span class="hl">at hardware speed.</span></h1>
+    <p class="lede">Govern known-value risk in text before it reaches the vector index. Run on real
+      NOL8 engines — Themis (FPGA) and Aergia — over a 1,000-chunk corpus. The engines governed
+      <b>identically</b>, and the actual processing time is <b>sub-millisecond</b>: nearly all
+      observed latency is the network path.</p>
+    <div class="statrow">
+      <div class="bigstat"><span class="v">535<small> /1000</small></span>
+        <span class="k">chunks governed · 0 errors</span></div>
+      <div class="bigstat"><span class="v">0.23<small> ms</small></span>
+        <span class="k">NOL8 engine processing / call</span></div>
+      <div class="bigstat alt"><span class="v">97<small> %</small></span>
+        <span class="k">of per-call latency is network + TLS</span></div>
+      <div class="bigstat alt"><span class="v">100<small> %</small></span>
+        <span class="k">Themis / Aergia output match</span></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head"><span class="tag">01</span><h2>Three ways to handle a chunk</h2></div>
+    <p class="sec-sub">Each approach runs the same corpus. They target different things — read them as
+      distinct strategies, not a single leaderboard.</p>
+    <div class="approaches">
+      <div class="card appr nil"><div class="rail"></div>
+        <h3>Do nothing</h3>
+        <div class="headline">Everything reaches the index</div>
+        <div class="metric">0<small> governed</small></div>
+        <p class="desc">Baseline. All 43,005 tokens forwarded downstream, sensitive values included.</p>
+      </div>
+      <div class="card appr re2"><div class="rail"></div>
+        <h3>RE2 · incumbent software</h3>
+        <div class="headline">Regex patterns + boilerplate strip</div>
+        <div class="metric">395<small> touched</small></div>
+        <p class="desc">The traditional way: pattern-shaped matches and template-line removal.
+          Generic, not tied to your risk list — and it can't see a named entity it has no pattern for.</p>
+      </div>
+      <div class="card appr nol8"><div class="rail"></div>
+        <h3>NOL8 · Themis + Aergia</h3>
+        <div class="headline">Deterministic known-value governance</div>
+        <div class="metric">535<small> governed</small></div>
+        <p class="desc">Your watchlist, exactly: denied entities, watched customers, compromised
+          accounts, payment cards, internal projects, blocked IPs — replaced with governance tokens.
+          Identical on both engines, and sub-millisecond per call.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="redact">
+        <div class="muted">Customer review: Westbridge Merchant Services requested accelerated
+          enablement for the Redwood Identity workflow.</div>
+        <div class="arrow">↓ NOL8 governs →</div>
+        <div>Customer review: <span class="tok">[CUSTOMER]</span> requested accelerated enablement
+          for the <span class="tok">[PROJECT]</span> workflow.</div>
+      </div>
+      <div class="both"><span class="dot"></span>Verified byte-identical across Themis and Aergia for all 1,000 records</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="tag">02</span><h2>Where a 7&nbsp;ms call actually goes</h2></div>
+    <p class="sec-sub">The raw engine time, isolated by measuring the path in layers and subtracting
+      transport (N&nbsp;=&nbsp;100, medians, from the client box). The engine is the smallest slice.</p>
+
+    <div class="card">
+      <div class="wf">
+        <div class="lbl"><b>NOL8 · Themis (FPGA) — cold call</b><span class="num">7.17 ms total</span></div>
+        <div class="bar" role="img" aria-label="Themis: network 2.14ms, TLS 4.80ms, engine 0.23ms">
+          <div class="seg net" style="flex:2.14">net&nbsp;2.14</div>
+          <div class="seg tls" style="flex:4.80">TLS&nbsp;handshake&nbsp;4.80</div>
+          <div class="seg eng" style="flex:0.23"></div>
+        </div>
+      </div>
+      <div class="wf" style="margin-top:20px">
+        <div class="lbl"><b>NOL8 · Aergia — cold call</b><span class="num">6.18 ms total</span></div>
+        <div class="bar" role="img" aria-label="Aergia: network 2.01ms, TLS 4.45ms, engine sub-millisecond">
+          <div class="seg net" style="flex:2.01">net&nbsp;2.01</div>
+          <div class="seg tls" style="flex:4.45">TLS&nbsp;handshake&nbsp;4.45</div>
+          <div class="seg eng" style="flex:0.15"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--network)"></i>Network round-trip</span>
+        <span><i style="background:var(--transport)"></i>TLS handshake — per call, removable by pooling</span>
+        <span><i style="background:var(--signal)"></i>Engine processing</span>
+      </div>
+      <div class="callout">Reusing one connection instead of reconnecting per call drops Themis from
+        <b>7.17&nbsp;ms → 2.38&nbsp;ms</b> — a 3× cut with zero engine change. What's left is one
+        network round-trip; the engine sits inside the measurement noise.</div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="tablewrap"><table>
+        <thead><tr>
+          <th>Engine</th><th>Network RTT</th><th>Warm (pooled)</th><th>Cold (TLS/call)</th>
+          <th>TLS tax</th><th>Engine</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Themis (FPGA)</td><td>2.14 ms</td><td>2.38 ms</td><td>7.17 ms</td><td>4.80 ms</td><td><span class="eng">≤ 0.23 ms</span></td></tr>
+          <tr><td>Aergia</td><td>2.01 ms</td><td>1.73 ms</td><td>6.18 ms</td><td>4.45 ms</td><td><span class="eng">≤ 0.00 ms</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="tag">03</span><h2>What it means for the path</h2></div>
+    <ul class="take">
+      <li><span class="n">→</span><div><b>Governance is free at the compute layer.</b>
+        <p>Sub-millisecond per call means deterministic control sits inline on the data path with no
+          latency-budget conversation. The engine keeps up with the wire.</p></div></li>
+      <li><span class="n">→</span><div><b>Your latency is a networking problem, not a compute one.</b>
+        <p>~97% of the observed per-call time is TLS setup and round-trip. Shorter, warmer, more direct
+          paths translate almost 1:1 into end-to-end improvement.</p></div></li>
+      <li><span class="n">→</span><div><b>The first win is connection reuse.</b>
+        <p>Pooling connections alone is a 3× per-call improvement here, before touching anything else.</p></div></li>
+      <li><span class="n">→</span><div><b>Two engines, one policy, same answer.</b>
+        <p>Identical output across Themis and Aergia means the control is deterministic and portable —
+          the choice between engines is about placement and throughput, not behavior.</p></div></li>
+    </ul>
+  </section>
+
+  <footer>
+    <p><b>Method.</b> 1,000-chunk synthetic pre-index corpus. "Do nothing" = forward everything;
+      "RE2" = the kit's local Go regex baseline (pattern masking + boilerplate strip); "NOL8" = the
+      same literal known-value policy deployed to Themis (:443) and Aergia (:444), measured over the
+      network via the adapter. Governance counts are exact ("chunks touched" for RE2 = masked + dropped;
+      "chunks governed" for NOL8 = chunks containing a governed value). RE2 and NOL8 target different
+      content, so their token counts are not a like-for-like comparison. Latency decomposed from the
+      field client box, N = 100 per layer, medians; engine time is bounded as (warm − network RTT) and
+      lands within network jitter, so it is an <b>upper bound</b> — no server-side timing hook is
+      exposed. Cold = new TLS connection per request (current adapter); warm = pooled. Not a
+      concurrency/throughput saturation test.</p>
+  </footer>
+</div>

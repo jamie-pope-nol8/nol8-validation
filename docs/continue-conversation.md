@@ -468,11 +468,18 @@ yet built - this is the active design conversation. What's already true:
   ms). Engine time is an UPPER BOUND (sits in network jitter; no server-side
   timing hook). This is THE demo thesis for a network partner (Megaport): the
   engine is free, latency is a path problem.
-- **Demo deliverables:** narrative + numbers in `demos/benchmark/DEMO-NOTES.md`;
-  shareable one-pager artifact (private) at
-  https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230 (governance
-  + latency decomposition, Megaport-tuned). Full report at
-  `demos/benchmark/datapoint1/report/report.html`.
+- **Demo deliverables:** narrative + numbers in `demos/benchmark/DEMO-NOTES.md`.
+  THE report to show is `demos/benchmark/pre-index-report.html` (committed,
+  self-contained, openable locally) - three approaches (**Do nothing / RE2 /
+  NOL8**) + the raw-FPGA latency decomposition. Same page as artifact (private):
+  https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230 (the user
+  reported the artifact link not opening for them - the LOCAL file is the reliable
+  copy). The kit's own `datapoint1/report/report.html` template is hardcoded to
+  the old kit modes (shows `nol8sim`/`listmatch`) - not for showing; superseded by
+  `pre-index-report.html`. Report framing decision: drop `nol8sim` (real now) and
+  the local `listmatch` baseline (confusing); RE2 stays as the incumbent-software
+  comparison, NOT our engine (we're listMatch-only). Fixing the kit template
+  itself is deferred (heavy JS surgery; the custom report is cleaner).
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.

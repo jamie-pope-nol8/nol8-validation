@@ -47,10 +47,34 @@ networking conversation, not a compute one.
 - Not a concurrency/saturation test. A real throughput/latency-under-load number
   needs parallel clients + server-side timing (next step if the perf angle matters).
 
+## The report: three approaches, not four modes
+
+The report is framed as three strategies for a chunk, because that is how a buyer
+reads it:
+
+- **Do nothing** (nofilter) - forward everything. 0 governed.
+- **RE2** (incumbent software) - the traditional regex way, for context. Catches
+  pattern shapes + strips boilerplate; 395 chunks touched. NOT our engine - it's
+  the thing we compare against.
+- **NOL8** (Themis + Aergia) - deterministic known-value governance. 535 governed,
+  identical on both engines, sub-ms per call.
+
+Dropped from the view: `nol8sim` (a placeholder - we have real results now) and
+`listmatch` (the kit's LOCAL Go list-matcher - confusing next to the real NOL8
+engines that do the same job for real). RE2 and NOL8 target different content, so
+do NOT stage it as a token-reduction race - NOL8's story is deterministic
+governance at hardware speed.
+
 ## Artifacts to show
 
-- **One-pager (shareable):** https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230
-- **Full benchmark report:** `demos/benchmark/datapoint1/report/report.html`
-  (regenerate with `demos/benchmark/run-live.sh` on EC2).
+- **THE report (open locally):** `demos/benchmark/pre-index-report.html` - the
+  three-approach benchmark + the raw-FPGA latency decomposition, self-contained.
+  Double-click / open in a browser. Committed, so it travels with the repo.
+- **Same page, shareable link:** https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230
+  (private; share from the page's share menu. If the link won't open, use the
+  local file above.)
+- **Kit's original report** (`datapoint1/report/report.html`, from run-live.sh) is
+  the raw detailed backup, but its template is hardcoded to the kit's old modes
+  (shows `nol8sim`/`listmatch`) - use `pre-index-report.html` for showing.
 - **Reproduce the latency numbers:** `python3 demos/benchmark/latency-decompose.py`
   on EC2 (`set -a; source .env; set +a` first).
