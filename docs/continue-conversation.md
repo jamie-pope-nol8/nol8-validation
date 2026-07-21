@@ -254,6 +254,14 @@ live endpoints/config, does not import from `framework/`.
   drop/route hit 52%. Themis is literal (can drop KNOWN boilerplate via a drop
   sentinel); broad filler-dropping is pattern-based (RE2/Aergia). Decide whether DP1
   leads with governance (current) or optimization (add drop rules).
+  **DROP verified live 2026-07-21:** policy `"password" -> "[DROP]"` on Themis; a
+  message with "password" came back `here is your [DROP]: 1324343` on direct curl,
+  and `{"action":"drop","text":""}` through the adapter with `THEMIS_DROP_TOKEN=
+  "[DROP]"` (dropped chunk = 0 forwarded). So chunk-level drop works. NOTE: Themis
+  is literal, so it can map a specific literal to `[DROP]` (drop the whole chunk) or
+  to `""` (strip that text inline, keep the rest - not yet tested). Tenant currently
+  has the 1-rule drop-test policy, NOT the 42-rule starter - redeploy the starter or
+  the new optimization policy before the next benchmark run.
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
