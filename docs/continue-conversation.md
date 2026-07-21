@@ -146,20 +146,19 @@ valid certs, both speaking `{"message"}->{"result":{"message"}}`.**
 `starter-known-values.nol` deployed to both (`--target themis` and `--target
 aergia`) produces BYTE-IDENTICAL literal masking:
 `[CARD]`/`[DENIED]`/`[PROJECT]`/`[BLOCKED_IP]` on both :443 and :444. So there is
-no separate "Themis policy" vs "Aergia policy" for literals - one file, both
-engines. Aergia is a superset: it ALSO does RE2 patterns (see below).
+no separate "Themis policy" vs "Aergia policy" - one file, both engines. **Both
+are listMatch (literal) engines; scope is listMatch only, NO regex** (Aergia
+can't do regex yet - see [[demo-scope-listmatch-only]]).
 
 **Aergia reload has a propagation delay.** The control-plane deploy returns 200
 before the :444 data plane swaps policy; the first read right after a deploy can
 return the STALE prior policy. Give it a few seconds (or poll until output
 matches) before trusting a fresh Aergia deploy.
 
-**We overwrote Aergia's prior policy.** Before our deploy, Aergia's active policy
-masked SSNs via regex (`123-45-6789 -> [SSN]`) - proof its RE2 capability is real
-and that a pattern policy already existed there. Our `REPLACE` deploy of the
-literal starter wiped it; Aergia currently masks the literal known values and no
-longer masks SSNs. To restore/author Aergia pattern rules we need its RE2 rule
-syntax (the remaining open item).
+**We overwrote Aergia's prior policy.** Before our deploy, Aergia masked
+`123-45-6789 -> [SSN]` - almost certainly a LITERAL rule for that exact value in
+the old demo policy (NOT regex; the engine can't do regex yet). Our `REPLACE`
+deploy of the literal starter wiped it. Disposable sandbox, redeployable.
 
 **Treat `themis-demo` with care** - policy deploys via the API are fine (the
 recovery path); service restarts and system changes are not ours to make.
@@ -400,10 +399,12 @@ Reading it honestly: **Themis masked 535/1000 chunks, 0 errors** - every one a
 KNOWN governed value. The ~138 chunks/sec is single-threaded end-to-end HTTP
 round-trips through the adapter (~7 ms each, matches Themis latency), NOT Themis
 throughput - do not quote it as an engine number. Themis's 2.5% token reduction
-is low precisely because it's literal: it governs known values and (correctly)
-leaves regex-class PII (emails/SSNs/phones) untouched. `re2` catches those
-patterns; `listmatch`'s drop/route come from the kit's own richer local rules.
-**That literal-vs-pattern split is the whole reason we need Aergia next.**
+is low precisely because it's literal: it governs the known values in the policy
+and leaves everything else. The kit's `re2`/`nol8sim` modes are aspirational
+regex code from before endpoints existed - ignore them ([[demo-scope-listmatch-
+only]]). **Scope is listMatch only.** Aergia (next) is a SECOND listMatch engine
+to compare against Themis on the same literal policy - a performance story, not a
+coverage one.
 
 Report (self-contained HTML, gitignored): pulled to the Mac at
 `demos/benchmark/datapoint1/report/report.html`. Regenerate anytime with
@@ -429,27 +430,18 @@ yet built - this is the active design conversation. What's already true:
 - **Same policy, both engines - CONFIRMED.** One `.nol` file deploys to Themis
   AND Aergia and gives identical literal masking. No separate policy source for
   literals. `demos/policies/build_policy.py` output is engine-agnostic.
-- **Remaining open item: Aergia RE2 pattern syntax - BLOCKED, needs engineering.**
-  Aergia is a superset (it did native SSN regex before we overwrote it), but the
-  `.nol` literal format CANNOT express a regex rule. Tested 2026-07-21:
-  - `"\d{3}-\d{2}-\d{4}" -> "[SSN]"` - loads, matched as a LITERAL (no SSN mask).
-  - `"\\d{3}-\\d{2}-\\d{4}"` (doubled backslash) - same, literal.
-  - `/\d{3}-\d{2}-\d{4}/ -> "[SSN]"` (slash-delimited) - deploy REJECTED, invalid
-    syntax ("target service rejected the policy deployment").
-  So the LHS is always a literal in this format. Aergia's pattern rules use a
-  different declaration that is undocumented in the repo + kit; the policy
-  endpoint won't read back a loaded policy (GET -> "method not allowed"). **Ask
-  engineering for the Aergia RE2 rule syntax (or a sample Aergia pattern policy /
-  the prior SSN policy we overwrote).** Until then the COVERAGE axis is blocked;
-  the PERFORMANCE axis (same literal policy, both engines) is not.
-- **Plan shape:** run BOTH engines over the same corpus via the adapter (point at
-  :443, then :444) and emit ONE combined report. Two demo axes, both now real:
-  1. **Performance:** same policy, same corpus, Themis (FPGA) vs Aergia (RE2) -
-     the throughput/latency comparison. (Measure adapter overhead out, or run the
-     Go harness `nol8_api` mode twice with the endpoint swapped.)
-  2. **Coverage:** add RE2 pattern rules to the Aergia policy (once syntax known)
-     so Aergia ALSO catches emails/SSNs/phones the literal policy misses. Themis =
-     known values only; Aergia = known values + pattern classes.
+- **SCOPE: listMatch only, NO regex** ([[demo-scope-listmatch-only]]). Aergia
+  can't do regex yet; we only test/demo literal list matching. Confirmed dead end
+  (do not retry): the `.nol` LHS is always a literal - `"\d{3}-\d{2}-\d{4}"` and
+  doubled-backslash both matched literally, `/\d/`-slash form was rejected on
+  deploy. Ignore regex until the engine supports it.
+- **Plan shape (listMatch performance/behavior):** run BOTH engines over the same
+  corpus with the SAME literal starter policy, via the adapter (point at :443 for
+  Themis, :444 for Aergia), and emit ONE combined report. Both should mask
+  identically (proven), so the comparison is **performance** - Themis (FPGA) vs
+  Aergia - plus the local `nofilter`/`listmatch` software baselines. Run the Go
+  harness `nol8_api` mode twice with the endpoint swapped, relabel the two API
+  rows (themis/aergia), stitch into one report.
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.
