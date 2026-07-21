@@ -110,7 +110,7 @@ a.foot:hover{{color:var(--accent) !important;}}
   .logo-dark{{display:none !important;}} .logo-light{{display:block !important;}}
   [data-reveal]{{opacity:1 !important;transform:none !important;}}
   [data-wf]{{opacity:1 !important;}}
-  .method-body{{display:block !important;}}
+  .method-body,.raw-body{{display:block !important;}}
   [data-card],section,.avoid-break{{break-inside:avoid;}}
   @page{{margin:14mm;}}
 }}
@@ -333,6 +333,49 @@ def method(d) -> str:
   </section>"""
 
 
+def raw_section(d) -> str:
+    raw = d.get("raw")
+    if not raw:
+        return ""
+    head = "".join(
+        f'<th style="text-align:{"left" if i == 0 else "right"};padding:12px 14px;color:var(--fg3);'
+        f'font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;'
+        f'white-space:nowrap;border-bottom:1px solid var(--rowline);">{esc(c)}</th>'
+        for i, c in enumerate(raw["columns"])
+    )
+    body = ""
+    for r_i, row in enumerate(raw["rows"]):
+        last = r_i == len(raw["rows"]) - 1
+        nol8 = "NOL8" in row[0] or "Themis" in row[0]
+        div = "" if last else "border-bottom:1px solid var(--hairline-soft);"
+        cells = ""
+        for i, cell in enumerate(row):
+            align = "left" if i == 0 else "right"
+            color = "var(--accent)" if (nol8 and i == 0) else ("var(--fg1)" if i == 0 else "var(--fg2)")
+            weight = "600" if i == 0 else "400"
+            cells += (f'<td style="text-align:{align};padding:13px 14px;color:{color};font-weight:{weight};'
+                      f'white-space:nowrap;{div}">{esc(cell)}</td>')
+        body += f"<tr>{cells}</tr>"
+    return f"""
+  <section id="appendix" data-section="appendix" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
+    <div style="max-width:1200px;margin:0 auto;padding:64px 40px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">Appendix · {esc(raw['heading'])}</span>
+        <button id="raw-toggle" class="no-print" style="border:1px solid var(--hairline);background:transparent;color:var(--fg2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;">Show</button>
+      </div>
+      <div class="raw-body" style="display:none;margin-top:20px;">
+        <div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:6px 6px;overflow-x:auto;">
+          <table style="width:100%;min-width:820px;border-collapse:collapse;font-variant-numeric:tabular-nums;letter-spacing:-.01em;font-size:13px;">
+            <thead><tr>{head}</tr></thead>
+            <tbody>{body}</tbody>
+          </table>
+        </div>
+        <p style="color:var(--fg3);font-size:12px;line-height:1.55;max-width:88ch;margin:16px 0 0;">{esc(raw['note'])}</p>
+      </div>
+    </div>
+  </section>"""
+
+
 def footer(d) -> str:
     f = d["footer"]
     nxt = "".join(f'<span style="color:var(--fg2);font-size:14px;">{esc(x)}</span>' for x in f["next"])
@@ -390,7 +433,7 @@ def top_bar(d) -> str:
     <div id="nav-scrim" style="position:fixed;inset:66px 0 0 0;z-index:40;background:rgba(0,0,0,0.35);"></div>
     <div style="position:fixed;top:66px;right:0;z-index:45;width:min(340px,86vw);background:var(--bg);border-left:1px solid var(--hairline);border-bottom:1px solid var(--hairline);padding:20px 20px 26px;animation:navIn .28s cubic-bezier(.2,.6,.2,1);">
       <div style="color:var(--fg3);font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:0 8px 10px;">On this page</div>
-      {"".join(f'<a class="navlink" data-target="{sid}" href="#{sid}" style="display:flex;align-items:center;gap:12px;padding:12px 8px;border-radius:8px;text-decoration:none;font-size:16px;border-bottom:1px solid var(--hairline-soft);"><span class="navdot" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;"></span>{label}</a>' for sid, label in [("overview","Overview"),("benchmark","The benchmark"),("latency","Where the time goes"),("meaning","What it means"),("method","Method")])}
+      {"".join(f'<a class="navlink" data-target="{sid}" href="#{sid}" style="display:flex;align-items:center;gap:12px;padding:12px 8px;border-radius:8px;text-decoration:none;font-size:16px;border-bottom:1px solid var(--hairline-soft);"><span class="navdot" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;"></span>{label}</a>' for sid, label in [("overview","Overview"),("benchmark","The benchmark"),("latency","Where the time goes"),("meaning","What it means"),("method","Method"),("appendix","Full data")])}
     </div>
   </div>"""
 
@@ -440,6 +483,9 @@ SCRIPT = """
   // ---- method toggle ----
   var mt=document.getElementById('method-toggle'), mb=document.querySelector('.method-body');
   mt.addEventListener('click',function(){ var hide=mb.style.display!=='none'; mb.style.display=hide?'none':'block'; mt.textContent=hide?'Show':'Hide'; });
+  // ---- raw data appendix (collapsed by default) ----
+  var rt=document.getElementById('raw-toggle'), rb=document.querySelector('.raw-body');
+  if(rt&&rb){ rt.addEventListener('click',function(){ var open=rb.style.display==='none'; rb.style.display=open?'block':'none'; rt.textContent=open?'Hide':'Show'; }); }
   // ---- back to top + scroll-spy ----
   var btt=document.getElementById('back-to-top');
   var sections=[].slice.call(document.querySelectorAll('[data-section]'));
@@ -469,7 +515,7 @@ SCRIPT = """
 def build(run: dict) -> str:
     body = "".join([
         top_bar(run), hero(run), stat_band(run), benchmark(run),
-        latency(run), meaning(run), method(run), footer(run), BACK_TO_TOP,
+        latency(run), meaning(run), method(run), raw_section(run), footer(run), BACK_TO_TOP,
     ])
     return f"""<!doctype html>
 <html lang="en">

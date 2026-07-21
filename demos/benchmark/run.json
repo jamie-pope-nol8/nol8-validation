@@ -73,6 +73,17 @@
   ],
   "methodNote": "Not a concurrency or throughput saturation test.",
 
+  "raw": {
+    "heading": "Full benchmark data",
+    "note": "Per-approach measurements from the 1,000-chunk run. Throughput (chunks/sec) is harness end-to-end and includes the network round-trip for the engines, so it is not an engine rate. CPU and max RSS are the harness client process.",
+    "columns": ["Approach", "Kept", "Masked", "Dropped", "Routed", "Tokens fwd", "Reduction", "Chunks/sec", "CPU s", "Elapsed s", "Max RSS"],
+    "rows": [
+      ["Do nothing", "1000", "0", "0", "0", "43,005", "0.0%", "257,363", "0.00", "0.01", "7.7 MB"],
+      ["Aergia (RE2 baseline)", "465", "535", "0", "0", "41,910", "2.5%", "149", "0.26", "6.69", "11.4 MB"],
+      ["Themis (NOL8 · FPGA)", "465", "535", "0", "0", "41,910", "2.5%", "137", "0.26", "7.28", "11.2 MB"]
+    ]
+  },
+
   "footer": {
     "tagline": "The AI data plane. Hardware-class, inline, wire-speed. Governance runs free at the compute layer.",
     "next": [ "Data Point 02 · Throughput at load", "Inline governance on the fabric" ],
