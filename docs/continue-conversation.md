@@ -21,13 +21,13 @@ can continue without reconstructing context from chat history.
 > **copied out** into `demos/benchmark/datapoint2/`. Scoped and ready to build; the
 > real-engine wiring is the main task (see "DP2" below).
 >
-> **One open loop:** the user made a small (~51 byte) edit to the Design template in
-> `/private/tmp/HTML Report redesign/Pre-Index Web Report.dc.html`. Its data and all
-> rendered copy are unchanged and the render is visually identical, so the change is
-> a non-visible markup/CSS tweak that could not be isolated without the prior file.
-> Asked the user what it was; apply it to `make-report.py` when known. NOTE our
-> report has intentionally diverged from that template (optimization vs the
-> template's governance copy); our renderer is our own `make-report.py`.
+> **Template tweak applied (2026-07-21):** the user's small change was the stat band
+> background - it was on the full-width `<section>` (`background:var(--card)`), so the
+> card surface bled edge-to-edge past the outer cards. Moved it onto the stat GRID so
+> it stops at the first card's left border, with page background beyond. Full-width
+> top/bottom rules kept. Both themes. NOTE our report has intentionally diverged from
+> the Design template (optimization vs the template's governance copy); our renderer
+> is our own `make-report.py`.
 
 This file is project *state*. Three companions carry the rest:
 
@@ -272,13 +272,14 @@ framework's tested matcher as the independent oracle).
   expected actions, an oracle sim). Per-mode `applyPreInference*` / `applyPostInference*`
   functions. The kit's `nol8_api_infer` mode calls a placeholder `/infer-control` API
   that our engines do NOT have.
-- **>>> THE BUILD (next):**
-  1. Boundary policy: a literal `.nol` built from the reference lists, mapping each
-     list to a sentinel/replacement (block_phrases -> `[BLOCK]`, route/flagged/denied
-     -> `[ROUTE]`, payment/account -> `[MASKED_*]`, internal_projects -> `[TAG_INTERNAL]`,
-     output_block -> `[BLOCKED_OUTPUT]`, output_tag -> `[TAG_PRIVILEGED]`). Same file
-     to both engines. (Mirror `build_policy.py`.)
-  2. Real-engine modes `themis_api_infer` / `aergia_api_infer`: call the engine at
+- **>>> THE BUILD:**
+  1. **DONE - Boundary policy:** `demos/policies/build_boundary_policy.py` reads the
+     DP2 reference lists and emits `demos/policies/boundary.nol` (19 rules, 9 lists).
+     Sentinels: block_phrases->`[BLOCK]`, route/flagged/denied->`[ROUTE]`, payment->
+     `[MASK_CARD]`, account->`[MASK_ACCT]`, internal->`[TAG_INT]`, output_block->
+     `[BLOCK_OUT]`, output_tag->`[TAG_PRIV]` (all <=15 chars). Reuses build_policy's
+     ISSUE-005/004 guards; the real lists passed the containment check. Tracked.
+  2. **NEXT - Real-engine modes** `themis_api_infer` / `aergia_api_infer`: call the engine at
      BOTH control points (govern the prompt, then govern the model-stub output) via
      the sentinel-extended adapter, deriving block/mask/route/tag from which sentinel
      appears. This is the DP1 drop-sentinel pattern generalized. (The adapter already

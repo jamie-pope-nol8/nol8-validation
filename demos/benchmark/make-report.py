@@ -146,9 +146,9 @@ def stat_band(d) -> str:
             <div style="color:var(--fg3);font-size:12.5px;line-height:1.4;margin-top:10px;">{esc(s["label"])}</div>
           </div>"""
     return f"""
-  <section style="border-top:1px solid var(--hairline-soft);border-bottom:1px solid var(--hairline-soft);background:var(--card);">
+  <section style="border-top:1px solid var(--hairline-soft);border-bottom:1px solid var(--hairline-soft);">
     <div style="max-width:1200px;margin:0 auto;padding:0 40px;">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);">{cells}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);background:var(--card);">{cells}
       </div>
     </div>
   </section>"""
