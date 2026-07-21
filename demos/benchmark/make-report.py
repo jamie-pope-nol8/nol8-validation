@@ -4,7 +4,7 @@
 Reproduces the Design handoff (`Pre-Index Web Report.dc.html`) as a single static
 HTML file: brand fonts, logos, and the hero pattern are inlined as data URIs, so
 the file opens anywhere and prints to a clean light PDF leave-behind (the "deck").
-Interactivity (theme toggle, engine-compare tabs, nav, back-to-top, scroll-reveal)
+Interactivity (theme toggle, engine-compare tabs, nav scroll-spy, back-to-top)
 is vanilla JS and degrades to fully-visible content with no JS and in print.
 
   python demos/benchmark/make-report.py \
@@ -58,7 +58,7 @@ def logo(name: str) -> str:
     return data_uri(BRAND / "assets" / name, "image/svg+xml")
 
 
-# ---- CSS: tokens (dark default), light override, print (light), reveal ----
+# ---- CSS: tokens (dark default), light override, print (light) ----
 def build_css() -> str:
     pattern = data_uri(BRAND / "assets" / "brand-pattern.png", "image/png")
     return f"""
@@ -90,12 +90,9 @@ a.cta:hover{{background:var(--accent-hover) !important;}}
 a.ghost:hover{{background:var(--card) !important;}}
 a.foot:hover{{color:var(--accent) !important;}}
 .trow:hover{{background:var(--tint);}}
-[data-rpt].js-reveal [data-reveal]{{opacity:0;transform:translateY(18px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1);}}
-[data-rpt].js-reveal [data-reveal].in{{opacity:1;transform:none;}}
 @keyframes navIn{{from{{opacity:0;transform:translateY(-10px);}}to{{opacity:1;transform:none;}}}}
 @media (prefers-reduced-motion:reduce){{
   html{{scroll-behavior:auto;}}
-  [data-rpt].js-reveal [data-reveal]{{opacity:1 !important;transform:none !important;transition:none;}}
 }}
 @media print{{
   [data-rpt]{{
@@ -108,7 +105,6 @@ a.foot:hover{{color:var(--accent) !important;}}
   body{{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
   .no-print{{display:none !important;}}
   .logo-dark{{display:none !important;}} .logo-light{{display:block !important;}}
-  [data-reveal]{{opacity:1 !important;transform:none !important;}}
   [data-wf]{{opacity:1 !important;}}
   .method-body,.raw-body{{display:block !important;}}
   [data-card],section,.avoid-break{{break-inside:avoid;}}
@@ -126,7 +122,7 @@ def hero(d) -> str:
       <div style="position:absolute;inset:0;background:linear-gradient(100deg,var(--bg) 6%,rgba(var(--herofade),0.55) 42%,rgba(var(--herofade),0) 74%);"></div>
     </div>
     <div style="position:relative;max-width:1200px;margin:0 auto;padding:64px 40px 56px;">
-      <div data-reveal style="max-width:720px;">
+      <div style="max-width:720px;">
         <div style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">{esc(d["eyebrow"])}</div>
         <h1 style="font-family:var(--font-display);font-weight:500;font-size:56px;line-height:1.03;letter-spacing:-.015em;color:var(--fg1);margin:22px 0 0;">{esc(h["lead"])}<span style="color:var(--accent);">{esc(h["accent"])}</span></h1>
         <p style="color:var(--fg2);font-size:18px;line-height:1.6;max-width:60ch;margin:24px 0 0;">{esc(d["lede"])}</p>
@@ -149,7 +145,7 @@ def stat_band(d) -> str:
             <div style="color:var(--fg3);font-size:12.5px;line-height:1.4;margin-top:10px;">{esc(s["label"])}</div>
           </div>"""
     return f"""
-  <section data-reveal style="border-top:1px solid var(--hairline-soft);border-bottom:1px solid var(--hairline-soft);background:var(--card);">
+  <section style="border-top:1px solid var(--hairline-soft);border-bottom:1px solid var(--hairline-soft);background:var(--card);">
     <div style="max-width:1200px;margin:0 auto;padding:0 40px;">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);">{cells}
       </div>
@@ -190,7 +186,7 @@ def benchmark(d) -> str:
     return f"""
   <section id="benchmark" data-section="benchmark" style="scroll-margin-top:80px;">
     <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
-      <div data-reveal>
+      <div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
           <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">01 · The benchmark</span>
           <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
@@ -198,9 +194,9 @@ def benchmark(d) -> str:
         <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;max-width:20ch;">{esc(b['heading'])}</h2>
         <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:66ch;margin:14px 0 0;">{esc(b['lede'])}</p>
       </div>
-      <div data-reveal style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:36px;">{cards}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:36px;">{cards}
       </div>
-      <div data-reveal data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:10px;padding:26px 28px;margin-top:18px;">
+      <div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:10px;padding:26px 28px;margin-top:18px;">
         <div style="color:var(--fg3);font-size:13.5px;line-height:1.9;">{esc(r['before'])}</div>
         <div style="color:var(--accent);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:14px 0 10px;">NOL8 governs &rsaquo;</div>
         <div style="font-size:14.5px;line-height:2;color:var(--fg2);">{after}</div>
@@ -253,7 +249,7 @@ def latency(d) -> str:
     return f"""
   <section id="latency" data-section="latency" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
     <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
-      <div data-reveal>
+      <div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
           <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">02 · Where the time goes</span>
           <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
@@ -261,7 +257,7 @@ def latency(d) -> str:
         <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;">{esc(lat['heading'])}</h2>
         <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:66ch;margin:14px 0 0;">{esc(lat['lede'])}</p>
       </div>
-      <div data-reveal data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:28px 30px;margin-top:34px;">
+      <div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:28px 30px;margin-top:34px;">
         <div class="no-print" style="display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
           <span style="color:var(--fg3);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-right:4px;">Compare</span>
           <button class="etab" data-view="both" style="cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 15px;border-radius:999px;">Both</button>
@@ -275,7 +271,7 @@ def latency(d) -> str:
         </div>
         <div style="margin-top:22px;padding:14px 18px;border-left:3px solid var(--accent);background:var(--tint);border-radius:0 8px 8px 0;font-size:14px;line-height:1.55;color:var(--fg1);">{esc(lat['callout'])}</div>
       </div>
-      <div data-reveal data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:8px 8px;margin-top:18px;overflow-x:auto;">
+      <div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:8px 8px;margin-top:18px;overflow-x:auto;">
         <div style="min-width:640px;font-variant-numeric:tabular-nums;letter-spacing:-.01em;">
           <div style="display:grid;grid-template-columns:1.5fr repeat(5,1fr);border-bottom:1px solid var(--rowline);">{head}
           </div>{rows}
@@ -297,14 +293,14 @@ def meaning(d) -> str:
     return f"""
   <section id="meaning" data-section="meaning" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
     <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
-      <div data-reveal>
+      <div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
           <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">03 · What it means</span>
           <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
         </div>
         <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;">{esc(d['meaning']['heading'])}</h2>
       </div>
-      <div data-reveal style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:38px 56px;margin-top:34px;">{items}
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:38px 56px;margin-top:34px;">{items}
       </div>
     </div>
   </section>"""
@@ -500,13 +496,9 @@ SCRIPT = """
     });
   }
   window.addEventListener('scroll',spy,{passive:true});
-  // ---- scroll reveal ----
-  root.classList.add('js-reveal');
-  var reveals=[].slice.call(root.querySelectorAll('[data-reveal]'));
-  if('IntersectionObserver' in window){
-    var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); },{rootMargin:'0px 0px -6% 0px',threshold:0.06});
-    reveals.forEach(function(el){ if(el.getBoundingClientRect().top<window.innerHeight*0.92) el.classList.add('in'); else io.observe(el); });
-  } else { reveals.forEach(function(el){ el.classList.add('in'); }); }
+  // Content is visible by default (no fade-gating), so nothing can get stuck
+  // hidden if the page is wrapped by another runtime or JS partially fails.
+  // Scroll-spy nav and back-to-top stay live.
   paintTheme(); paintEngine('both'); spy();
 })();
 </script>"""

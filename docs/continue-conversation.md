@@ -19,10 +19,16 @@ can continue without reconstructing context from chat history.
 > every divergence a strip, zero on redaction. Verifier: `demos/benchmark/
 > verify-oracle.py`. Finding logged: `demos/benchmark/findings/aergia-strip-
 > corruption.md`. Story is honest and earned ([[benchmark-integrity-no-rigging]]).
-> **NEXT:** (a) sync the updated Design template in `/private/tmp/HTML Report
-> redesign/`; decide whether DP1's report leads with governance (current) or
-> optimization (stronger, needs the divergence told carefully). Then: Datapoint 2
-> (scoped), agentic-mesh-lab review, Datapoint 3.
+> **Template synced (2026-07-21):** compared our report to Design's 14:13 export -
+> copy/data 100% in sync, 2x2 "What it means" grid matches. Mirrored Design's fix:
+> removed the fragile opacity:0 fade-gating (content visible by default), renamed
+> away from "reveal" (zero occurrences), kept scroll-spy + back-to-top. The left
+> "reveal slides" hamburger was reveal.js from a preso wrapper, never in our
+> standalone output (our report has one right-side nav; serve it standalone).
+> **NEXT:** decide whether DP1's report leads with governance (current headline) or
+> optimization (64% ship-less + the correctness gap, stronger but needs the
+> divergence told carefully). Then: Datapoint 2 (scoped), agentic-mesh-lab review,
+> Datapoint 3.
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.
@@ -251,8 +257,10 @@ live endpoints/config, does not import from `framework/`.
   / Aergia RE2 baseline / NOL8 Themis FPGA + latency decomposition). Includes a
   **collapsed "Full benchmark data" appendix** (raw per-approach table, Show
   toggle, auto-expanded in print). Report tracks the Design template in `/private/
-  tmp/HTML Report redesign/` (re-check it for updates - last synced its 13:28
-  change: takeaways are a fixed 2-column grid). The appendix measures **data
+  tmp/HTML Report redesign/` (re-check it for updates - **synced its 14:13 export**:
+  2x2 takeaways grid, and removed the opacity:0 fade-gating so content is visible by
+  default, renamed away from "reveal", kept scroll-spy + back-to-top; serve the
+  report standalone, not in a reveal.js/preso wrapper). The appendix measures **data
   forwarded** (payload that becomes embeddings), NOT test-harness CPU/RSS (those
   only differ because of the client+adapter we add to test, so they mislead -
   dropped 2026-07-21). **Open story question:** DP1 is "Pre-Index OPTIMIZATION"

@@ -116,7 +116,11 @@ python demos/benchmark/make-report.py         # -> demos/benchmark/pre-index-rep
 ```
 
 - **Web (default):** open `pre-index-report.html` in a browser. Dark theme, sticky
-  nav, engine-compare tabs, scroll-reveal. Interactivity degrades to fully-visible.
+  nav (scroll-spy), engine-compare tabs, back-to-top. All content is visible by
+  default (no fade-gating), so nothing can get stuck hidden if the page is wrapped
+  by another runtime or JS partially fails. Serve/open it as a standalone HTML page,
+  NOT inside a slide/preso harness (a reveal.js wrapper injects its own left-side
+  "reveal slides" hamburger, which is not part of the report).
 - **Deck / leave-behind:** the same file. Browser Export -> PDF triggers the
   `@media print` block, which forces the light (cream) palette and hides nav/tabs.
   That is the whole web/deck story - no separate build.
