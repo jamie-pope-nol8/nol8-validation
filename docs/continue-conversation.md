@@ -476,10 +476,14 @@ yet built - this is the active design conversation. What's already true:
   reported the artifact link not opening for them - the LOCAL file is the reliable
   copy). The kit's own `datapoint1/report/report.html` template is hardcoded to
   the old kit modes (shows `nol8sim`/`listmatch`) - not for showing; superseded by
-  `pre-index-report.html`. Report framing decision: drop `nol8sim` (real now) and
-  the local `listmatch` baseline (confusing); RE2 stays as the incumbent-software
-  comparison, NOT our engine (we're listMatch-only). Fixing the kit template
-  itself is deferred (heavy JS surgery; the custom report is cleaner).
+  `pre-index-report.html`. Report framing decisions: drop `nol8sim` (real now) and
+  the local `listmatch` baseline (confusing); the incumbent-software comparison is
+  labelled **"Traditional regex (software)"**, NEVER "RE2" - the team calls Aergia
+  "the RE2 engine", so "RE2" as a label collides. Engine-time column shows
+  **"< 0.3 ms" for BOTH engines** (upper bound, below the network floor) - the
+  earlier "<=0.00 / 0.23 ms" split was measurement noise and read as broken.
+  Fixing the kit template itself is deferred (heavy JS surgery; custom report is
+  cleaner).
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.
