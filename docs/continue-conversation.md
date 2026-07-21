@@ -310,6 +310,25 @@ framework's tested matcher as the independent oracle).
 
 ---
 
+# Queued - DP1 report: before/after cards do not show the divergence clearly
+
+User feedback (2026-07-21): the appendix before/after sample cards do not visibly
+contrast the Themis vs Aergia payload. `chunk-0000001` (the FIRST card) is the
+weakest example - it is govern+strip, so the redaction is byte-identical on both
+engines and dominates the card; the only difference is a tiny appended `ault.`
+fragment that nothing highlights, so the two payloads read as "the same." Fix (do
+NOT change other report behavior):
+1. Reorder so a PURE-STRIP chunk leads (`chunk-0000002` or `-0000006`: Themis blank
+   vs Aergia `ault. / ssed early.` - a stark clean-vs-garbage contrast). Demote or
+   drop the govern+strip card, or keep it last as the parity note.
+2. Visually HIGHLIGHT the leftover fragments in the RE2 box (marked/underlined span,
+   or a "Themis removed this, Aergia kept it" cue) so the divergence reads instantly
+   instead of being an easy-to-miss footnote.
+3. Optionally annotate `chunk-0000001` as "redaction identical (parity); Aergia added
+   a stray fragment," so it reinforces rather than dilutes.
+Implementation lives in `_samples()` / `_sample_row()` in `make-report.py` and the
+`raw.samples.items` order in `run.json`.
+
 # Deferred / backlog
 
 - Full `main.py` layer-split (Tier 5 remainder) - structural, skip until it matters.
