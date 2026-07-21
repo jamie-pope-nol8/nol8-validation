@@ -262,6 +262,20 @@ live endpoints/config, does not import from `framework/`.
   to `""` (strip that text inline, keep the rest - not yet tested). Tenant currently
   has the 1-rule drop-test policy, NOT the 42-rule starter - redeploy the starter or
   the new optimization policy before the next benchmark run.
+  **OPTIMIZATION POLICY BUILT + BIG FINDING (2026-07-21):**
+  `demos/policies/build_optimization_policy.py` -> `optimization.nol` = 42
+  governance redact rules + 10 strip rules (top repeated filler sentences -> "").
+  Run with `POLICY=demos/policies/optimization.nol bash demos/benchmark/run-live.sh`.
+  Result: **Themis forwards 15,343 tokens (64.3% reduction)**, huge "ship less"
+  win. BUT **Themis and Aergia DIVERGE** (Aergia 17,512 / 59.3%): **Aergia (RE2)
+  CORRUPTS output on multi-strip** - leaves match tails ("ault." from "default.",
+  "ssed early." from "suppressed early."); Themis strips cleanly to "\n\n".
+  Reproducible live post-propagation (direct :443 vs :444). This is a NEW finding
+  distinct from ISSUE-004 (Themis-on-overlapping-redaction). Parser note: trailing
+  inline comments after a rule are rejected (comments must be own-line). **OPEN:**
+  verify Themis is clean corpus-wide via the framework oracle before claiming the
+  win; decide whether to log the Aergia finding and how to frame "NOL8 clean vs RE2
+  corrupts" (Aergia is the user's RE2 stand-up).
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
