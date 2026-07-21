@@ -12,12 +12,17 @@ can continue without reconstructing context from chat history.
 > **Current focus: the demo environment.** Data Point 1 (pre-index) is built,
 > benchmarked, and has an **on-brand report pipeline** (`run.json` +
 > `make-report.py`, Design template, web + PDF, collapsible raw-data appendix).
-> **POST-COMPACT NEXT STEP = #3:** an optimization policy (govern + strip filler)
-> cut Themis's forwarded payload 64%, but revealed **Aergia (RE2) corrupts on
-> multi-strip** while Themis is clean. User's call: do NOT rig the test; verify
-> Themis against an independent oracle, then report honestly. Full recipe in the
-> "OPTIMIZATION POLICY" block below ([[benchmark-integrity-no-rigging]]). Then:
-> Datapoint 2 (scoped), agentic-mesh-lab review, Datapoint 3.
+> **#3 DONE (2026-07-21):** the optimization policy cut Themis's forwarded payload
+> 64.3% (15,343/43,005 tokens) and this is now **oracle-verified** — Themis matches
+> an independent oracle **1000/1000 byte-for-byte**; the RE2 baseline (Aergia)
+> **corrupts 876/1000** on the strip rules (leaves match tails, `default.`→`ault.`),
+> every divergence a strip, zero on redaction. Verifier: `demos/benchmark/
+> verify-oracle.py`. Finding logged: `demos/benchmark/findings/aergia-strip-
+> corruption.md`. Story is honest and earned ([[benchmark-integrity-no-rigging]]).
+> **NEXT:** (a) sync the updated Design template in `/private/tmp/HTML Report
+> redesign/`; decide whether DP1's report leads with governance (current) or
+> optimization (stronger, needs the divergence told carefully). Then: Datapoint 2
+> (scoped), agentic-mesh-lab review, Datapoint 3.
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.
@@ -284,21 +289,23 @@ live endpoints/config, does not import from `framework/`.
   not pick a "safe" policy to hide the divergence. See [[benchmark-integrity-no-
   rigging]]. Chosen path = #3.
 
-  **>>> POST-COMPACT NEXT STEP (#3) - verify Themis, then report honestly:**
-  1. Build/reuse an independent ORACLE that computes the correct expected output of
-     `optimization.nol` on each corpus chunk (leftmost-longest, non-overlapping
-     literal replacement - the framework already has this in
-     `framework/policy/matching.py`; may need an empty-replacement/strip path).
-  2. Diff Themis's `themis_api_output.jsonl` (from the optimization run) against the
-     oracle. If Themis == oracle -> Themis is correct, Aergia's fragments are a real
-     defect. If Themis also diverges -> we do NOT claim the win; investigate.
-  3. Then decide framing with corpus-wide evidence: log the Aergia multi-strip
-     corruption as a finding (like ISSUE-004), and shape the demo story honestly
-     (govern + 64% ship-less, and whatever the oracle says about each engine).
-  4. Tenant currently has `optimization.nol` on both engines; the optimization run
-     output is in `demos/benchmark/datapoint1/results/` on EC2 (gitignored).
-  Reproduce the run: `POLICY=demos/policies/optimization.nol
-  MODES="nofilter re2 themis_api aergia_api" bash demos/benchmark/run-live.sh` (EC2).
+  **>>> #3 DONE (2026-07-21) - verified, honest, logged:**
+  `demos/benchmark/verify-oracle.py` adjudicates each engine's recorded output
+  against the framework's Aho-Corasick oracle (`framework/policy/matching.py`,
+  leftmost-longest non-overlapping literal replacement, `""` for strip). Run on EC2
+  against the optimization outputs: **Themis 1000/1000 match oracle** (its 15,343-
+  token / 64.3% result is provably correct); **Aergia 876/1000 diverge, every one a
+  strip rule, zero redact-only** - Aergia keeps the tail of a stripped literal
+  (`default.`→`ault.`, `suppressed early.`→`ssed early.`) and forwards garbage into
+  the vectors. Finding: `demos/benchmark/findings/aergia-strip-corruption.md`
+  (self-contained, careful framing: Aergia is our RE2 baseline; RE2-inherent vs
+  Aergia-harness is an open follow-up). DEMO-NOTES has the "optimization variant"
+  section. Reproduce: `POLICY=demos/policies/optimization.nol
+  MODES="nofilter re2 themis_api aergia_api" bash demos/benchmark/run-live.sh` then
+  `python demos/benchmark/verify-oracle.py --results demos/benchmark/datapoint1/
+  results themis_api aergia_api` (EC2). Tenant has `optimization.nol` on both engines.
+  **Open story decision:** does DP1's report lead with governance (current headline,
+  drop-in parity) or optimization (64% ship-less + the correctness gap)? User's call.
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by

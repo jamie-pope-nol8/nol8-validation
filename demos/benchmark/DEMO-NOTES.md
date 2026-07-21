@@ -39,6 +39,32 @@ all latency is the network path.** That reframes "how fast is your engine?" into
    control has no meaningful compute latency budget. The FPGA-vs-software edge
    shows at **throughput/scale** — the next measurement, not this one.
 
+## The optimization variant — ship less, and correctness starts to matter
+
+The three beats above run the **governance** policy (redact known values to tokens):
+length-neutral, ~2.5% volume change, NOL8 and RE2 byte-identical. There is a second,
+stronger policy — **optimization** (`demos/policies/optimization.nol`): the same 42
+governance rules plus 10 strip rules that delete the most-repeated low-value filler
+sentences (`"...boilerplate." -> ""`). The story it tells: everything you forward to
+an embedding model becomes vectors you store and pay for, so cleaning the text first
+ships fewer vectors.
+
+- **NOL8 (Themis) forwards 15,343 of 43,005 tokens — a 64.3% reduction — and it is
+  provably correct:** verified byte-for-byte against an independent oracle on all
+  1,000 chunks (`demos/benchmark/verify-oracle.py`, adjudicated 1000/1000).
+- **On this same policy the engines DIVERGE.** The RE2 baseline (Aergia) corrupts
+  876 of 1,000 chunks on the strip rules — it leaves the tail of each stripped
+  literal (`default.` → `ault.`) and forwards that garbage into the vectors. Full
+  finding, evidence, and honest framing: `demos/benchmark/findings/aergia-strip-corruption.md`.
+- This is the integrity check pointed at us: we adjudicated **both** engines against
+  the oracle before claiming anything, so the win is earned, not staged. Same policy,
+  same data, both engines — we report the divergence, we do not tune it away.
+
+Story decision still open: whether DP1 *leads* with governance (drop-in parity, the
+current report headline) or with optimization (64% ship-less + a correctness gap).
+Both are honest; optimization is the stronger differentiator but needs the divergence
+told carefully (see the finding's "honest framing").
+
 ## Honesty guardrails (say these, don't let anyone over-read the numbers)
 
 - The 7 ms is **not** a NOL8 throughput number — it's single-threaded,
