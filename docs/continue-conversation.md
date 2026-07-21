@@ -336,12 +336,40 @@ came back `mask` with `[DENIED]/[CARD]/[PROJECT]/[BLOCKED_IP]`.
 corpus -> real redactions); for a real customer, drop their own values into
 `values/*.txt` and regenerate. No hand-authoring rules.
 
-**Next demo steps:** (1) copy ONE datapoint's Go harness + full corpus OUT of
-`preindex-benchmark-kit` into `demos/`, point its `NOL8_ENDPOINT` at the adapter,
-run it against the deployed starter policy, and produce one real report replacing
-the `nol8sim` placeholder. (2) Extend drop/route via sentinel-token policy rules.
-(3) Wire Aergia (RE2) for pattern-class PII. (4) Clone + review the agentic repo
-when pushed.
+**NEXT STEP (resume here after compaction) - run a real Go datapoint report:**
+
+Goal: produce one real benchmark report with genuine Themis results, replacing
+the simulated `nol8sim` placeholder. Recipe:
+
+1. **Copy datapoint1 OUT of the kit** (never edit the kit) into `demos/`:
+   source `~/Code/nol8/preindex-benchmark-kit/datapoint1_preindex_pack_v3/`.
+   Need its Go harness (`go/benchmark.go`, `go/nol8_client.go`, `go/go.mod`), the
+   corpus (`data/sample_chunks.jsonl`), `report/` (generate_report.py +
+   template), `python/analyze_results.py`, `scripts/run_all.sh`. The reference
+   values are already copied into `demos/policies/values/`.
+2. **Check Go toolchain** (kit needs Go 1.22+) - confirm `go version` on the Mac
+   or EC2 before running; may need install. This is the likely blocker.
+3. **Point the harness at the adapter.** `go/nol8_client.go` `nol8_api` mode POSTs
+   `{"text"}` to `$NOL8_ENDPOINT` expecting `{"action","text"}`. Set
+   `NOL8_ENDPOINT=http://127.0.0.1:8799` and run the adapter
+   (`demos/themis-adapter/adapter.py`; needs `THEMIS_PROCESS_ENDPOINT` +
+   `THEMIS_TOKEN` in env from `config/demo.env`+`.env`). The adapter accepts POST
+   at any path.
+4. **Deploy the starter policy** first (governs the corpus's known values):
+   `validate policy --file demos/policies/starter-known-values.nol --target themis`.
+   NOTE: the tenant currently has THIS 42-rule starter policy deployed (from the
+   live verification), not the 5,000-rule qualification - restore that only if
+   the validation framework needs it.
+5. Run the datapoint (`nol8_api` mode) -> real results -> `report/report.html`.
+   Verify redactions are real (known values -> governance tokens), then the
+   report is the "value + performance" artifact.
+
+**Watch:** the benchmark's mock expects regex-class masking (any email/SSN);
+Themis is literal, so it governs the KNOWN values only. That is the honest Themis
+story (Aergia/RE2 does pattern classes, step below). Don't fake regex results.
+
+**Later demo steps:** extend drop/route via sentinel-token policy rules; wire
+Aergia (RE2) for pattern-class PII; clone + review the agentic repo when pushed.
 
 ---
 
