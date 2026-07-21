@@ -239,7 +239,13 @@ live endpoints/config, does not import from `framework/`.
   PDF via headless Chrome. Artifact:
   https://claude.ai/code/artifact/2feb6e5a-b3d6-466b-b4db-cc3daa6a735c (local file
   is authoritative). Copy content lives in `run.json` (three approaches: Do nothing
-  / Aergia RE2 baseline / NOL8 Themis FPGA + latency decomposition).
+  / Aergia RE2 baseline / NOL8 Themis FPGA + latency decomposition). Includes a
+  **collapsed "Full benchmark data" appendix** (raw per-approach table, Show
+  toggle, auto-expanded in print). Report tracks the Design template in `/private/
+  tmp/HTML Report redesign/` (re-check it for updates - last synced its 13:28
+  change: takeaways are a fixed 2-column grid). Data caveat baked into the appendix
+  note: Do nothing CPU shows `<0.01` (below GNU time's 0.01s resolution, not zero);
+  engine chunks/sec is network-inclusive, not an engine rate.
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
