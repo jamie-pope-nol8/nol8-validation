@@ -9,12 +9,11 @@ can continue without reconstructing context from chat history.
 > pre-index demo runs end-to-end against live engines and produces a clean report.
 > **236 framework tests passing.**
 >
-> **Current focus: the demo environment.** Data Point 1 (pre-index) is built and
-> benchmarked; a new **report template (Claude-designed, on-brand)** is incoming
-> from the user, after which we add a **web (default) / deck** output toggle
-> (don't overthink - "deck" can just be a PDF save). Then: the **other two use
-> cases**, the **agentic repo** (user has pushed it to GitHub, will clone), and
-> **cleaning up the EC2 checkout**.
+> **Current focus: the demo environment.** Data Point 1 (pre-index) is built,
+> benchmarked, and has an **on-brand report pipeline** (`run.json` +
+> `make-report.py`, Design template, web + PDF, collapsible raw-data appendix).
+> **Next: Datapoint 2 (pre/post-inference), SCOPED and ready to build** (see Next
+> horizon). Then the agentic-mesh-lab review, then Datapoint 3.
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.
@@ -268,12 +267,24 @@ NOL8-vs-RE2 latency gap is network jitter, not engine speed; the FPGA's real edg
    leave-behind POC readout. Don't overthink the toggle.
 2. **Throughput / scale benchmark** - the concurrency + server-side-timing test that
    would let NOL8 (FPGA) visibly pull ahead of RE2. The honest "next measurement".
-3. **The other two use cases** (from the kit): datapoint2 Pre/Post-Inference Control
-   (model-boundary / prompt-injection filter), datapoint3 Agent-to-Agent Control
-   (agent-mesh; the ISSUE-006 story). Same adapter/policy pattern should extend.
-4. **Agentic insurance-claims repo** - the user built it, has pushed it to GitHub,
-   will clone it here for review (likely overlaps datapoint3). Not startable until
-   cloned. Review non-destructively like the kit.
+3. **Datapoint 2 - Pre/Post-Inference Control (SCOPED, build next).** Kit pack:
+   `~/Code/nol8/preindex-benchmark-kit/datapoint2_pre_post_inference_pack_v1`. Flow:
+   `Input -> Pre-Inference Control -> Model Stub -> Post-Inference Control -> Output`
+   (govern what reaches the model AND what leaves; prompt-injection in, egress out).
+   Modes map onto our story 1:1: `nocontrol`=Do nothing, `re2_guard`=RE2 (Aergia),
+   `nol8_api_infer`=NOL8 (Themis) via the SAME adapter. **Reuse:** adapter unchanged,
+   policy generator (+injection/egress phrase lists), report pipeline (new run.json).
+   **New:** the pack's corpus (ships), a boundary-tuned policy, pre/post report copy.
+   Highest reuse, closest to DP1 - do this first.
+4. **Agentic-mesh-lab review** - user's repo at `/Users/jamiepope/Code/nol8/
+   agentic-mesh-lab` (small, checked into GitHub). Review non-destructively; it
+   overlaps DP3, so it should inform DP3's shape. Do after DP2.
+5. **Datapoint 3 - Agent-to-Agent Control (SCOPED, build last).** Kit pack:
+   `datapoint3_agent_mesh_pack_v1`. Flow: `Triage -> Research -> Decision -> Action`
+   agents; govern what moves between agents/tools (agent-mesh, ISSUE-006). Same
+   harness pattern but an earlier first pass (fewer scripts, no live runtime).
+   Governance at each inter-agent hop via the adapter. More design; shape it after
+   the agentic-mesh-lab review.
 5. **EC2 cleanup** - reconcile the git divergence (procedure in Environments), then a
    general tidy of the checkout.
 
@@ -296,11 +307,13 @@ question (OBS-2, Comm 2) shapes a realistic demo.
 
 # Immediate Next Actions
 
-1. **Unblock git push** (user is looking at the classifier block); then push the
-   Mac's local commits and reconcile EC2 (procedure above).
-2. **Await the new report template**, then reskin + add web/deck toggle.
-3. **Clone + review the agentic repo** when the user provides the URL.
-4. Discuss the other two use cases.
+1. **Build Datapoint 2 (pre/post-inference)** - scoped in Next horizon item 3. Copy
+   the pack OUT of the kit into `demos/benchmark/datapoint2/`, point `nol8_api_infer`
+   at the adapter, author a boundary policy + run.json, render the report.
+2. **Review agentic-mesh-lab** (`/Users/jamiepope/Code/nol8/agentic-mesh-lab`),
+   then build Datapoint 3.
+3. Git push works now (was flaky); announce before every git command
+   ([[announce-before-git]]). EC2 reconciled; normal `git pull` there works.
 
 **Not blocking (user handles):** send ISSUE-004 to engineering (report in
 `docs/issues/`, Slack drafts in `docs/issues/internal/outbound-slack-comms.md`).
