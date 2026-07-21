@@ -144,23 +144,27 @@ our checkout, runs none of Themis.
 Themis (FPGA), 444 = Aergia (RE2), both on `tenant001-v1demo.nol8.net`, both
 valid certs, both speaking `{"message"}->{"result":{"message"}}`.**
 
-**Engines are policy-compatible (confirmed 2026-07-21).** The SAME
-`starter-known-values.nol` deployed to both (`--target themis` and `--target
-aergia`) produces BYTE-IDENTICAL literal masking:
-`[CARD]`/`[DENIED]`/`[PROJECT]`/`[BLOCKED_IP]` on both :443 and :444. So there is
-no separate "Themis policy" vs "Aergia policy" - one file, both engines. **Both
-are listMatch (literal) engines; scope is listMatch only, NO regex** (Aergia
-can't do regex yet - see [[demo-scope-listmatch-only]]).
+**ENGINE IDENTITY (I kept getting this wrong - see [[demo-scope-listmatch-only]]):
+Themis == NOL8** (the FPGA product, `:443`). **Aergia == RE2** (a real RE2/regex
+engine stood up as the *known incumbent* to benchmark NOL8 against, `:444`). There
+is NO "Themis + Aergia" pair of NOL8 engines - it is **NOL8 vs RE2**.
 
-**Aergia reload has a propagation delay.** The control-plane deploy returns 200
-before the :444 data plane swaps policy; the first read right after a deploy can
-return the STALE prior policy. Give it a few seconds (or poll until output
-matches) before trusting a fresh Aergia deploy.
+**Same policy, both engines (confirmed 2026-07-21).** The SAME
+`starter-known-values.nol` deployed to both (`--target themis`/`--target aergia`)
+produces BYTE-IDENTICAL output on `:443` and `:444`. That is the benchmark result:
+NOL8 reproduces the RE2 incumbent exactly on the same literal task. **Demo scope is
+listMatch only** - that's what NOL8 (Themis) does today; **regex is not a NOL8
+capability yet.** RE2 (Aergia) *is* a regex engine, but we run it on the same
+literal policy as the incumbent reference.
+
+**Aergia (RE2) reload has a propagation delay.** The control-plane deploy returns
+200 before the :444 data plane swaps policy; the first read right after a deploy
+can return the STALE prior policy. Give it a few seconds before trusting it.
 
 **We overwrote Aergia's prior policy.** Before our deploy, Aergia masked
-`123-45-6789 -> [SSN]` - almost certainly a LITERAL rule for that exact value in
-the old demo policy (NOT regex; the engine can't do regex yet). Our `REPLACE`
-deploy of the literal starter wiped it. Disposable sandbox, redeployable.
+`123-45-6789 -> [SSN]` - since Aergia IS RE2, that was likely a real regex rule
+(my earlier "literal" guess was wrong). Our `REPLACE` deploy of the literal
+starter wiped it. Disposable sandbox, redeployable. Regex is out of demo scope.
 
 **Treat `themis-demo` with care** - policy deploys via the API are fine (the
 recovery path); service restarts and system changes are not ours to make.
