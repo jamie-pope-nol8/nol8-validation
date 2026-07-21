@@ -12,8 +12,12 @@ can continue without reconstructing context from chat history.
 > **Current focus: the demo environment.** Data Point 1 (pre-index) is built,
 > benchmarked, and has an **on-brand report pipeline** (`run.json` +
 > `make-report.py`, Design template, web + PDF, collapsible raw-data appendix).
-> **Next: Datapoint 2 (pre/post-inference), SCOPED and ready to build** (see Next
-> horizon). Then the agentic-mesh-lab review, then Datapoint 3.
+> **POST-COMPACT NEXT STEP = #3:** an optimization policy (govern + strip filler)
+> cut Themis's forwarded payload 64%, but revealed **Aergia (RE2) corrupts on
+> multi-strip** while Themis is clean. User's call: do NOT rig the test; verify
+> Themis against an independent oracle, then report honestly. Full recipe in the
+> "OPTIMIZATION POLICY" block below ([[benchmark-integrity-no-rigging]]). Then:
+> Datapoint 2 (scoped), agentic-mesh-lab review, Datapoint 3.
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.
@@ -272,10 +276,29 @@ live endpoints/config, does not import from `framework/`.
   "ssed early." from "suppressed early."); Themis strips cleanly to "\n\n".
   Reproducible live post-propagation (direct :443 vs :444). This is a NEW finding
   distinct from ISSUE-004 (Themis-on-overlapping-redaction). Parser note: trailing
-  inline comments after a rule are rejected (comments must be own-line). **OPEN:**
-  verify Themis is clean corpus-wide via the framework oracle before claiming the
-  win; decide whether to log the Aergia finding and how to frame "NOL8 clean vs RE2
-  corrupts" (Aergia is the user's RE2 stand-up).
+  inline comments after a rule are rejected (comments must be own-line).
+
+  **USER DECISION (2026-07-21): do NOT rig the test to force parity.** Same policy,
+  same dataset, both engines (listMatch only). If Themis is clean and Aergia
+  corrupts on the same input, that is a legitimate result - report it honestly. Do
+  not pick a "safe" policy to hide the divergence. See [[benchmark-integrity-no-
+  rigging]]. Chosen path = #3.
+
+  **>>> POST-COMPACT NEXT STEP (#3) - verify Themis, then report honestly:**
+  1. Build/reuse an independent ORACLE that computes the correct expected output of
+     `optimization.nol` on each corpus chunk (leftmost-longest, non-overlapping
+     literal replacement - the framework already has this in
+     `framework/policy/matching.py`; may need an empty-replacement/strip path).
+  2. Diff Themis's `themis_api_output.jsonl` (from the optimization run) against the
+     oracle. If Themis == oracle -> Themis is correct, Aergia's fragments are a real
+     defect. If Themis also diverges -> we do NOT claim the win; investigate.
+  3. Then decide framing with corpus-wide evidence: log the Aergia multi-strip
+     corruption as a finding (like ISSUE-004), and shape the demo story honestly
+     (govern + 64% ship-less, and whatever the oracle says about each engine).
+  4. Tenant currently has `optimization.nol` on both engines; the optimization run
+     output is in `demos/benchmark/datapoint1/results/` on EC2 (gitignored).
+  Reproduce the run: `POLICY=demos/policies/optimization.nol
+  MODES="nofilter re2 themis_api aergia_api" bash demos/benchmark/run-live.sh` (EC2).
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
