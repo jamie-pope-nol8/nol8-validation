@@ -226,12 +226,21 @@ live endpoints/config, does not import from `framework/`.
   `nofilter re2 themis_api aergia_api`.
 - **`demos/benchmark/latency-decompose.py`** - isolates raw engine time by measuring
   network-RTT / warm-pooled / cold-per-call and subtracting transport.
-- **`demos/benchmark/pre-index-report.html`** - THE report to show (committed,
-  self-contained, openable locally). Clean Claude design: three approaches (**Do
-  nothing / RE2 (Aergia) / NOL8 (Themis, FPGA)**) + the raw-FPGA latency
-  decomposition. Also published as a private artifact (link:
-  https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230 - the user
-  reported it not opening; the LOCAL file is authoritative).
+- **On-brand report pipeline (Design-approved).** `run.json` (data contract) +
+  `make-report.py` -> `pre-index-report.html`, a self-contained on-brand report
+  (NOL8 design system: charcoal + green, Space Grotesk / Google Sans; fonts, logos,
+  hero pattern inlined). Reimplemented from the Design handoff `/private/tmp/HTML
+  Report redesign/` (Option B - from its `run.json` contract, not its `support.js`
+  runtime). **Web (default)** = open the HTML (dark, sticky nav, engine tabs);
+  **deck/leave-behind** = browser Export -> PDF (the `@media print` block forces
+  the light cream palette). Regenerate: `python demos/benchmark/make-report.py`.
+  Tracked: `run.json`, `make-report.py`, `brand/` (subset woff2 + logos + pattern);
+  the rendered HTML is gitignored. Brand voice enforced (no em dashes/exclamations/
+  emoji; Aergia = "RE2 baseline", never a NOL8 product). Verified in dark + light +
+  PDF via headless Chrome. Artifact:
+  https://claude.ai/code/artifact/2feb6e5a-b3d6-466b-b4db-cc3daa6a735c (local file
+  is authoritative). Copy content lives in `run.json` (three approaches: Do nothing
+  / Aergia RE2 baseline / NOL8 Themis FPGA + latency decomposition).
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
