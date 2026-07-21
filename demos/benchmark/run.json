@@ -75,12 +75,12 @@
 
   "raw": {
     "heading": "Full benchmark data",
-    "note": "Per-approach measurements from the 1,000-chunk run, harness client process. Throughput (chunks/sec) is end-to-end and includes the network round-trip for the engines, so it is not an engine rate. CPU below the timer's 0.01s resolution is shown as <0.01: Do nothing completes in about 10 ms, so its CPU rounds under the floor (cpu_percent was 100% for that window). Max RSS is the working set; Do nothing loads no reference lists, HTTP client, or regex, so it is the smallest.",
-    "columns": ["Approach", "Kept", "Masked", "Dropped", "Routed", "Tokens fwd", "Reduction", "Chunks/sec", "CPU s", "Elapsed s", "Max RSS"],
+    "note": "The measured outcome is the data forwarded downstream, the payload that becomes embeddings. Do nothing forwards everything; a governing policy forwards less, so fewer vectors are created. Reduction is versus Do nothing. Process metrics (CPU, memory, throughput) are omitted on purpose: they measure the test harness, not the customer outcome, and differ only because of the client and adapter we add to run the test. This 1,000-chunk corpus is a small synthetic set (about 322 KB); the payload scales with real data.",
+    "columns": ["Approach", "Kept", "Masked", "Dropped", "Routed", "Bytes forwarded", "Tokens forwarded", "vs Do nothing"],
     "rows": [
-      ["Do nothing", "1000", "0", "0", "0", "43,005", "0.0%", "257,363", "<0.01", "0.01", "7.7 MB"],
-      ["Aergia (RE2 baseline)", "465", "535", "0", "0", "41,910", "2.5%", "149", "0.26", "6.69", "11.4 MB"],
-      ["Themis (NOL8 · FPGA)", "465", "535", "0", "0", "41,910", "2.5%", "137", "0.26", "7.28", "11.2 MB"]
+      ["Do nothing", "1000", "0", "0", "0", "322 KB", "43,005", "baseline"],
+      ["Aergia (RE2 baseline)", "465", "535", "0", "0", "316 KB", "41,910", "-2.5%"],
+      ["Themis (NOL8 · FPGA)", "465", "535", "0", "0", "316 KB", "41,910", "-2.5%"]
     ]
   },
 
