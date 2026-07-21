@@ -4,8 +4,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-CONFIG_FILE="$PROJECT_ROOT/config/demo.env"
-SECRETS_FILE="$PROJECT_ROOT/.env"
+# Config and secrets default to the repo files but can be overridden, so tests
+# (and any non-default deployment) point at their own without touching the tree.
+# T5-3: keeps the transport tests hermetic - no real .env has to exist.
+CONFIG_FILE="${NOL8_CONFIG_FILE:-$PROJECT_ROOT/config/demo.env}"
+SECRETS_FILE="${NOL8_SECRETS_FILE:-$PROJECT_ROOT/.env}"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Config file not found: $CONFIG_FILE" >&2

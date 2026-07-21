@@ -103,6 +103,19 @@ class TransportScriptTests(unittest.TestCase):
             str(self.bin_directory) + os.pathsep + self.environment["PATH"]
         )
         self.environment["TRANSPORT_CAPTURE"] = str(self.capture_path)
+        # Hermetic config/secrets (T5-3): the transports read these instead of
+        # the repo's real config/demo.env and .env, so the suite depends on
+        # neither and never runs against a developer's production token.
+        config_file = self.root / "demo.env"
+        config_file.write_text(
+            'THEMIS_POLICY_ENDPOINT="https://control.test:8444/policy"\n'
+            'THEMIS_PROCESS_ENDPOINT="https://tenant.test/v1/process"\n'
+            "THEMIS_ALLOW_INSECURE_TLS=1\n"
+        )
+        secrets_file = self.root / "secrets.env"
+        secrets_file.write_text("")
+        self.environment["NOL8_CONFIG_FILE"] = str(config_file)
+        self.environment["NOL8_SECRETS_FILE"] = str(secrets_file)
         self.environment["THEMIS_TOKEN"] = "test-token"
 
     def capture(self) -> dict:
@@ -132,7 +145,7 @@ class TransportScriptTests(unittest.TestCase):
                 "token_in_argv": False,
                 "connect_timeout": True,
                 "max_time": True,
-                # config/demo.env sets THEMIS_ALLOW_INSECURE_TLS=1.
+                # The hermetic test config sets THEMIS_ALLOW_INSECURE_TLS=1.
                 "insecure": True,
             },
         )
@@ -249,7 +262,7 @@ class TransportScriptTests(unittest.TestCase):
     def test_caller_can_override_insecure_tls_from_the_config(self) -> None:
         """FW-5: a caller value wins over config/demo.env.
 
-        demo.env sets THEMIS_ALLOW_INSECURE_TLS=1. Before the fix the transport
+        the test config sets THEMIS_ALLOW_INSECURE_TLS=1. Before the fix the transport
         sourced the config after the caller's environment, so setting the
         variable to 0 on the command line had no effect.
         """
