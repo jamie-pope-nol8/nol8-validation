@@ -63,11 +63,19 @@ fi
 
 REQUEST_FILE="$(mktemp)"
 RESPONSE_FILE="$(mktemp)"
+HEADER_FILE="$(mktemp)"
 
 cleanup() {
-  rm -f "$REQUEST_FILE" "$RESPONSE_FILE"
+  rm -f "$REQUEST_FILE" "$RESPONSE_FILE" "$HEADER_FILE"
 }
 trap cleanup EXIT
+
+# Keep the bearer token out of the process argument list (T2-3). Passed as
+# `-H "Authorization: Bearer $TOKEN"` it is visible to any local user via `ps`,
+# once per record in the execution path. A 0600 temp file read with `-H @file`
+# is owner-only and removed on exit - the token is never an argv element.
+chmod 600 "$HEADER_FILE"
+printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HEADER_FILE"
 
 cat > "$REQUEST_FILE"
 
@@ -83,7 +91,7 @@ CURL_METADATA="$(curl -sS \
   -o "$RESPONSE_FILE" \
   -w '%{http_code} %{time_total}' \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "@$HEADER_FILE" \
   --data-binary "@$REQUEST_FILE" \
   "$ENDPOINT")"
 CURL_STATUS=$?

@@ -19,17 +19,35 @@ import os
 import sys
 
 arguments = sys.argv[1:]
-headers = [
+raw_headers = [
     arguments[index + 1]
     for index, value in enumerate(arguments[:-1])
     if value == "-H"
 ]
+# Resolve `-H @file` the way curl does, so the header the request actually
+# carries is visible even when the token is kept out of argv (T2-3).
+headers = []
+for value in raw_headers:
+    if value.startswith("@"):
+        try:
+            with open(value[1:], encoding="utf-8") as handle:
+                headers.extend(line.rstrip("\n") for line in handle if line.strip())
+        except OSError:
+            pass
+    else:
+        headers.append(value)
+token = os.environ.get("THEMIS_TOKEN", "")
 capture = {
     "authorization_header": any(
         value.startswith("Authorization: Bearer ")
         and len(value) > len("Authorization: Bearer ")
         for value in headers
     ),
+    # T2-3: the token must never be a command-line argument (ps-visible).
+    "authorization_in_argv": any(
+        str(value).startswith("Authorization: Bearer ") for value in arguments
+    ),
+    "token_in_argv": bool(token) and any(token in str(value) for value in arguments),
     "connect_timeout": "--connect-timeout" in arguments
         and arguments[arguments.index("--connect-timeout") + 1] == "5",
     "max_time": "--max-time" in arguments
@@ -109,6 +127,9 @@ class TransportScriptTests(unittest.TestCase):
             self.capture(),
             {
                 "authorization_header": True,
+                # T2-3: authenticated, but the token is not in the argv.
+                "authorization_in_argv": False,
+                "token_in_argv": False,
                 "connect_timeout": True,
                 "max_time": True,
                 # config/demo.env sets THEMIS_ALLOW_INSECURE_TLS=1.
@@ -189,6 +210,41 @@ class TransportScriptTests(unittest.TestCase):
                 self.assertTrue(capture["max_time"])
                 self.assertTrue(capture["authorization_header"])
 
+
+    def test_token_is_never_passed_on_the_command_line(self) -> None:
+        """T2-3: the bearer token must not appear in the process argument list.
+
+        Passed as `-H "Authorization: Bearer $TOKEN"` it is readable via `ps` by
+        any local user. Both transports now write it to a 0600 temp file read
+        with `-H @file`, so it is never an argv element while staying
+        authenticated.
+        """
+        policy_path = self.root / "policy.nol"
+        policy_path.write_text('"x" -> "y";\n')
+        invocations = (
+            ([str(POLICY_SCRIPT), "themis", str(policy_path)], None),
+            ([str(RUN_SCRIPT), "themis"], json.dumps({"message": "test"})),
+        )
+
+        for command, request_body in invocations:
+            with self.subTest(script=command[0]):
+                self.capture_path.unlink(missing_ok=True)
+                result = subprocess.run(
+                    command,
+                    cwd=REPOSITORY_ROOT,
+                    env=self.environment,
+                    input=request_body,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                capture = self.capture()
+                # Still authenticated (the header reaches curl via the file)...
+                self.assertTrue(capture["authorization_header"])
+                # ...but the token is not exposed on the command line.
+                self.assertFalse(capture["authorization_in_argv"])
+                self.assertFalse(capture["token_in_argv"])
 
     def test_caller_can_override_insecure_tls_from_the_config(self) -> None:
         """FW-5: a caller value wins over config/demo.env.
