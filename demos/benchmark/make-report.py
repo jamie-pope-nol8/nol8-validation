@@ -304,7 +304,7 @@ def meaning(d) -> str:
         </div>
         <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;">{esc(d['meaning']['heading'])}</h2>
       </div>
-      <div data-reveal style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px 40px;margin-top:34px;">{items}
+      <div data-reveal style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:38px 56px;margin-top:34px;">{items}
       </div>
     </div>
   </section>"""
