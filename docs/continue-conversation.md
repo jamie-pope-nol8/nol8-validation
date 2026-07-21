@@ -17,8 +17,15 @@ can continue without reconstructing context from chat history.
 > **OPERATIONAL: `git push` is being blocked by the auto-mode classifier this
 > session** (it was allowed in prior sessions). Commits still work locally; to
 > sync EC2 this session I used `rsync` over the ssh config instead of push/pull.
-> The Mac has unpushed commits. User can add a Bash permission rule for `git push`
-> to restore the normal push/pull flow.
+> The Mac has 2 unpushed commits (`32f7e07`, `3e1e866`). User can add a Bash
+> permission rule for `git push` to restore the normal push/pull flow.
+>
+> **EC2 git reconciliation:** because `demos/benchmark/` reached EC2 via rsync (not
+> a pull), those files are UNTRACKED there while identical to the commits. When
+> push is restored, on EC2 the next pull will error ("untracked files would be
+> overwritten"). Fix: `cd /opt/nol8/nol8-validation && git clean -fd demos/benchmark
+> && git pull` (`clean` without `-x` removes the rsynced source but keeps gitignored
+> `results/`+`report.html`; the pull restores the identical tracked source).
 >
 > **Next work:** wire and test **Aergia (RE2)** as a second engine and produce a
 > combined Themis+Aergia report - see "Next horizon - Aergia".
