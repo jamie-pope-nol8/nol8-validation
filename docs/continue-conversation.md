@@ -306,9 +306,27 @@ I review it the same way (likely overlaps datapoint3). Not startable until clone
   (inline/proxy/streaming - `jid`/`frameId`/`last:true` hint at it) shapes a
   realistic demo. Worth engineering's answer (Comm 2).
 
-**Suggested first spike:** the benchmark-kit adapter - wire datapoint-1 (or -2)
-to the live Themis/Aergia endpoint (from a copy outside the kit) and produce one
-real report.
+### Progress (2026-07-21) - demo environment started IN THIS REPO
+
+Decision: the demo work lives in `demos/` inside nol8-validation (its own
+directory, self-contained, isolated from `framework/` and the validation
+`tests/` - can graduate to its own repo later by lifting the dir out). It reuses
+the live endpoints/config but does not import from `framework/`.
+
+**Done:** `demos/themis-adapter/adapter.py` - the bridge that lets the benchmark
+harness run against real Themis. Accepts the benchmark's `{"text"}`, calls
+Themis, returns `{"action","text"}` (keep if unchanged, mask if changed; opt-in
+drop/route via `THEMIS_DROP_TOKEN`/`THEMIS_ROUTE_TOKEN` policy sentinels).
+9 network-free tests. **Live-verified against Themis** (mask + keep both correct;
+the 15-char truncation showed through, confirming real behaviour). Run tests:
+`python -m unittest discover -s demos/themis-adapter -p 'test_*.py'`.
+
+**Next demo steps:** (1) copy ONE datapoint's harness+datasets OUT of
+`preindex-benchmark-kit` into `demos/` (never edit the kit), point its
+`NOL8_ENDPOINT` at the adapter, and produce one real report replacing the
+`nol8sim` placeholder. (2) Extend the adapter's drop/route via a policy that maps
+governed values to sentinel tokens. (3) Clone + review the agentic repo when
+pushed.
 
 ---
 
@@ -330,10 +348,12 @@ real report.
 
 **In order:**
 
-1. **Build the demo environment.** (a) Clone the agentic insurance-claims repo
-   once the user pushes it, and review it. (b) Reuse `preindex-benchmark-kit`
-   from OUTSIDE it (copy into a new demo repo) - prototype the adapter, wire a
-   datapoint to the live endpoints, produce one real report. See "Next horizon".
+1. **Build the demo environment (STARTED, in `demos/`).** The Themis adapter is
+   done and live-verified. Next: copy ONE datapoint (harness+datasets) OUT of
+   `preindex-benchmark-kit` into `demos/`, point its `NOL8_ENDPOINT` at the
+   adapter, and produce one real report. Then extend drop/route via sentinel
+   policy. Clone + review the agentic repo when the user pushes it. See "Next
+   horizon - Progress".
 
 **Not blocking (user handles):** send ISSUE-004 to engineering - report in
 `docs/issues/`, Slack comms in `docs/issues/internal/outbound-slack-comms.md`.
