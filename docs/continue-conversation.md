@@ -243,9 +243,17 @@ live endpoints/config, does not import from `framework/`.
   **collapsed "Full benchmark data" appendix** (raw per-approach table, Show
   toggle, auto-expanded in print). Report tracks the Design template in `/private/
   tmp/HTML Report redesign/` (re-check it for updates - last synced its 13:28
-  change: takeaways are a fixed 2-column grid). Data caveat baked into the appendix
-  note: Do nothing CPU shows `<0.01` (below GNU time's 0.01s resolution, not zero);
-  engine chunks/sec is network-inclusive, not an engine rate.
+  change: takeaways are a fixed 2-column grid). The appendix measures **data
+  forwarded** (payload that becomes embeddings), NOT test-harness CPU/RSS (those
+  only differ because of the client+adapter we add to test, so they mislead -
+  dropped 2026-07-21). **Open story question:** DP1 is "Pre-Index OPTIMIZATION"
+  (ship less to embeddings = fewer vectors = lower cost), but our demo policy
+  REDACTS known values (governance, length-neutral, ~2.5% volume cut). The strong
+  "clean it up, ship much less" story needs the policy to DROP low-value content
+  (filler/boilerplate): kit `re2` stripping boilerplate hit 7.2%, `listmatch`
+  drop/route hit 52%. Themis is literal (can drop KNOWN boilerplate via a drop
+  sentinel); broad filler-dropping is pattern-based (RE2/Aergia). Decide whether DP1
+  leads with governance (current) or optimization (add drop rules).
 - **`demos/benchmark/DEMO-NOTES.md`** - the narrative + numbers + honesty guardrails.
 - The kit's own `datapoint1/report/report.html` template is hardcoded to old kit
   modes (`nol8sim`/`listmatch`) - NOT for showing; superseded by
