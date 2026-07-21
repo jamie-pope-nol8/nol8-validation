@@ -124,6 +124,14 @@ python demos/benchmark/make-report.py         # -> demos/benchmark/pre-index-rep
 - **Deck / leave-behind:** the same file. Browser Export -> PDF triggers the
   `@media print` block, which forces the light (cream) palette and hides nav/tabs.
   That is the whole web/deck story - no separate build.
+- **Report leads with the OPTIMIZATION use case** (user's call, 2026-07-21): headline
+  "Clean the data before it becomes embeddings"; 64.3% ship-less as the outcome;
+  "One policy. Two engines. Only one stays correct." Governance byte-identical
+  redaction is the trust anchor below. The collapsible appendix is a full
+  **"Show your work"** receipts block: the 64.3% breakdown with the oracle-verified
+  1000/1000 stamp, the 10 strip rules with repeat counts, 3 real before/after chunks
+  (green token chips on Themis output, RE2 corruption fragments boxed in red), and
+  the forwarded-payload aggregate. Every number is oracle-verified, not estimated.
 - The rendered HTML is **gitignored** (regenerate with the command above). Tracked:
   `run.json`, `make-report.py`, `brand/` (subset woff2 fonts, logos, pattern).
 - Design source: `/private/tmp/HTML Report redesign/` (the handoff bundle -

@@ -1,28 +1,28 @@
 {
-  "_comment": "One benchmark run = one of these. make-report.py renders it into the on-brand report. Presentation-free where possible; the generator derives colors/styles from role/kind. Copy follows NOL8 brand voice: no em dashes, no exclamation marks, no emoji; Aergia is always the RE2 benchmark, never a NOL8 product.",
+  "_comment": "One benchmark run = one of these. make-report.py renders it into the on-brand report. Presentation-free where possible; the generator derives colors/styles from role/kind. Copy follows NOL8 brand voice: no em dashes, no exclamation marks, no emoji; Aergia is always the RE2 benchmark, never a NOL8 product. This report leads with the pre-index OPTIMIZATION use case (clean the data before it becomes embeddings); governance parity with the incumbent is the trust anchor.",
 
-  "identifier": { "left": "NOL8 · Pre-Index Governance", "right": "Data Point 01 / Benchmark" },
-  "navLabel": "Pre-Index Governance · Data Point 01",
+  "identifier": { "left": "NOL8 · Pre-Index Optimization", "right": "Data Point 01 / Benchmark" },
+  "navLabel": "Pre-Index Optimization · Data Point 01",
 
-  "headline": { "lead": "Deterministic governance before embedding, ", "accent": "at hardware speed." },
-  "eyebrow": "NOL8 · Pre-Index Governance Benchmark",
-  "lede": "Govern known-value risk before it reaches the vector index. Themis runs the policy inline on FPGA. To prove it, we ran the identical policy and corpus through Aergia, our stand-up of Google RE2, as the benchmark. Same data. Same policy. Byte-identical output. Compute cost is sub-millisecond, so nearly all observed latency is the network path.",
+  "headline": { "lead": "Clean the data before it becomes embeddings, ", "accent": "at hardware speed." },
+  "eyebrow": "NOL8 · Pre-Index Optimization Benchmark",
+  "lede": "Everything you forward to an embedding model becomes vectors you store, search, and pay for. A deterministic pre-index policy removes what should not be there before it reaches the index: sensitive values, and repeated low-value filler. Themis runs it inline on FPGA. On this corpus it cut the forwarded payload 64.3%, verified byte-for-byte against an independent oracle. We ran the identical policy through Aergia, our stand-up of Google RE2, as the benchmark.",
 
   "stats": [
-    { "value": "535",  "unit": "/ 1000", "label": "chunks governed, 0 errors",            "key": true  },
-    { "value": "<0.3", "unit": "ms",     "label": "engine time per call",                 "key": true  },
-    { "value": "97",   "unit": "%",      "label": "of per-call latency is network + TLS", "key": false },
-    { "value": "100",  "unit": "%",      "label": "Themis / Aergia output match",         "key": false }
+    { "value": "64.3", "unit": "%",      "label": "fewer tokens forwarded to the index", "key": true  },
+    { "value": "1000", "unit": "/ 1000", "label": "chunks verified against an oracle",    "key": true  },
+    { "value": "<0.3", "unit": "ms",     "label": "engine time per call",                 "key": false },
+    { "value": "97",   "unit": "%",      "label": "of per-call latency is network + TLS", "key": false }
   ],
 
   "benchmark": {
-    "heading": "One policy. Two engines. Identical output.",
-    "lede": "The same literal known-value policy runs the same 1,000-chunk corpus on both engines: Themis on FPGA, and Aergia, our stand-up of Google RE2, as the benchmark. Do nothing is the null baseline."
+    "heading": "One policy. Two engines. Only one stays correct.",
+    "lede": "The same literal policy runs the same 1,000-chunk corpus on both engines. It governs known values to tokens and strips the most-repeated low-value filler to nothing. Themis forwards 64.3% less and matches an independent oracle on every chunk. Aergia, our stand-up of Google RE2, corrupts the strip on most of them. Do nothing is the null baseline."
   },
   "approaches": [
-    { "role": "baseline",  "tag": "Baseline · Do nothing",     "headline": "Everything reaches the index",         "metric": "0",   "metricUnit": "governed", "desc": "All 43,005 tokens forwarded downstream, sensitive values included." },
-    { "role": "benchmark", "tag": "Benchmark · Aergia (RE2)",  "headline": "Google RE2, the known regex engine",   "metric": "535", "metricUnit": "governed", "desc": "Our sandbox stand-up of Google RE2, running the identical policy on CPU. The established software baseline we measure against." },
-    { "role": "nol8",      "tag": "NOL8 · Themis (FPGA)",      "headline": "Deterministic known-value governance", "metric": "535", "metricUnit": "governed", "desc": "The identical policy, inline on FPGA at hardware speed. Byte-identical output to the RE2 benchmark, and sub-millisecond per call." }
+    { "role": "baseline",  "tag": "Baseline · Do nothing",    "headline": "Everything reaches the index",       "metric": "43,005", "metricUnit": "tokens forwarded", "desc": "The full embedding bill. Every token forwarded downstream, sensitive values and repeated filler included." },
+    { "role": "benchmark", "tag": "Benchmark · Aergia (RE2)", "headline": "Google RE2, the known regex engine", "metric": "17,512", "metricUnit": "tokens forwarded", "desc": "Our stand-up of Google RE2. It strips the filler but leaves fragments behind (default. becomes ault.), corrupting 876 of 1,000 chunks and polluting the vectors with garbage tokens." },
+    { "role": "nol8",      "tag": "NOL8 · Themis (FPGA)",     "headline": "Govern and shrink in one pass",      "metric": "15,343", "metricUnit": "tokens forwarded", "desc": "64.3% less, and correct on every chunk (verified against an independent oracle). The identical policy, inline on FPGA at hardware speed." }
   ],
 
   "redaction": {
@@ -34,12 +34,12 @@
       { "text": "[PROJECT]", "token": true },
       { "text": " workflow.", "token": false }
     ],
-    "note": "Byte-identical across Themis and Aergia for all 1,000 records"
+    "note": "Redaction is byte-identical across Themis and Aergia for all 1,000 records. The engines only diverge when stripping, shown in the appendix."
   },
 
   "latency": {
     "heading": "The engine is the smallest slice.",
-    "lede": "We isolated raw engine time by measuring the path in layers and subtracting transport. N = 100, medians, from the client box. On both engines the compute lands below the network round-trip, so it is reported as an upper bound.",
+    "lede": "We isolated raw engine time by measuring the path in layers and subtracting transport. N = 100, medians, from the client box. On both engines the compute lands below the network round-trip, so it is reported as an upper bound. Cleaning runs inline with no latency budget to spend.",
     "callout": "Reusing one connection instead of reconnecting per call drops Themis from 7.17 ms to 2.38 ms, a 3x cut with zero engine change. What is left is one network round-trip. The engine sits inside the measurement noise."
   },
   "waterfall": [
@@ -56,36 +56,94 @@
 
   "meaning": { "heading": "What it means for the data path." },
   "takeaways": [
-    { "title": "Governance is free at the compute layer.", "body": "Sub-millisecond per call means deterministic control sits inline on the data path with no latency-budget conversation. Themis keeps up with the wire." },
-    { "title": "Your latency is a networking problem, not a compute one.", "body": "About 97% of observed per-call time is TLS setup and round-trip. Shorter, warmer, more direct paths translate almost one-to-one into end-to-end improvement." },
-    { "title": "The first win is connection reuse.", "body": "Pooling connections alone is a 3x per-call improvement here, before touching anything else." },
-    { "title": "Parity with the RE2 benchmark, at hardware speed.", "body": "Themis matches Aergia byte-for-byte on the identical policy and corpus. NOL8 is provably as correct as the established regex engine, and it runs inline on FPGA where legacy software middleware cannot." }
+    { "title": "Everything you embed is a bill.", "body": "Forwarded text becomes vectors you store, search, and pay for. Removing repeated filler before the index cut this corpus 64.3%. The saving scales with real data." },
+    { "title": "Correctness is not optional at the index.", "body": "A strip that leaves fragments poisons the vectors silently. Themis matched an independent oracle on all 1,000 chunks. The RE2 benchmark corrupted 876 of them." },
+    { "title": "Govern and optimize in one deterministic pass.", "body": "The same literal policy removes sensitive values and low-value filler together, inline, before anything reaches the model. One control, two outcomes." },
+    { "title": "Your latency is a networking problem, not a compute one.", "body": "The engine is sub-millisecond, so cleaning runs inline with no latency budget. About 97% of per-call time is TLS and round-trip. The win is the payload, not the clock." }
   ],
 
   "method": [
-    { "term": "Corpus",           "def": "1,000-chunk synthetic pre-index corpus, run identically through every approach." },
-    { "term": "Policy",           "def": "One literal known-value policy: denied entities, watched customers, compromised accounts, payment cards, internal projects, blocked IPs." },
-    { "term": "Engines",          "def": "Themis, the NOL8 FPGA (:443), and Aergia, our stand-up of Google RE2 (:444) as the benchmark. Same data, same policy, byte-identical output. Do nothing forwards everything." },
-    { "term": "Governance count", "def": "Exact. Chunks governed = chunks containing a governed value." },
-    { "term": "Latency",          "def": "Decomposed from the field client box, N = 100 per layer, medians." },
-    { "term": "Engine time",      "def": "Bounded as (warm minus network RTT). Lands within network jitter, so it is reported as an upper bound. No server-side timing hook is exposed." },
-    { "term": "Cold vs warm",     "def": "Cold = new TLS connection per request (current adapter). Warm = pooled." }
+    { "term": "Corpus",       "def": "1,000-chunk synthetic pre-index corpus, run identically through every approach." },
+    { "term": "Policy",       "def": "One literal policy, two jobs: govern known values to tokens (denied entities, watched customers, compromised accounts, payment cards, internal projects, blocked IPs), and strip the ten most-repeated low-value filler sentences to nothing. The same file is deployed to both engines." },
+    { "term": "Engines",      "def": "Themis, the NOL8 FPGA (:443), and Aergia, our stand-up of Google RE2 (:444) as the benchmark. Same data, same policy. Do nothing forwards everything." },
+    { "term": "Oracle",       "def": "Each engine's output is adjudicated against the validation framework's independent Aho-Corasick matcher (leftmost-longest, non-overlapping literal replacement). Themis matched it 1000 of 1000; Aergia diverged on 876, every divergence a strip." },
+    { "term": "Reduction",    "def": "Measured as tokens forwarded versus Do nothing. Themis forwards 15,343 of 43,005 tokens, a 64.3% cut. Redaction is length-neutral; the volume cut is the filler strip." },
+    { "term": "Filler list",  "def": "Corpus-derived: the most-repeated exact sentences, which carry no per-chunk retrieval value. A real deployment supplies its own list; the mechanism is identical." },
+    { "term": "Latency",      "def": "Decomposed from the field client box, N = 100 per layer, medians. Engine time bounded as (warm minus network RTT), an upper bound; no server-side timing hook is exposed." }
   ],
-  "methodNote": "Not a concurrency or throughput saturation test.",
+  "methodNote": "Not a concurrency or throughput saturation test. Themis is a literal matcher, so this strips exact repeated sentences; variable boilerplate is pattern work, out of scope for listMatch.",
 
   "raw": {
-    "heading": "Full benchmark data",
-    "note": "The measured outcome is the data forwarded downstream, the payload that becomes embeddings. Do nothing forwards everything; a governing policy forwards less, so fewer vectors are created. Reduction is versus Do nothing. Process metrics (CPU, memory, throughput) are omitted on purpose: they measure the test harness, not the customer outcome, and differ only because of the client and adapter we add to run the test. This 1,000-chunk corpus is a small synthetic set (about 322 KB); the payload scales with real data.",
-    "columns": ["Approach", "Kept", "Masked", "Dropped", "Routed", "Bytes forwarded", "Tokens forwarded", "vs Do nothing"],
-    "rows": [
-      ["Do nothing", "1000", "0", "0", "0", "322 KB", "43,005", "baseline"],
-      ["Aergia (RE2 baseline)", "465", "535", "0", "0", "316 KB", "41,910", "-2.5%"],
-      ["Themis (NOL8 · FPGA)", "465", "535", "0", "0", "316 KB", "41,910", "-2.5%"]
-    ]
+    "heading": "Show your work",
+    "intro": "Every number here comes from the same 1,000-chunk run. Themis output is verified byte-for-byte against an independent oracle, so these are receipts, not estimates.",
+    "breakdown": {
+      "title": "Where the 64.3% comes from",
+      "columns": ["Stage", "Forwarded", "What it does"],
+      "rows": [
+        ["Baseline (Do nothing)", "43,005 tokens", "everything reaches the index"],
+        ["Governance redaction", "length-neutral", "known values become tokens, safety not size"],
+        ["Filler strip", "the volume cut", "repeated low-value sentences removed"],
+        ["Themis forwarded", "15,343 tokens", "64.3% less, oracle-verified correct"]
+      ],
+      "verified": "Verified byte-for-byte against an independent oracle: 1000 of 1000 chunks match."
+    },
+    "stripRules": {
+      "title": "What we removed, and why",
+      "note": "The ten most-repeated exact sentences in the corpus. Each is generic framing that adds no per-chunk retrieval value, so it is stripped everywhere it appears. Counts are occurrences across the 1,000 chunks.",
+      "columns": ["Seen", "Repeated sentence, stripped to nothing"],
+      "rows": [
+        ["219x", "Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default."],
+        ["217x", "The analyst assistant should prioritize incident timelines, account context, and remediation notes over boilerplate."],
+        ["214x", "The AI search workflow is only useful if customer-risk context is preserved while low-value noise is suppressed early."],
+        ["200x", "Security operations wants embedding spend focused on high-value investigative content rather than repetitive status traffic."],
+        ["199x", "Retrieval quality improves when onboarding summaries and fraud-review notes are normalized before indexing."],
+        ["155x", "Customer operations added a short note explaining that the account requires special handling during after-hours support."],
+        ["148x", "Tier-2 support escalated the case after the customer reported repeated sign-in failures from a new device profile."],
+        ["132x", "The payments team attached an investigation summary covering disputed transactions, refund notes, and fraud indicators."],
+        ["125x", "The fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context."],
+        ["115x", "A compliance analyst documented the onboarding review and recommended manual verification before account activation."]
+      ]
+    },
+    "samples": {
+      "title": "Before and after, real corpus chunks",
+      "note": "Original chunk in, forwarded payload out. Governed values become tokens; stripped filler is gone. The RE2 benchmark column shows where Aergia leaves fragments behind (default. becomes ault.), the corruption that pollutes the vectors.",
+      "items": [
+        {
+          "id": "chunk-0000001",
+          "kind": "govern + strip",
+          "in": "Customer review: Westbridge Merchant Services requested accelerated enablement for the Redwood Identity workflow.\nThe fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context.\nGovernance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.",
+          "themis": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\n",
+          "aergia": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\nault."
+        },
+        {
+          "id": "chunk-0000002",
+          "kind": "strip only (three filler sentences)",
+          "in": "Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.\nThe AI search workflow is only useful if customer-risk context is preserved while low-value noise is suppressed early.\nThe fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context.",
+          "themis": "\n\n",
+          "aergia": "ault.\nssed early.\n"
+        },
+        {
+          "id": "chunk-0000006",
+          "kind": "strip only (three filler sentences)",
+          "in": "Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.\nThe analyst assistant should prioritize incident timelines, account context, and remediation notes over boilerplate.\nTier-2 support escalated the case after the customer reported repeated sign-in failures from a new device profile.",
+          "themis": "\n\n",
+          "aergia": "ault.\nlerplate.\nrofile."
+        }
+      ]
+    },
+    "aggregate": {
+      "note": "The measured outcome is the data forwarded downstream, the payload that becomes embeddings. Reduction is versus Do nothing. Aergia forwards more than Themis, and its payload includes corruption fragments rather than clean signal. Process metrics (CPU, memory) are omitted on purpose: they measure the test harness, not the customer outcome. Aergia byte total was not captured locally; it is shown as a dash pending the recorded-run refresh.",
+      "columns": ["Approach", "Bytes forwarded", "Tokens forwarded", "vs Do nothing", "Oracle match"],
+      "rows": [
+        ["Do nothing", "322 KB", "43,005", "baseline", "n/a"],
+        ["Aergia (RE2 baseline)", "—", "17,512", "-59.3%", "124 / 1000"],
+        ["Themis (NOL8 · FPGA)", "117 KB", "15,343", "-64.3%", "1000 / 1000"]
+      ]
+    }
   },
 
   "footer": {
-    "tagline": "The AI data plane. Hardware-class, inline, wire-speed. Governance runs free at the compute layer.",
+    "tagline": "The AI data plane. Hardware-class, inline, wire-speed. Clean the data before it becomes cost.",
     "next": [ "Data Point 02 · Throughput at load", "Inline governance on the fabric" ],
     "copyright": "© 2026 Nol8. All rights reserved.",
     "confidential": "Private & Confidential"

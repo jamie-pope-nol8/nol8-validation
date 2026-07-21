@@ -25,10 +25,17 @@ can continue without reconstructing context from chat history.
 > away from "reveal" (zero occurrences), kept scroll-spy + back-to-top. The left
 > "reveal slides" hamburger was reveal.js from a preso wrapper, never in our
 > standalone output (our report has one right-side nav; serve it standalone).
-> **NEXT:** decide whether DP1's report leads with governance (current headline) or
-> optimization (64% ship-less + the correctness gap, stronger but needs the
-> divergence told carefully). Then: Datapoint 2 (scoped), agentic-mesh-lab review,
-> Datapoint 3.
+> **Report rebuilt to LEAD with the optimization use case (2026-07-21, user's
+> call):** headline "Clean the data before it becomes embeddings, at hardware
+> speed"; 64.3% ship-less as the outcome; "One policy. Two engines. Only one stays
+> correct." benchmark; governance byte-identical redaction as the trust anchor. The
+> appendix is now a full **"Show your work"** receipts block: 64.3% breakdown +
+> oracle-verified stamp, the 10 strip rules with repeat counts, 3 real before/after
+> chunks (green token chips on Themis, RE2 corruption fragments boxed in red), and
+> the forwarded-payload aggregate. `run.json` + `make-report.py` updated.
+> **NEXT:** Datapoint 2 (scoped), agentic-mesh-lab review, Datapoint 3. (Optional
+> data refresh: pull Aergia's exact forwarded bytes from EC2 to replace the "—" in
+> the aggregate table once the tunnel is back.)
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.

@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -329,29 +330,131 @@ def method(d) -> str:
   </section>"""
 
 
-def raw_section(d) -> str:
-    raw = d.get("raw")
-    if not raw:
-        return ""
+WARN = "#cf6a4a"  # semantic "corrupted" hue for the RE2 fragments, not the accent
+
+
+def _subhead(title: str, first: bool = False) -> str:
+    mt = "4px" if first else "40px"
+    return (f'<h3 style="font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--fg1);'
+            f'margin:{mt} 0 8px;">{esc(title)}</h3>')
+
+
+def _note(text: str) -> str:
+    return (f'<p style="color:var(--fg3);font-size:12.5px;line-height:1.6;max-width:92ch;'
+            f'margin:0 0 14px;">{esc(text)}</p>')
+
+
+def _num_table(cols, rows, min_width=560) -> str:
+    """First column is a left label; the rest are right-aligned readouts."""
     head = "".join(
-        f'<th style="text-align:{"left" if i == 0 else "right"};padding:12px 14px;color:var(--fg3);'
-        f'font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;'
-        f'white-space:nowrap;border-bottom:1px solid var(--rowline);">{esc(c)}</th>'
-        for i, c in enumerate(raw["columns"])
+        f'<th style="text-align:{"left" if i == 0 else "right"};padding:11px 14px;color:var(--fg3);'
+        f'font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;'
+        f'border-bottom:1px solid var(--rowline);">{esc(c)}</th>'
+        for i, c in enumerate(cols)
     )
     body = ""
-    for r_i, row in enumerate(raw["rows"]):
-        last = r_i == len(raw["rows"]) - 1
-        nol8 = "NOL8" in row[0] or "Themis" in row[0]
+    for r_i, row in enumerate(rows):
+        last = r_i == len(rows) - 1
+        nol8 = "NOL8" in str(row[0]) or "Themis" in str(row[0])
         div = "" if last else "border-bottom:1px solid var(--hairline-soft);"
         cells = ""
         for i, cell in enumerate(row):
             align = "left" if i == 0 else "right"
             color = "var(--accent)" if (nol8 and i == 0) else ("var(--fg1)" if i == 0 else "var(--fg2)")
             weight = "600" if i == 0 else "400"
-            cells += (f'<td style="text-align:{align};padding:13px 14px;color:{color};font-weight:{weight};'
+            cells += (f'<td style="text-align:{align};padding:12px 14px;color:{color};font-weight:{weight};'
                       f'white-space:nowrap;{div}">{esc(cell)}</td>')
         body += f"<tr>{cells}</tr>"
+    return (f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
+            f'padding:6px 6px;overflow-x:auto;"><table style="width:100%;min-width:{min_width}px;'
+            f'border-collapse:collapse;font-variant-numeric:tabular-nums;letter-spacing:-.01em;font-size:13px;">'
+            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>")
+
+
+def _strip_table(cols, rows) -> str:
+    """Count column (green, narrow) + a wrapping sentence column."""
+    head = "".join(
+        f'<th style="text-align:left;padding:11px 14px;color:var(--fg3);font-weight:600;font-size:11px;'
+        f'letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--rowline);'
+        f'white-space:nowrap;">{esc(c)}</th>'
+        for c in cols
+    )
+    body = ""
+    for r_i, (count, sentence) in enumerate(rows):
+        div = "" if r_i == len(rows) - 1 else "border-bottom:1px solid var(--hairline-soft);"
+        body += (
+            f'<tr><td style="padding:11px 14px;color:var(--accent);font-weight:600;white-space:nowrap;'
+            f'vertical-align:top;font-variant-numeric:tabular-nums;{div}">{esc(count)}</td>'
+            f'<td style="padding:11px 14px;color:var(--fg2);line-height:1.5;{div}">{esc(sentence)}</td></tr>'
+        )
+    return (f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
+            f'padding:6px 6px;overflow-x:auto;"><table style="width:100%;min-width:560px;border-collapse:collapse;'
+            f'font-size:13px;"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>')
+
+
+def _chipify(escaped_text: str) -> str:
+    return re.sub(
+        r"(\[[A-Z0-9_]+\])",
+        r'<span style="color:var(--accent);font-weight:600;background:var(--tint);'
+        r'padding:1px 5px;border-radius:4px;">\1</span>',
+        escaped_text,
+    )
+
+
+def _sample_row(label: str, label_color: str, text: str, role: str) -> str:
+    stripped = text.strip()
+    if role == "in":
+        inner = esc(text)
+        color = "var(--fg3)"
+        wrap = ""
+    elif role == "themis":
+        color = "var(--fg1)"
+        inner = (_chipify(esc(text)) if stripped
+                 else '<span style="color:var(--fg3);font-style:italic;">nothing forwarded, stripped to blank</span>')
+        wrap = ""
+    else:  # aergia
+        color = WARN
+        inner = (esc(text) if stripped
+                 else '<span style="color:var(--fg3);font-style:italic;">nothing forwarded</span>')
+        wrap = (f"background:rgba(207,106,74,0.09);border:1px solid rgba(207,106,74,0.28);"
+                f"border-radius:6px;padding:8px 11px;")
+    return (
+        f'<div><div style="font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
+        f'color:{label_color};margin-bottom:5px;">{esc(label)}</div>'
+        f'<div style="white-space:pre-wrap;color:{color};font-size:12.5px;line-height:1.7;{wrap}">{inner}</div></div>'
+    )
+
+
+def _samples(items) -> str:
+    cards = ""
+    for it in items:
+        rows = (
+            _sample_row("Original in", "var(--fg3)", it["in"], "in")
+            + _sample_row("NOL8 Themis · forwarded", "var(--accent)", it["themis"], "themis")
+            + _sample_row("RE2 (Aergia) · forwarded", WARN, it["aergia"], "aergia")
+        )
+        cards += (
+            f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
+            f'padding:18px 20px;margin-top:14px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">'
+            f'<span style="color:var(--fg2);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;">{esc(it["id"])}</span>'
+            f'<span style="color:var(--fg3);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;">{esc(it.get("kind",""))}</span>'
+            f'</div><div style="display:grid;gap:14px;">{rows}</div></div>'
+        )
+    return cards
+
+
+def raw_section(d) -> str:
+    raw = d.get("raw")
+    if not raw:
+        return ""
+    bd = raw["breakdown"]
+    sr = raw["stripRules"]
+    sm = raw["samples"]
+    ag = raw["aggregate"]
+    dot = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent);"></span>'
+    verified = (f'<div style="display:inline-flex;align-items:center;gap:9px;margin-top:14px;color:var(--accent);'
+                f'font-size:13px;font-weight:600;">{dot}{esc(bd["verified"])}</div>')
     return f"""
   <section id="appendix" data-section="appendix" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
     <div style="max-width:1200px;margin:0 auto;padding:64px 40px;">
@@ -359,14 +462,24 @@ def raw_section(d) -> str:
         <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">Appendix · {esc(raw['heading'])}</span>
         <button id="raw-toggle" class="no-print" style="border:1px solid var(--hairline);background:transparent;color:var(--fg2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;">Show</button>
       </div>
-      <div class="raw-body" style="display:none;margin-top:20px;">
-        <div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;padding:6px 6px;overflow-x:auto;">
-          <table style="width:100%;min-width:820px;border-collapse:collapse;font-variant-numeric:tabular-nums;letter-spacing:-.01em;font-size:13px;">
-            <thead><tr>{head}</tr></thead>
-            <tbody>{body}</tbody>
-          </table>
-        </div>
-        <p style="color:var(--fg3);font-size:12px;line-height:1.55;max-width:88ch;margin:16px 0 0;">{esc(raw['note'])}</p>
+      <div class="raw-body" style="display:none;margin-top:22px;">
+        <p style="color:var(--fg2);font-size:14px;line-height:1.6;max-width:88ch;margin:0 0 8px;">{esc(raw['intro'])}</p>
+
+        {_subhead(bd['title'])}
+        {_num_table(bd['columns'], bd['rows'])}
+        {verified}
+
+        {_subhead(sr['title'])}
+        {_note(sr['note'])}
+        {_strip_table(sr['columns'], sr['rows'])}
+
+        {_subhead(sm['title'])}
+        {_note(sm['note'])}
+        {_samples(sm['items'])}
+
+        {_subhead(ag.get('title', 'Forwarded payload'))}
+        {_num_table(ag['columns'], ag['rows'], min_width=680)}
+        <p style="color:var(--fg3);font-size:12px;line-height:1.55;max-width:92ch;margin:16px 0 0;">{esc(ag['note'])}</p>
       </div>
     </div>
   </section>"""
