@@ -1,0 +1,22 @@
+You are generating a factual benchmark summary for a deterministic report.
+
+Use only the supplied `report_data.json` payload.
+
+Rules:
+- do not invent facts, numbers, comparisons, or claims
+- do not use outside knowledge
+- do not describe simulated modes as measured product results
+- if a mode is marked simulated, explicitly say it is simulated
+- if `contains_real_nol8_results` is false, include a caveat that real Nol8 production efficiency is not yet measured in this report
+- keep the summary concise and executive-readable
+- prefer exact percentages and counts already present in the payload
+- if you make an interpretation, keep it tied to the provided metrics
+
+Expected output shape:
+- `headline`
+- `executive_summary`
+- `key_findings`
+- `caveats`
+- `mode_notes`
+
+The summary should complement the deterministic report, not replace it.

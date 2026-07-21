@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Point 1 Report</title>
+  <style>
+    :root {
+      --bg: #FFFAEF;
+      --panel: #fffdfa;
+      --ink: #404040;
+      --muted: #5f5f5f;
+      --line: #D2D2D2;
+      --accent: #33B046;
+      --accent-strong: #57DE6B;
+      --soft-accent: #AFFFBB;
+      --warn: #404040;
+      --soft-warn: #FFFAEF;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    p { margin: 0 0 12px; line-height: 1.5; }
+    ul { margin: 10px 0 0 18px; padding-left: 0; }
+    li { margin-bottom: 6px; }
+    .lede { color: var(--muted); max-width: 900px; }
+    .note { color: var(--muted); margin: 0 0 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 18px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .card h3 { font-size: 15px; color: var(--muted); margin-bottom: 8px; }
+    .card .value { font-size: 28px; font-weight: 700; margin: 0 0 6px; }
+    .card .sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #D2D2D2; font-weight: 700; }
+    tr.baseline td { background: #FFFAEF; }
+    tr.traditional td { background: #f2fff5; }
+    tr.nol8 td { background: #AFFFBB; }
+    tr.reference td { background: #e7ffeb; }
+    .legend { margin-top: 18px; color: var(--muted); font-size: 14px; }
+    .legend span { display: inline-block; margin: 0 12px 8px 0; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; }
+    .kpi-table th:first-child, .kpi-table td:first-child { width: 320px; }
+    code { background: rgba(51, 176, 70, 0.12); padding: 1px 4px; border-radius: 4px; font-family: "SFMono-Regular", Consolas, monospace; }
+    .footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+    .callout {
+      background: var(--soft-accent);
+      border: 1px solid var(--accent-strong);
+      border-left: 4px solid var(--accent);
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin: 0 0 20px 0;
+    }
+    .warning { border-color: var(--line); border-left-color: var(--warn); background: var(--soft-warn); }
+    details.panel {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 18px 20px;
+      box-shadow: 0 10px 25px rgba(31,31,27,0.05);
+    }
+    details.panel > summary { cursor: pointer; font-weight: 700; list-style: none; }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel > summary::before { content: "▸"; display: inline-block; margin-right: 8px; color: var(--muted); }
+    details.panel[open] > summary::before { content: "▾"; }
+    .panel-body { margin-top: 12px; color: var(--ink); }
+    .report-section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-top: 18px;
+      box-shadow: 0 10px 25px rgba(31,31,27,0.05);
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Data Point 1 — Pre-Index Optimization</h1>
+      <p class="lede">This benchmark compares a baseline path, a traditional software filtering path, a first-pass enterprise reference-list path, and a Nol8-style simulation before embedding.</p>
+    </header>
+
+    <div id="environment"></div>
+    <div id="reading_guide"></div>
+    <div id="caveat_banner"></div>
+    <div id="external_execution_note"></div>
+    <div id="ai_summary"></div>
+    <div id="summary" class="report-section"></div>
+    <div id="legend"></div>
+    <div id="metrics" class="report-section"></div>
+    <div id="resources" class="report-section"></div>
+    <div id="results" class="report-section"></div>
+    <div id="definitions"></div>
+  </main>
+
+  <script>
+    const report = __REPORT_DATA__;
+    const metadata = report.benchmark_metadata || {};
+    const dataset = report.dataset_metadata || {};
+    const modeMetadata = report.mode_metadata || {};
+    const data = report.results || [];
+    const resources = report.resources || {};
+    const derived = report.derived_metrics || {};
+    const flags = report.interpretation_flags || {};
+    const aiSummary = report.ai_summary || null;
+
+    function num(v) {
+      const n = Number(v);
+      return Number.isNaN(n) ? 0 : n;
+    }
+
+    function pct(numVal, denVal) {
+      if (!denVal) return "0.0%";
+      return ((numVal / denVal) * 100).toFixed(1) + "%";
+    }
+
+    function signedNumber(v) {
+      const n = num(v);
+      if (n > 0) return "+" + n.toLocaleString();
+      if (n < 0) return n.toLocaleString();
+      return "0";
+    }
+
+    function signedPercent(v) {
+      const n = num(v);
+      if (n > 0) return "+" + n.toFixed(1) + "%";
+      if (n < 0) return n.toFixed(1) + "%";
+      return "0.0%";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[ch]));
+    }
+
+    function classifyMode(mode) {
+      if (mode === "nofilter") return "baseline";
+      if (mode === "re2") return "traditional";
+      if (mode === "listmatch") return "reference";
+      if (mode === "nol8sim" || (modeMetadata[mode] || {}).role === "measured_product") return "nol8";
+      return "";
+    }
+
+    function labelMode(mode) {
+      if (mode === "nofilter") return "nofilter (Baseline)";
+      if (mode === "re2") return "re2 (Traditional)";
+      if (mode === "listmatch") return "listmatch (Reference Lists)";
+      if (mode === "nol8sim") return "nol8sim (Behavior Placeholder)";
+      const role = (modeMetadata[mode] || {}).role;
+      if (role === "measured_product") return `${mode} (Measured Nol8)`;
+      return mode;
+    }
+
+    function prettyHeader(key) {
+      const mapping = {
+        mode: "Mode",
+        chunks_total: "Chunks Total",
+        chunks_kept: "Kept",
+        chunks_masked: "Masked",
+        chunks_dropped: "Dropped",
+        chunks_routed: "Routed",
+        chars_in: "Chars In",
+        chars_forwarded: "Chars Forwarded",
+        chars_delta_vs_baseline: "Chars Delta vs Baseline",
+        chars_delta_pct_vs_baseline: "Chars Delta % vs Baseline",
+        tokens_in_est: "Tokens In",
+        tokens_forwarded_est: "Tokens Forwarded",
+        tokens_delta_vs_baseline: "Tokens Delta vs Baseline",
+        tokens_delta_pct_vs_baseline: "Tokens Delta % vs Baseline",
+        preprocess_ms: "Preprocess ms",
+        chunks_per_sec: "Chunks/sec",
+        embed_cost_units_est: "Embedding Cost Proxy"
+      };
+      return mapping[key] || key;
+    }
+
+    const byMode = Object.fromEntries(data.map(r => [r.mode, r]));
+    const baseline = byMode["nofilter"] || {};
+    const traditional = byMode["re2"] || {};
+    const listmatch = byMode["listmatch"] || {};
+    const listmatchDerived = derived["listmatch"] || {};
+    const re2Derived = derived["re2"] || {};
+    const baselineTokens = num(baseline.tokens_forwarded_est);
+    const baselineChars = num(baseline.chars_forwarded);
+    const baselinePrevented = num(baseline.chunks_dropped) + num(baseline.chunks_routed);
+
+    if (metadata && Object.keys(metadata).length) {
+      const specs = metadata.instance_specs || {};
+      const hardware = [];
+      if (metadata.instance_type) hardware.push(`<strong>Instance:</strong> <code>${metadata.instance_type}</code>`);
+      if (specs.vcpu) hardware.push(`<strong>vCPU:</strong> ${specs.vcpu}`);
+      if (specs.memory_gib) hardware.push(`<strong>Memory:</strong> ${specs.memory_gib} GiB`);
+      if (specs.cpu_arch) hardware.push(`<strong>CPU arch:</strong> ${specs.cpu_arch}`);
+      if (metadata.aws_region) hardware.push(`<strong>Region:</strong> <code>${metadata.aws_region}</code>`);
+      if (metadata.go_version) hardware.push(`<strong>Go:</strong> <code>${metadata.go_version}</code>`);
+      if (dataset.chunks_total) hardware.push(`<strong>Chunks:</strong> ${dataset.chunks_total}`);
+      document.getElementById("environment").innerHTML = `
+        <h2>Benchmark Environment</h2>
+        <div class="callout">${hardware.join(" | ")}</div>
+      `;
+    }
+
+    document.getElementById("reading_guide").innerHTML = `
+      <details class="panel">
+        <summary>How To Read This Benchmark</summary>
+        <div class="panel-body">
+          <ul>
+            <li><strong>nofilter</strong> is the do-nothing baseline.</li>
+            <li><strong>re2</strong> is the incumbent software pattern-matching baseline.</li>
+            <li><strong>listmatch</strong> is the first-pass enterprise use case using known watchlists and indicators.</li>
+            <li><strong>nol8sim</strong> is a behavior placeholder and not a measured production Nol8 result.</li>
+          </ul>
+          <div class="callout" style="margin-bottom:0;">
+            This benchmark starts with <strong>list-driven enterprise control</strong>: known customers, bad actors, compromised accounts, and payment-card values. It is intentionally focused on a deterministic first-pass control layer before embedding.
+          </div>
+        </div>
+      </details>
+    `;
+
+    if (flags.contains_simulated_modes && !flags.contains_real_nol8_results) {
+      document.getElementById("caveat_banner").innerHTML = `
+        <details class="panel" open>
+          <summary>Measured vs Simulated Caveat</summary>
+          <div class="panel-body">
+            <div class="callout warning" style="margin-bottom:0;">
+              This report includes simulated Nol8 behavior for control semantics only. It does not include measured production Nol8 performance, and it is not yet safe to make product-performance claims from Nol8 rows in this report.
+            </div>
+          </div>
+        </details>
+      `;
+      document.getElementById("external_execution_note").innerHTML = `
+        <details class="panel">
+          <summary>Next Step: Real Nol8 Execution</summary>
+          <div class="panel-body">
+            The next step is to run this same benchmark contract against a real Nol8 endpoint through <code>nol8_api</code> and return the standard artifacts. This repo is ready to hand to engineering for that measured execution path.
+          </div>
+        </details>
+      `;
+    }
+
+    if (aiSummary && aiSummary.headline) {
+      const findings = Array.isArray(aiSummary.key_findings)
+        ? `<ul>${aiSummary.key_findings.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : "";
+      const caveats = Array.isArray(aiSummary.caveats) && aiSummary.caveats.length
+        ? `<div class="callout warning"><strong>Caveats:</strong><ul>${aiSummary.caveats.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`
+        : "";
+      const modeNotes = aiSummary.mode_notes && typeof aiSummary.mode_notes === "object"
+        ? `<h4>Mode Notes</h4><ul>${Object.entries(aiSummary.mode_notes).map(([mode, note]) => `<li><strong>${escapeHtml(mode)}:</strong> ${escapeHtml(note)}</li>`).join("")}</ul>`
+        : "";
+      document.getElementById("ai_summary").innerHTML = `
+        <details class="panel" open>
+          <summary>AI Summary</summary>
+          <div class="panel-body">
+            <h3>${escapeHtml(aiSummary.headline)}</h3>
+            <p>${escapeHtml(aiSummary.executive_summary)}</p>
+            ${findings}
+            ${caveats}
+            ${modeNotes}
+          </div>
+        </details>
+      `;
+    }
+
+    const summaryHtml = `
+      <h2>Summary</h2>
+      <div class="summary-grid">
+        <div class="card">
+          <h3>Listmatch token reduction</h3>
+          <p class="value">${(listmatchDerived.token_reduction_vs_baseline_pct ?? 0).toFixed(1)}%</p>
+          <div class="sub"><code>listmatch</code>: ${num(listmatch.tokens_forwarded_est).toLocaleString()} tokens forwarded vs <code>nofilter</code>: ${baselineTokens.toLocaleString()}.</div>
+          <div class="sub">Delta vs baseline: ${signedNumber(num(listmatch.tokens_forwarded_est) - baselineTokens)} tokens (${signedPercent(-num(listmatchDerived.token_reduction_vs_baseline_pct))}).</div>
+        </div>
+        <div class="card">
+          <h3>Prevented from embedding</h3>
+          <p class="value">${(listmatchDerived.prevented_from_embedding_pct ?? 0).toFixed(1)}%</p>
+          <div class="sub"><code>listmatch</code>: ${(num(listmatch.chunks_dropped) + num(listmatch.chunks_routed)).toLocaleString()} chunks prevented vs <code>nofilter</code>: ${baselinePrevented.toLocaleString()}.</div>
+          <div class="sub">Computed as dropped + routed chunks, divided by total chunks.</div>
+        </div>
+        <div class="card">
+          <h3>Governed share of corpus</h3>
+          <p class="value">${(listmatchDerived.governed_share_pct ?? 0).toFixed(1)}%</p>
+          <div class="sub"><code>listmatch</code>: ${(num(listmatch.chunks_masked) + num(listmatch.chunks_dropped) + num(listmatch.chunks_routed)).toLocaleString()} chunks touched by mask, drop, or route.</div>
+        </div>
+        <div class="card">
+          <h3>Listmatch CPU vs re2</h3>
+          <p class="value">${listmatchDerived.cpu_multiple_vs_re2 ? listmatchDerived.cpu_multiple_vs_re2.toFixed(2) + "x" : "n/a"}</p>
+          <div class="sub">Approximate total CPU-time multiple for software list-driven control relative to the traditional <code>re2</code> baseline on this corpus.</div>
+        </div>
+      </div>
+    `;
+    document.getElementById("summary").innerHTML = summaryHtml;
+
+    document.getElementById("legend").innerHTML = `
+      <div class="legend">
+        <span style="background:#f7f7f7;">Baseline</span>
+        <span style="background:#eef4ff;">Traditional</span>
+        <span style="background:#fff6e8;">Reference Lists</span>
+        <span style="background:#edf8ed;">Nol8 / Placeholder</span>
+      </div>
+    `;
+
+    const kpiRows = [
+      {
+        name: "Drop rate",
+        nofilter: `${(derived["nofilter"]?.drop_rate_pct ?? 0).toFixed(1)}%`,
+        re2: `${(re2Derived.drop_rate_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.drop_rate_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.drop_rate_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Route rate",
+        nofilter: `${(derived["nofilter"]?.route_rate_pct ?? 0).toFixed(1)}%`,
+        re2: `${(re2Derived.route_rate_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.route_rate_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.route_rate_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Mask rate",
+        nofilter: `${(derived["nofilter"]?.mask_rate_pct ?? 0).toFixed(1)}%`,
+        re2: `${(re2Derived.mask_rate_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.mask_rate_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.mask_rate_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Forwarded token delta vs baseline",
+        nofilter: "0",
+        re2: `${signedNumber(num(traditional.tokens_forwarded_est) - baselineTokens)}`,
+        listmatch: `${signedNumber(num(listmatch.tokens_forwarded_est) - baselineTokens)}`,
+        nol8sim: `${signedNumber(num((byMode["nol8sim"] || {}).tokens_forwarded_est) - baselineTokens)}`,
+      },
+      {
+        name: "Token reduction vs baseline",
+        nofilter: "0.0%",
+        re2: `${(re2Derived.token_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.token_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.token_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Forwarded char delta vs baseline",
+        nofilter: "0",
+        re2: `${signedNumber(num(traditional.chars_forwarded) - baselineChars)}`,
+        listmatch: `${signedNumber(num(listmatch.chars_forwarded) - baselineChars)}`,
+        nol8sim: `${signedNumber(num((byMode["nol8sim"] || {}).chars_forwarded) - baselineChars)}`,
+      },
+      {
+        name: "Payload reduction vs baseline",
+        nofilter: "0.0%",
+        re2: `${(re2Derived.payload_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.payload_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.payload_reduction_vs_baseline_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Estimated embedding cost delta vs baseline",
+        nofilter: "0.0%",
+        re2: `${(re2Derived.estimated_embedding_cost_delta_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        listmatch: `${(listmatchDerived.estimated_embedding_cost_delta_vs_baseline_pct ?? 0).toFixed(1)}%`,
+        nol8sim: `${(derived["nol8sim"]?.estimated_embedding_cost_delta_vs_baseline_pct ?? 0).toFixed(1)}%`,
+      },
+      {
+        name: "Prevented chunks vs baseline",
+        nofilter: "0",
+        re2: `${signedNumber(num(traditional.chunks_dropped) + num(traditional.chunks_routed) - baselinePrevented)}`,
+        listmatch: `${signedNumber(num(listmatch.chunks_dropped) + num(listmatch.chunks_routed) - baselinePrevented)}`,
+        nol8sim: `${signedNumber(num((byMode["nol8sim"] || {}).chunks_dropped) + num((byMode["nol8sim"] || {}).chunks_routed) - baselinePrevented)}`,
+      },
+      {
+        name: "Throughput delta vs traditional",
+        nofilter: "n/a",
+        re2: "0.0%",
+        listmatch: `${signedPercent(((num(listmatch.chunks_per_sec) - num(traditional.chunks_per_sec)) / (num(traditional.chunks_per_sec) || 1)) * 100)}`,
+        nol8sim: `${signedPercent(((num((byMode["nol8sim"] || {}).chunks_per_sec) - num(traditional.chunks_per_sec)) / (num(traditional.chunks_per_sec) || 1)) * 100)}`,
+      }
+    ];
+
+    let kpiHtml = `<h2>Derived Metrics</h2><table class="kpi-table"><tr><th>Metric</th><th>nofilter</th><th>re2</th><th>listmatch</th><th>nol8sim</th></tr>`;
+    kpiRows.forEach(r => {
+      kpiHtml += `<tr><td>${r.name}</td><td>${r.nofilter}</td><td>${r.re2}</td><td>${r.listmatch}</td><td>${r.nol8sim}</td></tr>`;
+    });
+    kpiHtml += `</table>`;
+    document.getElementById("metrics").innerHTML = kpiHtml;
+
+    if (resources && Object.keys(resources).length) {
+      let rHtml = `<h2>Resource Efficiency</h2>
+      <div class="callout">
+        <ul>
+          <li><strong>User CPU sec</strong>: time spent in the benchmark process itself.</li>
+          <li><strong>System CPU sec</strong>: kernel/OS work on behalf of that process.</li>
+          <li><strong>Total CPU sec</strong>: user plus system CPU across cores, so it can exceed elapsed wall-clock time.</li>
+          <li><strong>CPU cores used</strong>: approximate average number of fully utilized cores during the run.</li>
+        </ul>
+      </div>
+      <table><tr><th>Mode</th><th>User CPU sec</th><th>System CPU sec</th><th>Total CPU sec</th><th>CPU cores used</th><th>Elapsed sec</th><th>Max RSS KB</th><th>Tokens reduced / CPU sec</th><th>Payload reduced / CPU sec</th><th>Chunks processed / CPU sec</th></tr>`;
+      Object.keys(resources).forEach(mode => {
+        const res = resources[mode] || {};
+        const d = derived[mode] || {};
+        rHtml += `<tr class="${classifyMode(mode)}"><td>${labelMode(mode)}</td><td>${num(res.user_cpu_seconds).toFixed(3)}</td><td>${num(res.system_cpu_seconds).toFixed(3)}</td><td>${num(res.total_cpu_seconds).toFixed(3)}</td><td>${num(res.cpu_cores_used_est).toFixed(2)}</td><td>${num(res.elapsed_seconds).toFixed(3)}</td><td>${res.max_rss_kb || 0}</td><td>${num(d.tokens_reduced_per_cpu_sec).toFixed(1)}</td><td>${num(d.payload_reduced_per_cpu_sec).toFixed(1)}</td><td>${num(d.chunks_processed_per_cpu_sec).toFixed(1)}</td></tr>`;
+      });
+      rHtml += `</table>`;
+      document.getElementById("resources").innerHTML = rHtml;
+    }
+
+    const columnGroups = [
+      { title: "Identity", keys: ["mode"] },
+      { title: "Volume In", keys: ["chunks_total", "chars_in", "tokens_in_est"] },
+      { title: "Decisions", keys: ["chunks_kept", "chunks_masked", "chunks_dropped", "chunks_routed"] },
+      { title: "Volume Out", keys: ["chars_forwarded", "chars_delta_vs_baseline", "chars_delta_pct_vs_baseline", "tokens_forwarded_est", "tokens_delta_vs_baseline", "tokens_delta_pct_vs_baseline", "embed_cost_units_est"] },
+      { title: "Performance", keys: ["preprocess_ms", "chunks_per_sec"] }
+    ];
+    const orderedColumns = columnGroups.flatMap(g => g.keys);
+
+    let tableHtml = "<h2>Raw Benchmark Output</h2><table><tr>";
+    columnGroups.forEach(g => {
+      tableHtml += `<th colspan="${g.keys.length}">${g.title}</th>`;
+    });
+    tableHtml += "</tr><tr>";
+    orderedColumns.forEach(k => tableHtml += "<th>" + prettyHeader(k) + "</th>");
+    tableHtml += "</tr>";
+
+    data.forEach(row => {
+      const rowTokens = num(row.tokens_forwarded_est);
+      const rowChars = num(row.chars_forwarded);
+      const enrichedRow = {
+        ...row,
+        chars_delta_vs_baseline: signedNumber(rowChars - baselineChars),
+        chars_delta_pct_vs_baseline: signedPercent(-num((derived[row.mode] || {}).payload_reduction_vs_baseline_pct)),
+        tokens_delta_vs_baseline: signedNumber(rowTokens - baselineTokens),
+        tokens_delta_pct_vs_baseline: signedPercent(-num((derived[row.mode] || {}).token_reduction_vs_baseline_pct)),
+      };
+      tableHtml += `<tr class="${classifyMode(row.mode)}">`;
+      orderedColumns.forEach(k => {
+        const value = k === "mode" ? labelMode(enrichedRow[k]) : enrichedRow[k];
+        tableHtml += "<td>" + value + "</td>";
+      });
+      tableHtml += "</tr>";
+    });
+    tableHtml += "</table>";
+    document.getElementById("results").innerHTML = tableHtml;
+
+    document.getElementById("definitions").innerHTML = `
+      <details class="panel">
+        <summary>Metric Definitions</summary>
+        <div class="panel-body">
+          <table>
+            <tr><th>Metric</th><th>Meaning</th></tr>
+            <tr><td><code>tokens_forwarded_est</code></td><td>Simple proxy for embedding cost. Lower is better.</td></tr>
+            <tr><td><code>tokens/chars delta vs baseline</code></td><td>Absolute difference between the current mode's forwarded volume and the <code>nofilter</code> baseline.</td></tr>
+            <tr><td><code>tokens/chars delta % vs baseline</code></td><td>Percentage reduction versus the <code>nofilter</code> baseline, shown next to the underlying raw forwarded values.</td></tr>
+            <tr><td><code>chars_forwarded</code></td><td>Simple payload proxy for text forwarded to embedding. Lower is better.</td></tr>
+            <tr><td><code>prevented from embedding</code></td><td>Chunks dropped or routed away from embedding by the control layer.</td></tr>
+            <tr><td><code>governed share</code></td><td>Chunks touched by mask, drop, or route decisions.</td></tr>
+            <tr><td><code>user/system/total CPU sec</code></td><td>User CPU is benchmark code time, system CPU is kernel/OS work, and total CPU sec is the sum across cores.</td></tr>
+            <tr><td><code>CPU cores used</code></td><td>Approximate average fully utilized CPU cores during the run.</td></tr>
+            <tr><td><code>Max RSS KB</code></td><td>Peak resident memory used by the benchmark process.</td></tr>
+          </table>
+          <div class="footer">This report stays intentionally lightweight: one HTML file, one structured report JSON, and a focus on interpretable metrics.</div>
+        </div>
+      </details>
+    `;
+  </script>
+</body>
+</html>
