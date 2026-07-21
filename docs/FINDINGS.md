@@ -56,6 +56,8 @@ in `docs/issues/` (`ISSUE-NNN`), aligned 1:1 — **ISSUE-N = THM-N**.
 | FW-6 | Failing reports are unusable at scale (Tier 4) | Medium | Fixed |
 | FW-7 | Generation depends on YAML key order (T1-6) | Low | Fixed |
 | FW-8 | Policy tests polluted the real deployment ledger | Low | **Fixed** |
+| FW-9 | Bearer token exposed on the command line (T2-3) | Medium | **Fixed** |
+| FW-10 | Dead transport scripts had unauthenticated/plaintext paths (T2-4/T2-5) | Low | **Fixed** |
 
 ### Observations - OBS
 
@@ -63,6 +65,7 @@ in `docs/issues/` (`ISSUE-NNN`), aligned 1:1 — **ISSUE-N = THM-N**.
 |---|---|---|
 | OBS-1 | Control plane TLS is self-signed | **Not a finding.** Do not re-promote |
 | OBS-2 | Processed payload returns to the caller | **Open question**, not a defect |
+| OBS-3 | Run artifacts are plaintext (T2-4) | **Accepted residual.** Synthetic data only |
 
 ---
 
@@ -363,6 +366,27 @@ local ledger. Now: `setUp` patches `_policy_ledger_path` to a temp file, matchin
 the isolation the dedicated ledger test already used. Verified load-bearing - with
 the patch removed, one suite run repolluted the real file.
 
+## FW-9 - Bearer token exposed on the command line (FIXED)
+
+Both transports (`scripts/load-policy.sh`, `scripts/run-validation.sh`) passed
+the token as `-H "Authorization: Bearer $TOKEN"` in curl's argument list, where
+any local user can read it via `ps` - once per record on the execution path.
+Now each writes the header to a `0600` `mktemp` file and passes it with
+`-H @file`, so the token is never an argv element while the request stays
+authenticated; the file is removed by the existing exit trap. Verified live
+against Themis (policy deploy 200, run 5/5) and by a transport test that resolves
+`-H @file` and asserts the token appears in no argv element (T2-3).
+
+## FW-10 - Dead transport scripts carried insecure paths (FIXED)
+
+The Tier 2 review flagged unauthenticated processing calls (T2-5) and a
+plaintext-writing execution path (T2-4). Both lived only in code the live path
+does not use: `scripts/process-message.sh`, `framework/execution/run_functional_test.py`
+(and the one-time `scripts/restructure-framework.sh` that referenced it). The
+live path (`run-validation.sh`) authenticates and sanitizes. Resolved by deleting
+the dead files outright - verified unreferenced by any live code or test. See
+OBS-3 for the remaining T2-4 residual on live artifacts.
+
 ---
 
 # OBS - Recorded, deliberately not findings
@@ -393,6 +417,19 @@ streaming protocol we may simply not be using.
 **Raise as a question, not a finding:** is there an inline or proxy mode, and
 what is the intended production integration pattern? Recorded at the end of the
 ISSUE-004 handover drafts.
+
+## OBS-3 - Run artifacts are plaintext (T2-4 residual)
+
+The live path writes full expected/actual messages into `artifacts/runs/` with
+default file permissions. T2-4's concern - plaintext sensitive content on disk -
+does not bite here because the framework operates on **synthetic data by design**
+(`expected.jsonl` is our test oracle, not customer data; see "the oracle is
+ours"). Accepted as a residual, not fixed in code.
+
+**Guardrail:** do not point this framework at real customer data without first
+adding restrictive artifact permissions and, ideally, encryption at rest. The
+dead plaintext-writing path was removed (FW-10); this note covers the remaining
+live path.
 
 ---
 

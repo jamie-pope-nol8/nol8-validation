@@ -68,16 +68,14 @@ validate generate --config config/workloads/customer-record-csv.yaml \
 
 ---
 
-## Not done - verify before removing
+## Removed 2026-07-21 (Tier 2 review, FW-10)
 
-`scripts/restructure-framework.sh` - a one-time migration script. The only
-references to it are inside itself, plus the baseline directory name. Confirm
-the migration is complete before removing; it may be retained deliberately as
-a record of the layout change.
-
-`scripts/process-message.sh` - no references found in the repository. May be a
-manual convenience tool. It also reads `ARGUS_PROCESS_ENDPOINT`, which nothing
-defines, so it always falls back to a hardcoded tenant URL.
+`scripts/restructure-framework.sh`, `scripts/process-message.sh`, and
+`framework/execution/run_functional_test.py` (with its empty package
+`__init__.py`) were removed. Verified unreferenced by any live code or test.
+`process-message.sh` and `run_functional_test.py` carried the unauthenticated
+processing paths (T2-5) and the plaintext writer (T2-4); deleting them resolved
+those findings outright rather than hardening dead code. See FINDINGS FW-10.
 
 `docs/continue-conversation.md` contains working conventions that would serve
 better as `CLAUDE.md` at the repository root, where tooling and contributors

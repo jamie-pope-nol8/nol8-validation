@@ -29,11 +29,12 @@ reconstructing context from chat history.
 >   ISSUE-005 `[FINANCIAL:CRED`).
 > - **Outbound Slack comms** drafted: `docs/issues/internal/outbound-slack-comms.md`.
 >
-> **Next work items (tomorrow, in order):**
-> 1. **Tier 2 - security.** NOT STARTED. T2-1..T2-4 catalogued in
->    `docs/CODE_REVIEW_PLAN.md` (re-read against current code first; FW-4/FW-5
->    already hardened the env-file transport).
-> 2. **Tier 5 - structure and tests.** NOT STARTED.
+> **Next work items (in order):**
+> 1. **Tier 2 - security. DONE 2026-07-21.** T2-3 fixed (FW-9, token off argv,
+>    live-verified); dead insecure scripts removed (FW-10, resolves T2-4/T2-5);
+>    T2-1/T2-2 already handled by FW-4/5; T2-4 residual recorded as OBS-3. See
+>    the Tier 2 status block in `docs/CODE_REVIEW_PLAN.md`.
+> 2. **Tier 5 - structure and tests. START HERE.** NOT STARTED.
 > 3. **Then: demo environment.** Likely a NEW repo, reusing the reviewed
 >    `preindex-benchmark-kit` (three use cases, datasets, Go harness, reports -
 >    ~80% built) and a second **agentic insurance-claims** repo that is **not on
@@ -428,14 +429,17 @@ data?" and "you don't, this proves the engine works" is a weak answer alone.
 - **Tier 1 COMPLETE** - T1-6 (YAML key order) closed this session as FW-7. The
   only remaining Tier 1 item historically deferred was T1-6; confirm nothing
   else is outstanding when you next open the plan.
-- **Tier 2 NOT STARTED** - security. T2-1..T2-4 are catalogued in the plan
-  (TLS-on-control-plane, git-tracked env sourcing, token on the command line,
-  plaintext content in artifacts). Note FW-4/FW-5 already hardened the env-file
-  transport; re-read the plan against current code before acting.
+- **Tier 2 COMPLETE (2026-07-21)** - security. T2-3 fixed (FW-9: token off the
+  curl argv into a 0600 `-H @file`, live-verified). Dead insecure scripts removed
+  (FW-10: `process-message.sh`, `framework/execution/run_functional_test.py`,
+  `restructure-framework.sh`) - this resolves T2-5 (unauthenticated paths) and the
+  T2-4 plaintext writer. T2-1 (TLS) and T2-2 (env sourcing) were already handled
+  by FW-4/FW-5. T2-4 residual on live artifacts recorded as OBS-3 (synthetic data
+  only; real-data guardrail). Full status block in the plan.
 - **Tier 3** - product limitations, written up.
 - **Tier 4** - evidence quality and report usability. **FW-6 (report usability)
-  done this session.** Re-scan the plan for any remaining Tier 4 items.
-- **Tier 5 NOT STARTED** - structure and tests.
+  done.** Re-scan the plan for any remaining Tier 4 items.
+- **Tier 5 NOT STARTED** - structure and tests. **Next.**
 
 ## Generator guarantees
 
@@ -650,15 +654,16 @@ section as the seed; the plan gets built when we start.
 
 # Immediate Next Actions
 
-**Tomorrow's plan, in order:**
+**In order:**
 
-1. **Tier 2 - security. START HERE.** NOT STARTED. Re-read
-   `docs/CODE_REVIEW_PLAN.md` against current code first (T2-1..T2-4 are
-   catalogued there; FW-4/FW-5 already hardened the git-tracked env-file
-   transport, so confirm what remains before acting). Work one item at a time,
-   verify each issue is real before proposing changes, add a test per fix.
+1. **Tier 5 - structure and tests. START HERE.** NOT STARTED. Re-read the Tier 5
+   section of `docs/CODE_REVIEW_PLAN.md` against current code first (as with Tier
+   2, some items may already be resolved). Work one item at a time, verify each
+   issue is real before proposing changes, add a test per fix.
 
-2. **Tier 5 - structure and tests.** NOT STARTED. After Tier 2.
+2. **Tier 2 - security. DONE 2026-07-21.** T2-3 fixed (FW-9); dead insecure
+   scripts removed (FW-10); T2-1/T2-2 via FW-4/5; T2-4 residual = OBS-3. See the
+   plan's Tier 2 status block.
 
 3. **Then: build the demo environment.** Likely a new repo. Start by (a) cloning
    the **agentic insurance-claims** repo (not on this machine yet) and reviewing

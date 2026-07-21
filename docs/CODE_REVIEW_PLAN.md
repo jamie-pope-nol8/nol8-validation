@@ -113,6 +113,22 @@ reproducibility.
 
 ## Tier 2 - Security
 
+> **Status 2026-07-21 - Tier 2 COMPLETE.** Verified each item against current
+> code before acting; several were already resolved by FW-4/FW-5.
+> - **T2-1** - resolved. `load-policy.sh` gates `--insecure` behind
+>   `THEMIS_ALLOW_INSECURE_TLS` (verify-on by default); residual is OBS-1, the
+>   product self-signed cert.
+> - **T2-2** - resolved (FW-4). Both transports use `load_env_file`, a safe
+>   allowlisted parse - no `source`/`eval` of the committed config.
+> - **T2-3** - fixed (FW-9). Token moved out of curl argv into a `0600` temp
+>   file read with `-H @file`; live-verified.
+> - **T2-4** - the cited writer (`run_functional_test.py`) was dead and is
+>   removed (FW-10); the live path writes synthetic data only, recorded as the
+>   OBS-3 residual with a real-data guardrail.
+> - **T2-5** - resolved. The two unauthenticated paths were dead
+>   (`process-message.sh`, `run_functional_test.py`), now removed (FW-10); the
+>   live `run-validation.sh` authenticates.
+
 **T2-1. TLS verification disabled on the policy control plane.**  
 `scripts/load-policy.sh:74` uses `curl -skS`, unconditionally, on the one call
 carrying both the bearer token and the complete DLP ruleset. A MITM can steal
