@@ -39,6 +39,7 @@ demos/benchmark/**/results/*.csv
 demos/benchmark/**/results/*.json
 demos/benchmark/**/results/*.txt
 demos/benchmark/**/report/report.html
+demos/benchmark/**/report/report_data.json
 # The on-brand report is generated from run.json by make-report.py (run.json,
 # make-report.py, and brand/ are tracked; the rendered HTML is not).
 demos/benchmark/pre-index-report.html

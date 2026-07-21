@@ -1,0 +1,19 @@
+# Local build artifacts
+go/use_case_2_runner
+go/datapoint2_pre_post_inference_pack_v1
+.gocache/
+report/__pycache__/
+*.pyc
+
+# Generated outputs
+results/*.csv
+results/*_output.jsonl
+results/*_stdout.txt
+results/*_time.txt
+report/*.html
+report/*.json
+
+# Keep docs and placeholders
+!results/README.md
+!report/README.md
+!report/report_template.html
