@@ -143,8 +143,8 @@
     <div class="statrow">
       <div class="bigstat"><span class="v">535<small> /1000</small></span>
         <span class="k">chunks governed · 0 errors</span></div>
-      <div class="bigstat"><span class="v">0.23<small> ms</small></span>
-        <span class="k">NOL8 engine processing / call</span></div>
+      <div class="bigstat"><span class="v">&lt;0.3<small> ms</small></span>
+        <span class="k">NOL8 engine time / call — below the network floor</span></div>
       <div class="bigstat alt"><span class="v">97<small> %</small></span>
         <span class="k">of per-call latency is network + TLS</span></div>
       <div class="bigstat alt"><span class="v">100<small> %</small></span>
@@ -231,10 +231,15 @@
           <th>TLS tax</th><th>Engine</th>
         </tr></thead>
         <tbody>
-          <tr><td>Themis (FPGA)</td><td>2.14 ms</td><td>2.38 ms</td><td>7.17 ms</td><td>4.80 ms</td><td><span class="eng">≤ 0.23 ms</span></td></tr>
-          <tr><td>Aergia</td><td>2.01 ms</td><td>1.73 ms</td><td>6.18 ms</td><td>4.45 ms</td><td><span class="eng">≤ 0.00 ms</span></td></tr>
+          <tr><td>Themis (FPGA)</td><td>2.14 ms</td><td>2.38 ms</td><td>7.17 ms</td><td>4.80 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
+          <tr><td>Aergia</td><td>2.01 ms</td><td>1.73 ms</td><td>6.18 ms</td><td>4.45 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
         </tbody>
       </table></div>
+      <p style="font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);margin:14px 0 0">
+        Engine time = what's left after subtracting network RTT and TLS. On both engines it lands
+        under the network round-trip, i.e. below what we can resolve from outside — sub-millisecond,
+        reported as an upper bound. The takeaway isn't a precise figure; it's that the engine is not
+        where the time goes.</p>
     </div>
   </section>
 
