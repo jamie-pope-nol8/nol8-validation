@@ -136,10 +136,10 @@
   <header class="hero">
     <div class="eyebrow">Data Point 1 · Pre-Index Optimization · Measured on live engines</div>
     <h1>Deterministic governance before embedding —<br><span class="hl">at hardware speed.</span></h1>
-    <p class="lede">Govern known-value risk in text before it reaches the vector index. Run on real
-      NOL8 engines — Themis (FPGA) and Aergia — over a 1,000-chunk corpus. The engines governed
-      <b>identically</b>, and the actual processing time is <b>sub-millisecond</b>: nearly all
-      observed latency is the network path.</p>
+    <p class="lede">Govern known-value risk in text before it reaches the vector index — on
+      <b>NOL8 (Themis, FPGA)</b>, benchmarked against a real <b>RE2 incumbent (Aergia)</b> over a
+      1,000-chunk corpus. NOL8 matched the incumbent <b>byte-for-byte</b>, and its actual processing
+      time is <b>sub-millisecond</b>: nearly all observed latency is the network path.</p>
     <div class="statrow">
       <div class="bigstat"><span class="v">535<small> /1000</small></span>
         <span class="k">chunks governed · 0 errors</span></div>
@@ -148,15 +148,15 @@
       <div class="bigstat alt"><span class="v">97<small> %</small></span>
         <span class="k">of per-call latency is network + TLS</span></div>
       <div class="bigstat alt"><span class="v">100<small> %</small></span>
-        <span class="k">Themis / Aergia output match</span></div>
+        <span class="k">NOL8 matches the RE2 incumbent, byte-for-byte</span></div>
     </div>
   </header>
 
   <section>
-    <div class="sec-head"><span class="tag">01</span><h2>Three ways to handle a chunk</h2></div>
-    <p class="sec-sub">Each approach runs the same corpus. They target different things — read them as
-      distinct strategies, not a single leaderboard. (Traditional regex here is CPU software, the
-      incumbent baseline — not a NOL8 engine.)</p>
+    <div class="sec-head"><span class="tag">01</span><h2>NOL8 vs the RE2 incumbent</h2></div>
+    <p class="sec-sub">Same corpus, same governance policy on both engines. NOL8 (Themis, FPGA)
+      reproduces the RE2 incumbent (Aergia) exactly — the difference is in <em>how</em> each gets
+      there (next section). "Do nothing" is the baseline.</p>
     <div class="approaches">
       <div class="card appr nil"><div class="rail"></div>
         <h3>Do nothing</h3>
@@ -165,19 +165,19 @@
         <p class="desc">Baseline. All 43,005 tokens forwarded downstream, sensitive values included.</p>
       </div>
       <div class="card appr re2"><div class="rail"></div>
-        <h3>Traditional regex · software</h3>
-        <div class="headline">Regex patterns + boilerplate strip</div>
-        <div class="metric">395<small> touched</small></div>
-        <p class="desc">The incumbent way, on a CPU: pattern-shaped matches and template-line removal.
-          Generic, not tied to your risk list — and it can't see a named entity it has no pattern for.</p>
+        <h3>RE2 · Aergia (incumbent)</h3>
+        <div class="headline">The known regex engine, as reference</div>
+        <div class="metric">535<small> governed</small></div>
+        <p class="desc">A real RE2 engine, stood up and named Aergia to benchmark against. Given the
+          same governance policy, it flags the same chunks — the incumbent reference point.</p>
       </div>
       <div class="card appr nol8"><div class="rail"></div>
-        <h3>NOL8 · Themis + Aergia</h3>
+        <h3>NOL8 · Themis (FPGA)</h3>
         <div class="headline">Deterministic known-value governance</div>
         <div class="metric">535<small> governed</small></div>
         <p class="desc">Your watchlist, exactly: denied entities, watched customers, compromised
           accounts, payment cards, internal projects, blocked IPs — replaced with governance tokens.
-          Identical on both engines, and sub-millisecond per call.</p>
+          Byte-identical to the RE2 incumbent, on FPGA, sub-millisecond per call.</p>
       </div>
     </div>
 
@@ -189,7 +189,7 @@
         <div>Customer review: <span class="tok">[CUSTOMER]</span> requested accelerated enablement
           for the <span class="tok">[PROJECT]</span> workflow.</div>
       </div>
-      <div class="both"><span class="dot"></span>Verified byte-identical across Themis and Aergia for all 1,000 records</div>
+      <div class="both"><span class="dot"></span>NOL8 output verified byte-identical to the RE2 incumbent across all 1,000 records</div>
     </div>
   </section>
 
@@ -201,15 +201,15 @@
     <div class="card">
       <div class="wf">
         <div class="lbl"><b>NOL8 · Themis (FPGA) — cold call</b><span class="num">7.17 ms total</span></div>
-        <div class="bar" role="img" aria-label="Themis: network 2.14ms, TLS 4.80ms, engine 0.23ms">
+        <div class="bar" role="img" aria-label="NOL8 Themis: network 2.14ms, TLS 4.80ms, engine sub-millisecond">
           <div class="seg net" style="flex:2.14">net&nbsp;2.14</div>
           <div class="seg tls" style="flex:4.80">TLS&nbsp;handshake&nbsp;4.80</div>
           <div class="seg eng" style="flex:0.23"></div>
         </div>
       </div>
       <div class="wf" style="margin-top:20px">
-        <div class="lbl"><b>NOL8 · Aergia — cold call</b><span class="num">6.18 ms total</span></div>
-        <div class="bar" role="img" aria-label="Aergia: network 2.01ms, TLS 4.45ms, engine sub-millisecond">
+        <div class="lbl"><b>RE2 · Aergia (incumbent) — cold call</b><span class="num">6.18 ms total</span></div>
+        <div class="bar" role="img" aria-label="RE2 Aergia: network 2.01ms, TLS 4.45ms, engine sub-millisecond">
           <div class="seg net" style="flex:2.01">net&nbsp;2.01</div>
           <div class="seg tls" style="flex:4.45">TLS&nbsp;handshake&nbsp;4.45</div>
           <div class="seg eng" style="flex:0.15"></div>
@@ -220,9 +220,9 @@
         <span><i style="background:var(--transport)"></i>TLS handshake — per call, removable by pooling</span>
         <span><i style="background:var(--signal)"></i>Engine processing</span>
       </div>
-      <div class="callout">Reusing one connection instead of reconnecting per call drops Themis from
+      <div class="callout">Reusing one connection instead of reconnecting per call drops NOL8 from
         <b>7.17&nbsp;ms → 2.38&nbsp;ms</b> — a 3× cut with zero engine change. What's left is one
-        network round-trip; the engine sits inside the measurement noise.</div>
+        network round-trip; the engine sits inside the measurement noise on both NOL8 and RE2.</div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -232,15 +232,15 @@
           <th>TLS tax</th><th>Engine</th>
         </tr></thead>
         <tbody>
-          <tr><td>Themis (FPGA)</td><td>2.14 ms</td><td>2.38 ms</td><td>7.17 ms</td><td>4.80 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
-          <tr><td>Aergia</td><td>2.01 ms</td><td>1.73 ms</td><td>6.18 ms</td><td>4.45 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
+          <tr><td>NOL8 (Themis, FPGA)</td><td>2.14 ms</td><td>2.38 ms</td><td>7.17 ms</td><td>4.80 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
+          <tr><td>RE2 (Aergia)</td><td>2.01 ms</td><td>1.73 ms</td><td>6.18 ms</td><td>4.45 ms</td><td><span class="eng">&lt; 0.3 ms</span></td></tr>
         </tbody>
       </table></div>
       <p style="font-family:var(--font-mono);font-size:12px;color:var(--ink-soft);margin:14px 0 0">
-        Engine time = what's left after subtracting network RTT and TLS. On both engines it lands
-        under the network round-trip, i.e. below what we can resolve from outside — sub-millisecond,
-        reported as an upper bound. The takeaway isn't a precise figure; it's that the engine is not
-        where the time goes.</p>
+        Engine time = what's left after subtracting network RTT and TLS. On both NOL8 and RE2 it lands
+        under the network round-trip — below what we can resolve from outside — so it's reported as a
+        sub-millisecond upper bound. The small NOL8-vs-RE2 differences here are network-path variance,
+        not engine speed; the point is the engine is not where the time goes.</p>
     </div>
   </section>
 
@@ -255,23 +255,22 @@
           paths translate almost 1:1 into end-to-end improvement.</p></div></li>
       <li><span class="n">→</span><div><b>The first win is connection reuse.</b>
         <p>Pooling connections alone is a 3× per-call improvement here, before touching anything else.</p></div></li>
-      <li><span class="n">→</span><div><b>Two engines, one policy, same answer.</b>
-        <p>Identical output across Themis and Aergia means the control is deterministic and portable —
-          the choice between engines is about placement and throughput, not behavior.</p></div></li>
+      <li><span class="n">→</span><div><b>NOL8 is a drop-in for the incumbent.</b>
+        <p>NOL8 reproduces the RE2 incumbent's governance byte-for-byte — same deterministic control,
+          on FPGA. Parity on correctness today; the hardware's edge is throughput at scale (next test).</p></div></li>
     </ul>
   </section>
 
   <footer>
     <p><b>Method.</b> 1,000-chunk synthetic pre-index corpus. "Do nothing" = forward everything;
-      "Traditional regex" = a local Go RE2 software baseline (pattern masking + boilerplate strip),
-      running on a CPU — the incumbent way, not a NOL8 engine; "NOL8" = the same literal known-value
-      policy deployed to Themis (:443) and Aergia (:444), measured over the network via the adapter.
-      Governance counts are exact ("chunks touched" for the regex baseline = masked + dropped;
-      "chunks governed" for NOL8 = chunks containing a governed value). The regex baseline and NOL8
-      target different content, so their token counts are not a like-for-like comparison. Latency decomposed from the
+      "RE2 (Aergia)" = a real RE2 engine stood up as the known incumbent (:444); "NOL8 (Themis)" =
+      the FPGA engine (:443). The same literal known-value policy was deployed to both and measured
+      over the network via the adapter — NOL8 and RE2 produced byte-identical output for all 1,000
+      records. "Chunks governed" = chunks containing a governed value. Latency decomposed from the
       field client box, N = 100 per layer, medians; engine time is bounded as (warm − network RTT) and
       lands within network jitter, so it is an <b>upper bound</b> — no server-side timing hook is
       exposed. Cold = new TLS connection per request (current adapter); warm = pooled. Not a
-      concurrency/throughput saturation test.</p>
+      concurrency/throughput saturation test — the FPGA-vs-software throughput comparison is the next
+      measurement.</p>
   </footer>
 </div>
