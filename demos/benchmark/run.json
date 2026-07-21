@@ -1,0 +1,82 @@
+{
+  "_comment": "One benchmark run = one of these. make-report.py renders it into the on-brand report. Presentation-free where possible; the generator derives colors/styles from role/kind. Copy follows NOL8 brand voice: no em dashes, no exclamation marks, no emoji; Aergia is always the RE2 benchmark, never a NOL8 product.",
+
+  "identifier": { "left": "NOL8 · Pre-Index Governance", "right": "Data Point 01 / Benchmark" },
+  "navLabel": "Pre-Index Governance · Data Point 01",
+
+  "headline": { "lead": "Deterministic governance before embedding, ", "accent": "at hardware speed." },
+  "eyebrow": "NOL8 · Pre-Index Governance Benchmark",
+  "lede": "Govern known-value risk before it reaches the vector index. Themis runs the policy inline on FPGA. To prove it, we ran the identical policy and corpus through Aergia, our stand-up of Google RE2, as the benchmark. Same data. Same policy. Byte-identical output. Compute cost is sub-millisecond, so nearly all observed latency is the network path.",
+
+  "stats": [
+    { "value": "535",  "unit": "/ 1000", "label": "chunks governed, 0 errors",            "key": true  },
+    { "value": "<0.3", "unit": "ms",     "label": "engine time per call",                 "key": true  },
+    { "value": "97",   "unit": "%",      "label": "of per-call latency is network + TLS", "key": false },
+    { "value": "100",  "unit": "%",      "label": "Themis / Aergia output match",         "key": false }
+  ],
+
+  "benchmark": {
+    "heading": "One policy. Two engines. Identical output.",
+    "lede": "The same literal known-value policy runs the same 1,000-chunk corpus on both engines: Themis on FPGA, and Aergia, our stand-up of Google RE2, as the benchmark. Do nothing is the null baseline."
+  },
+  "approaches": [
+    { "role": "baseline",  "tag": "Baseline · Do nothing",     "headline": "Everything reaches the index",         "metric": "0",   "metricUnit": "governed", "desc": "All 43,005 tokens forwarded downstream, sensitive values included." },
+    { "role": "benchmark", "tag": "Benchmark · Aergia (RE2)",  "headline": "Google RE2, the known regex engine",   "metric": "535", "metricUnit": "governed", "desc": "Our sandbox stand-up of Google RE2, running the identical policy on CPU. The established software baseline we measure against." },
+    { "role": "nol8",      "tag": "NOL8 · Themis (FPGA)",      "headline": "Deterministic known-value governance", "metric": "535", "metricUnit": "governed", "desc": "The identical policy, inline on FPGA at hardware speed. Byte-identical output to the RE2 benchmark, and sub-millisecond per call." }
+  ],
+
+  "redaction": {
+    "before": "Customer review: Westbridge Merchant Services requested accelerated enablement for the Redwood Identity workflow.",
+    "after": [
+      { "text": "Customer review: ", "token": false },
+      { "text": "[CUSTOMER]", "token": true },
+      { "text": " requested accelerated enablement for the ", "token": false },
+      { "text": "[PROJECT]", "token": true },
+      { "text": " workflow.", "token": false }
+    ],
+    "note": "Byte-identical across Themis and Aergia for all 1,000 records"
+  },
+
+  "latency": {
+    "heading": "The engine is the smallest slice.",
+    "lede": "We isolated raw engine time by measuring the path in layers and subtracting transport. N = 100, medians, from the client box. On both engines the compute lands below the network round-trip, so it is reported as an upper bound.",
+    "callout": "Reusing one connection instead of reconnecting per call drops Themis from 7.17 ms to 2.38 ms, a 3x cut with zero engine change. What is left is one network round-trip. The engine sits inside the measurement noise."
+  },
+  "waterfall": [
+    { "key": "themis", "name": "Themis (NOL8 · FPGA), cold call", "total": "7.17 ms total",
+      "segments": [ { "kind": "net", "label": "net 2.14", "ms": 2.14 }, { "kind": "tls", "label": "TLS handshake 4.80", "ms": 4.80 }, { "kind": "engine", "label": "", "ms": 0.23 } ] },
+    { "key": "aergia", "name": "Aergia (RE2 baseline), cold call", "total": "6.18 ms total",
+      "segments": [ { "kind": "net", "label": "net 2.01", "ms": 2.01 }, { "kind": "tls", "label": "TLS handshake 4.45", "ms": 4.45 }, { "kind": "engine", "label": "", "ms": 0.15 } ] }
+  ],
+  "table": [
+    { "engine": "Themis (NOL8 · FPGA)", "rtt": "2.14 ms", "warm": "2.38 ms", "cold": "7.17 ms", "tls": "4.80 ms", "eng": "< 0.3 ms" },
+    { "engine": "Aergia (RE2 baseline)", "rtt": "2.01 ms", "warm": "1.73 ms", "cold": "6.18 ms", "tls": "4.45 ms", "eng": "< 0.3 ms" }
+  ],
+  "tableNote": "Engine time is what remains after subtracting network RTT and TLS. On both engines it lands under the network round-trip, below what we can resolve from outside, so it is reported as an upper bound. The takeaway is not a precise figure. It is that the engine is not where the time goes.",
+
+  "meaning": { "heading": "What it means for the data path." },
+  "takeaways": [
+    { "title": "Governance is free at the compute layer.", "body": "Sub-millisecond per call means deterministic control sits inline on the data path with no latency-budget conversation. Themis keeps up with the wire." },
+    { "title": "Your latency is a networking problem, not a compute one.", "body": "About 97% of observed per-call time is TLS setup and round-trip. Shorter, warmer, more direct paths translate almost one-to-one into end-to-end improvement." },
+    { "title": "The first win is connection reuse.", "body": "Pooling connections alone is a 3x per-call improvement here, before touching anything else." },
+    { "title": "Parity with the RE2 benchmark, at hardware speed.", "body": "Themis matches Aergia byte-for-byte on the identical policy and corpus. NOL8 is provably as correct as the established regex engine, and it runs inline on FPGA where legacy software middleware cannot." }
+  ],
+
+  "method": [
+    { "term": "Corpus",           "def": "1,000-chunk synthetic pre-index corpus, run identically through every approach." },
+    { "term": "Policy",           "def": "One literal known-value policy: denied entities, watched customers, compromised accounts, payment cards, internal projects, blocked IPs." },
+    { "term": "Engines",          "def": "Themis, the NOL8 FPGA (:443), and Aergia, our stand-up of Google RE2 (:444) as the benchmark. Same data, same policy, byte-identical output. Do nothing forwards everything." },
+    { "term": "Governance count", "def": "Exact. Chunks governed = chunks containing a governed value." },
+    { "term": "Latency",          "def": "Decomposed from the field client box, N = 100 per layer, medians." },
+    { "term": "Engine time",      "def": "Bounded as (warm minus network RTT). Lands within network jitter, so it is reported as an upper bound. No server-side timing hook is exposed." },
+    { "term": "Cold vs warm",     "def": "Cold = new TLS connection per request (current adapter). Warm = pooled." }
+  ],
+  "methodNote": "Not a concurrency or throughput saturation test.",
+
+  "footer": {
+    "tagline": "The AI data plane. Hardware-class, inline, wire-speed. Governance runs free at the compute layer.",
+    "next": [ "Data Point 02 · Throughput at load", "Inline governance on the fabric" ],
+    "copyright": "© 2026 Nol8. All rights reserved.",
+    "confidential": "Private & Confidential"
+  }
+}

@@ -78,16 +78,33 @@ engines that do the same job for real). RE2 and NOL8 target different content, s
 do NOT stage it as a token-reduction race - NOL8's story is deterministic
 governance at hardware speed.
 
-## Artifacts to show
+## The report (on-brand, Design-approved template)
 
-- **THE report (open locally):** `demos/benchmark/pre-index-report.html` - the
-  three-approach benchmark + the raw-FPGA latency decomposition, self-contained.
-  Double-click / open in a browser. Committed, so it travels with the repo.
-- **Same page, shareable link:** https://claude.ai/code/artifact/e07bb1c5-fdf9-461c-9059-31279d055230
-  (private; share from the page's share menu. If the link won't open, use the
-  local file above.)
+**One data contract, one renderer.** `demos/benchmark/run.json` holds the run's
+data; `make-report.py` renders it into a self-contained, on-brand HTML using the
+NOL8 design system (charcoal + green, Space Grotesk / Google Sans). Fonts, logos,
+and the hero pattern are inlined, so the file opens anywhere.
+
+```bash
+python demos/benchmark/make-report.py         # -> demos/benchmark/pre-index-report.html
+```
+
+- **Web (default):** open `pre-index-report.html` in a browser. Dark theme, sticky
+  nav, engine-compare tabs, scroll-reveal. Interactivity degrades to fully-visible.
+- **Deck / leave-behind:** the same file. Browser Export -> PDF triggers the
+  `@media print` block, which forces the light (cream) palette and hides nav/tabs.
+  That is the whole web/deck story - no separate build.
+- The rendered HTML is **gitignored** (regenerate with the command above). Tracked:
+  `run.json`, `make-report.py`, `brand/` (subset woff2 fonts, logos, pattern).
+- Design source: `/private/tmp/HTML Report redesign/` (the handoff bundle -
+  `Pre-Index Web Report.dc.html` + `_ds/` + README). We reimplemented from its
+  `run.json` contract (Option B) rather than carry its `support.js` runtime.
+
+**Brand voice (enforced in report copy):** no em dashes, no exclamation marks, no
+emoji. Aergia is always "Aergia (RE2 baseline)" / "Google RE2", never a NOL8
+product. Themis is "Themis (NOL8 · FPGA)".
+
 - **Kit's original report** (`datapoint1/report/report.html`, from run-live.sh) is
-  the raw detailed backup, but its template is hardcoded to the kit's old modes
-  (shows `nol8sim`/`listmatch`) - use `pre-index-report.html` for showing.
+  the raw detailed backup only (hardcoded to old kit modes) - not for showing.
 - **Reproduce the latency numbers:** `python3 demos/benchmark/latency-decompose.py`
   on EC2 (`set -a; source .env; set +a` first).
