@@ -132,11 +132,11 @@
       ]
     },
     "aggregate": {
-      "note": "The measured outcome is the data forwarded downstream, the payload that becomes embeddings. Reduction is versus Do nothing. Aergia forwards more than Themis, and its payload includes corruption fragments rather than clean signal. Process metrics (CPU, memory) are omitted on purpose: they measure the test harness, not the customer outcome. Aergia byte total was not captured locally; it is shown as a dash pending the recorded-run refresh.",
+      "note": "The measured outcome is the data forwarded downstream, the payload that becomes embeddings. Reduction is versus Do nothing. Aergia forwards more than Themis, and its payload includes corruption fragments rather than clean signal. Process metrics (CPU, memory) are omitted on purpose: they measure the test harness, not the customer outcome. From a single clean run of the optimization policy on both live engines.",
       "columns": ["Approach", "Bytes forwarded", "Tokens forwarded", "vs Do nothing", "Oracle match"],
       "rows": [
         ["Do nothing", "322 KB", "43,005", "baseline", "n/a"],
-        ["Aergia (RE2 baseline)", "—", "17,512", "-59.3%", "124 / 1000"],
+        ["Aergia (RE2 baseline)", "131 KB", "17,512", "-59.3%", "124 / 1000"],
         ["Themis (NOL8 · FPGA)", "117 KB", "15,343", "-64.3%", "1000 / 1000"]
       ]
     }

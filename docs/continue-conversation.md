@@ -33,9 +33,12 @@ can continue without reconstructing context from chat history.
 > oracle-verified stamp, the 10 strip rules with repeat counts, 3 real before/after
 > chunks (green token chips on Themis, RE2 corruption fragments boxed in red), and
 > the forwarded-payload aggregate. `run.json` + `make-report.py` updated.
-> **NEXT:** Datapoint 2 (scoped), agentic-mesh-lab review, Datapoint 3. (Optional
-> data refresh: pull Aergia's exact forwarded bytes from EC2 to replace the "—" in
-> the aggregate table once the tunnel is back.)
+> **Fresh clean run folded in (2026-07-21):** re-ran `run-live.sh` (optimization
+> policy, both live engines) + `verify-oracle.py` in one pass. Confirmed Themis
+> 15,343 tokens / 117 KB / 1000-1000 oracle; Aergia 17,512 / 131 KB / 124-1000
+> (876 diverge); both kept 27 / masked 973. Aggregate table now has Aergia's real
+> 131 KB (no more dash). The whole report rests on this single run.
+> **NEXT:** Datapoint 2 (scoped), agentic-mesh-lab review, Datapoint 3.
 >
 > **Tenant state:** the 42-rule **starter policy** is deployed to BOTH engines
 > (NOL8/Themis :443 and RE2/Aergia :444). Not the 5,000-rule qualification.
