@@ -1,5 +1,0 @@
-"Thomas.Jones@bluefield.dev" -> "[EMAILADDR0001]";
-"daniel.Davis@MAILBOX.IO" -> "[EMAILADDR0002]";
-"JOHN.lopez@bluefield.dev" -> "[EMAILADDR0003]";
-"MatthewDavis@brightline.co" -> "[EMAILADDR0004]";
-"Michael.ANDERSON@example.com" -> "[EMAILADDR0005]";

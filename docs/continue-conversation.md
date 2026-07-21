@@ -334,10 +334,6 @@ real report.
    once the user pushes it, and review it. (b) Reuse `preindex-benchmark-kit`
    from OUTSIDE it (copy into a new demo repo) - prototype the adapter, wire a
    datapoint to the live endpoints, produce one real report. See "Next horizon".
-2. **Repo cleanup - one open decision:** remove `samples/` (15 MB of unreferenced
-   legacy `e75e21ea_data_*.txt`) and `artifacts/initial-functional-baseline/`
-   (superseded by `artifacts/evidence/`)? Both unreferenced by code/config/tests;
-   git-recoverable. Awaiting the user's OK (see Repository Hygiene).
 
 **Not blocking (user handles):** send ISSUE-004 to engineering - report in
 `docs/issues/`, Slack comms in `docs/issues/internal/outbound-slack-comms.md`.
@@ -370,13 +366,32 @@ Tracked evidence in `artifacts/evidence/` (with a README on provenance):
 copy - Themis can't read back what's deployed), `issue-004-failure-sample.jsonl`,
 `qualification-passing-report.html`.
 
-**Cleanup done 2026-07-21:** removed the stray `dotenv` file and the 0-byte doc
-stubs (`docs/ARCHITECTURE.md`, `docs/REPORTS.md`, `docs/product/validation-
-framework-overview.md`) and their placeholder note. Earlier (Tier 2) removed dead
-scripts (`process-message.sh`, `restructure-framework.sh`, `run_functional_test.py`).
+**Where generated data goes.** `validate generate` writes to
+`artifacts/runs/<RUN_ID>/` (RUN_ID = UTC stamp, e.g. `20260721T120130336787Z`),
+which is **gitignored** - generated corpora stay local, never committed:
 
-**Cleanup pending user OK:** `samples/` (15 MB legacy data) and
-`artifacts/initial-functional-baseline/` - both unreferenced, superseded.
+```
+artifacts/runs/<RUN_ID>/
+  manifest.json                  run state
+  config/<workload>.yaml         snapshot of the config used
+  generated/input.jsonl          the generated corpus (sent to Themis)
+  generated/expected.jsonl       the oracle (expected redacted output)
+  generated/scale-policy.nol     the generated policy
+  generated/generation-manifest.json   seed, counts, overlapping_match_documents
+  generated/output.jsonl         actual Themis responses (after `run`)
+  generated/comparison.jsonl     per-record verdicts (after `compare`)
+  reports/validation-report.html the report (after `report`)
+```
+
+Anything that must survive cleanup is copied into the tracked
+`artifacts/evidence/`. Default runs root is `artifacts/runs` (`DEFAULT_RUNS_DIRECTORY`).
+
+**Cleanup done 2026-07-21:** removed the stray `dotenv` file, the 0-byte doc
+stubs (`docs/ARCHITECTURE.md`, `docs/REPORTS.md`, `docs/product/validation-
+framework-overview.md`) and their placeholder note, `samples/` (15 MB legacy
+data), and `artifacts/initial-functional-baseline/` (superseded by evidence/).
+Earlier (Tier 2) removed dead scripts (`process-message.sh`,
+`restructure-framework.sh`, `run_functional_test.py`).
 
 **PDFs are not tracked.** The user generates PDF renders via the
 `yzane.markdown-pdf` VS Code extension (exports to gitignored `handoff/`), then
