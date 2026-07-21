@@ -58,9 +58,12 @@ def build(top_n: int, min_count: int) -> str:
         "# --- OPTIMIZATION: strip repeated low-value filler (ship less to embeddings) ---",
         f"# Top {len(filler)} most-repeated exact sentences in the demo corpus, stripped to nothing.",
     ]
+    # NOTE: the policy parser does not allow a trailing comment after a rule
+    # (`... -> ""; # note` is rejected); comments must be on their own line.
     for sentence, count in filler:
         escaped = sentence.replace('"', '\\"')
-        lines.append(f'"{escaped}" -> "";   # repeats {count}x')
+        lines.append(f"# repeats {count}x")
+        lines.append(f'"{escaped}" -> "";')
     lines.append("")
     return "\n".join(lines)
 

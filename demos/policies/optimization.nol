@@ -59,13 +59,23 @@
 
 # --- OPTIMIZATION: strip repeated low-value filler (ship less to embeddings) ---
 # Top 10 most-repeated exact sentences in the demo corpus, stripped to nothing.
-"Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default." -> "";   # repeats 219x
-"The analyst assistant should prioritize incident timelines, account context, and remediation notes over boilerplate." -> "";   # repeats 217x
-"The AI search workflow is only useful if customer-risk context is preserved while low-value noise is suppressed early." -> "";   # repeats 214x
-"Security operations wants embedding spend focused on high-value investigative content rather than repetitive status traffic." -> "";   # repeats 200x
-"Retrieval quality improves when onboarding summaries and fraud-review notes are normalized before indexing." -> "";   # repeats 199x
-"Customer operations added a short note explaining that the account requires special handling during after-hours support." -> "";   # repeats 155x
-"Tier-2 support escalated the case after the customer reported repeated sign-in failures from a new device profile." -> "";   # repeats 148x
-"The payments team attached an investigation summary covering disputed transactions, refund notes, and fraud indicators." -> "";   # repeats 132x
-"The fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context." -> "";   # repeats 125x
-"A compliance analyst documented the onboarding review and recommended manual verification before account activation." -> "";   # repeats 115x
+# repeats 219x
+"Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default." -> "";
+# repeats 217x
+"The analyst assistant should prioritize incident timelines, account context, and remediation notes over boilerplate." -> "";
+# repeats 214x
+"The AI search workflow is only useful if customer-risk context is preserved while low-value noise is suppressed early." -> "";
+# repeats 200x
+"Security operations wants embedding spend focused on high-value investigative content rather than repetitive status traffic." -> "";
+# repeats 199x
+"Retrieval quality improves when onboarding summaries and fraud-review notes are normalized before indexing." -> "";
+# repeats 155x
+"Customer operations added a short note explaining that the account requires special handling during after-hours support." -> "";
+# repeats 148x
+"Tier-2 support escalated the case after the customer reported repeated sign-in failures from a new device profile." -> "";
+# repeats 132x
+"The payments team attached an investigation summary covering disputed transactions, refund notes, and fraud indicators." -> "";
+# repeats 125x
+"The fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context." -> "";
+# repeats 115x
+"A compliance analyst documented the onboarding review and recommended manual verification before account activation." -> "";
