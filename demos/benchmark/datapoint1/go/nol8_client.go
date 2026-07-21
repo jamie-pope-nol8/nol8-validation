@@ -30,9 +30,15 @@ func nol8HTTPClient() *http.Client {
 }
 
 func callNol8API(text string) (string, string, error) {
-	endpoint := os.Getenv("NOL8_ENDPOINT")
+	return callNol8APIEndpoint(text, os.Getenv("NOL8_ENDPOINT"))
+}
+
+// callNol8APIEndpoint sends one record to a specific endpoint. Used by the
+// per-engine modes (themis_api -> THEMIS_ENDPOINT, aergia_api -> AERGIA_ENDPOINT)
+// so a single run can compare engines side by side.
+func callNol8APIEndpoint(text, endpoint string) (string, string, error) {
 	if endpoint == "" {
-		return "", "error", fmt.Errorf("NOL8_ENDPOINT is not set")
+		return "", "error", fmt.Errorf("endpoint is not set")
 	}
 
 	body, err := json.Marshal(Nol8Request{Text: text})

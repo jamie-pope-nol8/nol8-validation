@@ -113,6 +113,18 @@ func runMode(records []Record, mode string, outputPath string, listMatcher *Refe
 	start := time.Now()
 	stats := Stats{Mode: mode}
 
+	// Per-engine API modes resolve their own endpoint so one run can compare
+	// engines side by side (listMatch on Themis :443 vs Aergia :444).
+	apiEndpoint := ""
+	switch mode {
+	case "themis_api":
+		apiEndpoint = os.Getenv("THEMIS_ENDPOINT")
+	case "aergia_api":
+		apiEndpoint = os.Getenv("AERGIA_ENDPOINT")
+	case "nol8_api":
+		apiEndpoint = os.Getenv("NOL8_ENDPOINT")
+	}
+
 	outFile, err := os.Create(outputPath)
 	if err != nil {
 		panic(err)
@@ -197,8 +209,8 @@ func runMode(records []Record, mode string, outputPath string, listMatcher *Refe
 				stats.TokensForwardedEst += tokenEstimate(out)
 			}
 
-		case "nol8_api":
-			out, action, err := callNol8API(text)
+		case "nol8_api", "themis_api", "aergia_api":
+			out, action, err := callNol8APIEndpoint(text, apiEndpoint)
 			if err != nil {
 				action = "error"
 			}

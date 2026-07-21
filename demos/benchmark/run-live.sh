@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Run the datapoint1 benchmark against REAL Themis, via the adapter.
+# Run the datapoint1 benchmark against BOTH real engines, listMatch only.
 #
-# One-shot: starts the Themis adapter as a child of this process, runs the Go
-# harness (nol8_api mode hits the adapter -> Themis) plus the local baselines,
-# then generates the combined HTML report and stops the adapter. Runs entirely
-# on EC2 (the box that can reach Themis). Deploy the policy first:
-#   validate policy --file demos/policies/starter-known-values.nol --target themis
+# Deploys the same literal starter policy to Themis (:443) and Aergia (:444),
+# starts one adapter per engine, runs the Go harness so `themis_api` and
+# `aergia_api` are separate columns, then builds ONE combined report and cleans
+# up. Both engines run identical listMatch rules, so the comparison is
+# performance/behavior (Themis FPGA vs Aergia), alongside the local `nofilter`
+# and `listmatch` software baselines. Runs on EC2 (the box that reaches Themis).
 #
-# Env overrides: MODES, ADAPTER_PORT, NOL8_TIMEOUT_MS.
+# Scope note: listMatch (literal) only. No regex. (Aergia can't do regex yet.)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root
@@ -17,30 +18,41 @@ source .venv/bin/activate
 set -a; source config/demo.env; source .env; set +a
 export PATH="$HOME/.local/go/bin:$PATH"
 
-MODES="${MODES:-nofilter re2 listmatch nol8_api}"
-PORT="${ADAPTER_PORT:-8799}"
+POLICY="demos/policies/starter-known-values.nol"
+MODES="${MODES:-nofilter listmatch themis_api aergia_api}"
 export NOL8_TIMEOUT_MS="${NOL8_TIMEOUT_MS:-10000}"
 
-echo ">> starting Themis adapter on 127.0.0.1:$PORT"
-ADAPTER_PORT="$PORT" python demos/themis-adapter/adapter.py >/tmp/adapter.log 2>&1 &
-ADAPTER_PID=$!
-trap 'kill "$ADAPTER_PID" 2>/dev/null || true' EXIT
+echo ">> deploying the same starter policy to both engines"
+validate policy --file "$POLICY" --target themis >/dev/null
+validate policy --file "$POLICY" --target aergia >/dev/null
+echo ">> waiting for Aergia reload to propagate"
+sleep 6
 
-# Wait for the adapter to accept connections.
-for _ in $(seq 1 30); do
-  if curl -sS -o /dev/null --max-time 5 -X POST "http://127.0.0.1:$PORT/" \
-       -d '{"text":"ping"}' 2>/dev/null; then
-    ready=1; break
-  fi
-  sleep 0.3
-done
-if [ "${ready:-0}" != 1 ]; then
-  echo "!! adapter did not become ready" >&2; cat /tmp/adapter.log >&2; exit 1
-fi
-echo ">> adapter ready: $(cat /tmp/adapter.log)"
+start_adapter() {  # name port process_endpoint process_token
+  PROCESS_ENDPOINT="$3" PROCESS_TOKEN="$4" ADAPTER_PORT="$2" \
+    python demos/themis-adapter/adapter.py >"/tmp/adapter-$1.log" 2>&1 &
+  echo "$!"
+}
+
+THEMIS_PID="$(start_adapter themis 8799 "$THEMIS_PROCESS_ENDPOINT" "$THEMIS_TOKEN")"
+AERGIA_PID="$(start_adapter aergia 8800 "$AERGIA_PROCESS_ENDPOINT" "$AERGIA_TOKEN")"
+trap 'kill "$THEMIS_PID" "$AERGIA_PID" 2>/dev/null || true' EXIT
+
+wait_ready() {  # port
+  for _ in $(seq 1 30); do
+    if curl -sS -o /dev/null --max-time 5 -X POST "http://127.0.0.1:$1/" \
+         -d '{"text":"ping"}' 2>/dev/null; then return 0; fi
+    sleep 0.3
+  done
+  echo "!! adapter on :$1 did not become ready" >&2; return 1
+}
+wait_ready 8799
+wait_ready 8800
+echo ">> adapters ready: themis=8799 aergia=8800"
 
 cd demos/benchmark/datapoint1
-export NOL8_ENDPOINT="http://127.0.0.1:$PORT"
+export THEMIS_ENDPOINT="http://127.0.0.1:8799"
+export AERGIA_ENDPOINT="http://127.0.0.1:8800"
 export MODES
-echo ">> MODES=$MODES  NOL8_ENDPOINT=$NOL8_ENDPOINT"
+echo ">> MODES=$MODES"
 bash scripts/run_all.sh

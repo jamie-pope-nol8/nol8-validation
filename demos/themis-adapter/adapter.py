@@ -112,8 +112,13 @@ def call_themis(text: str, *, endpoint: str, token: str, timeout: float = 10.0) 
 
 class _AdapterConfig:
     def __init__(self) -> None:
-        self.endpoint = os.environ.get("THEMIS_PROCESS_ENDPOINT", "")
-        self.token = os.environ.get("THEMIS_TOKEN", "")
+        # Generic PROCESS_ENDPOINT/PROCESS_TOKEN let one adapter serve either
+        # engine (Themis :443 or Aergia :444); THEMIS_* remain the default.
+        self.endpoint = (
+            os.environ.get("PROCESS_ENDPOINT")
+            or os.environ.get("THEMIS_PROCESS_ENDPOINT", "")
+        )
+        self.token = os.environ.get("PROCESS_TOKEN") or os.environ.get("THEMIS_TOKEN", "")
         self.drop_token = os.environ.get("THEMIS_DROP_TOKEN") or None
         self.route_token = os.environ.get("THEMIS_ROUTE_TOKEN") or None
         self.port = int(os.environ.get("ADAPTER_PORT", "8799"))

@@ -42,6 +42,20 @@ MODE_METADATA = {
         "is_simulated": False,
         "eligible_for_performance_claims": False,
     },
+    # Real product engines, measured over the network via the adapter. listMatch
+    # (literal) policy on both; Themis is the FPGA path, Aergia the second engine.
+    "themis_api": {
+        "role": "measured_product",
+        "is_measured": True,
+        "is_simulated": False,
+        "eligible_for_performance_claims": True,
+    },
+    "aergia_api": {
+        "role": "measured_product",
+        "is_measured": True,
+        "is_simulated": False,
+        "eligible_for_performance_claims": True,
+    },
 }
 
 
