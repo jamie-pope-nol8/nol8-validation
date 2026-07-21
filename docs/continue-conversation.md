@@ -5,11 +5,21 @@ Last Updated: 2026-07-20
 Durable memory of the project, so a new session can continue without
 reconstructing context from chat history.
 
-> **Handoff at 2026-07-20 (end of day, third handoff).** Clean tree, all pushed
-> (latest commit `1d2a70e` or later), both hosts synced, 228 tests passing.
-> Endpoint healthy; the 5,000-rule qualification policy is deployed (SHA
-> `27fe47db`). Nothing mid-edit. User stopped for family time; resumes tomorrow
-> with **Tier 2 then Tier 5**.
+> **Handoff at 2026-07-21 (fourth handoff).** Clean tree, all pushed (latest
+> commit this doc or later), both hosts synced, **236 tests passing**. Endpoint
+> healthy. Nothing mid-edit. **All code-review tiers are now done** (0-4 and
+> pragmatic 5); **next is the demo environment** - see "Next horizon" and
+> Immediate Next Actions.
+>
+> This session (2026-07-21) added **Tier 2** (T2-3 token off argv = FW-9,
+> live-verified; dead insecure scripts removed = FW-10; OBS-3 residual) and
+> **pragmatic Tier 5** (atomic-write + JSONL-reader consolidation, end-to-end
+> pipeline test, hermetic transport tests = FW-11; full `main.py` layer-split
+> deferred). The 2026-07-20 work is summarized below.
+>
+> Note: the tenant policy was overwritten by T2-3 live-verification then restored
+> to the 5,000-rule qualification policy (SHA `27fe47db`). Overwrite freely - it
+> is the user's sandbox (do not reflexively restore).
 >
 > **Done this session (all committed + pushed):**
 > - **FW-6** report usability - grouped, compact failure details (`4cc2185`).
@@ -30,15 +40,13 @@ reconstructing context from chat history.
 > - **Outbound Slack comms** drafted: `docs/issues/internal/outbound-slack-comms.md`.
 >
 > **Next work items (in order):**
-> 1. **Tier 2 - security. DONE 2026-07-21.** T2-3 fixed (FW-9, token off argv,
->    live-verified); dead insecure scripts removed (FW-10, resolves T2-4/T2-5);
->    T2-1/T2-2 already handled by FW-4/5; T2-4 residual recorded as OBS-3. See
->    the Tier 2 status block in `docs/CODE_REVIEW_PLAN.md`.
-> 2. **Tier 5 - structure and tests. START HERE.** NOT STARTED.
-> 3. **Then: demo environment.** Likely a NEW repo, reusing the reviewed
->    `preindex-benchmark-kit` (three use cases, datasets, Go harness, reports -
->    ~80% built) and a second **agentic insurance-claims** repo that is **not on
->    this machine yet** (clone + review first). See "Next horizon - demonstrations".
+> 1. **Demo environment. START HERE.** The code-review tiers are done (0-4 and
+>    pragmatic 5). Clone the agentic insurance-claims repo (not on this machine
+>    yet) + review; reuse `preindex-benchmark-kit`; wire a datapoint to the live
+>    endpoints. See "Next horizon - demonstrations".
+> 2. **Tier 2 DONE (2026-07-21):** T2-3 (FW-9), dead scripts (FW-10), OBS-3.
+>    **Tier 5 pragmatic DONE:** consolidation + e2e test + hermeticity (FW-11);
+>    full `main.py` layer-split deferred.
 >
 > Still open but not blocking: send ISSUE-004 to engineering (register + comms
 > are ready; the user handles the actual send).
@@ -439,7 +447,12 @@ data?" and "you don't, this proves the engine works" is a weak answer alone.
 - **Tier 3** - product limitations, written up.
 - **Tier 4** - evidence quality and report usability. **FW-6 (report usability)
   done.** Re-scan the plan for any remaining Tier 4 items.
-- **Tier 5 NOT STARTED** - structure and tests. **Next.**
+- **Tier 5 PRAGMATIC scope COMPLETE (2026-07-21, FW-11)** - structure and tests.
+  Load-bearing consolidation done: one atomic-write primitive (unique temp +
+  fsync) and a robust JSONL reader. Added an end-to-end pipeline test (T5-2) and
+  made transport tests hermetic via `NOL8_CONFIG_FILE`/`NOL8_SECRETS_FILE` (T5-3).
+  **Deferred by choice:** the full `main.py` layer-split (high churn, pre-release
+  value not needed pre-demo). Status block in the plan.
 
 ## Generator guarantees
 
@@ -656,14 +669,20 @@ section as the seed; the plan gets built when we start.
 
 **In order:**
 
-1. **Tier 5 - structure and tests. START HERE.** NOT STARTED. Re-read the Tier 5
-   section of `docs/CODE_REVIEW_PLAN.md` against current code first (as with Tier
-   2, some items may already be resolved). Work one item at a time, verify each
-   issue is real before proposing changes, add a test per fix.
+1. **Build the demo environment. START HERE.** The code-review tiers are done
+   (0,1,2,3,4 and pragmatic 5). Per "Next horizon - demonstrations": (a) clone
+   the **agentic insurance-claims** repo (not on this machine yet) and review it,
+   (b) reuse `~/Code/nol8/preindex-benchmark-kit` - likely a new repo, wire
+   datapoint-1/2 to the live Themis/Aergia endpoints via an adapter, retire its
+   Terraform. Suggested first spike: one datapoint producing a real report.
 
-2. **Tier 2 - security. DONE 2026-07-21.** T2-3 fixed (FW-9); dead insecure
-   scripts removed (FW-10); T2-1/T2-2 via FW-4/5; T2-4 residual = OBS-3. See the
-   plan's Tier 2 status block.
+2. **Tier 2 and Tier 5 - DONE 2026-07-21.** Tier 2: T2-3 (FW-9), dead scripts
+   (FW-10), T2-4 residual (OBS-3). Tier 5 pragmatic: consolidation + e2e test +
+   hermeticity (FW-11); full `main.py` layer-split deferred. See the plan's
+   status blocks.
+
+3. **Still open (user handles):** send ISSUE-004 to engineering - register in
+   `docs/issues/`, Slack comms in `docs/issues/internal/outbound-slack-comms.md`.
 
 3. **Then: build the demo environment.** Likely a new repo. Start by (a) cloning
    the **agentic insurance-claims** repo (not on this machine yet) and reviewing

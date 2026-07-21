@@ -239,6 +239,19 @@ the highest-value single addition.
 
 ## Tier 5 - Structure and tests
 
+> **Status 2026-07-21 - Tier 5 PRAGMATIC scope COMPLETE (FW-11).** Verified each
+> item against current code first; most of T5-2/T5-3 was already closed by FW work.
+> - **T5-1** - the load-bearing consolidation is done: one atomic-write primitive
+>   (unique temp + fsync) and a robust JSONL reader. The full architectural
+>   layer-split of `main.py` is **deliberately deferred** (high churn on a working
+>   core, "before external release" value not needed pre-demo).
+> - **T5-2** - test gaps mostly already closed by FW-3/FW-6/FW-7 (overlap, report,
+>   `--limit`). The remaining gap - no end-to-end pipeline test - is closed
+>   (`tests/test_end_to_end_pipeline.py`).
+> - **T5-3** - the production-token leak was already fixed by FW-5 (caller
+>   precedence). Full hermeticity added: transports honor `NOL8_CONFIG_FILE`/
+>   `NOL8_SECRETS_FILE`, so tests supply their own config/secrets and need no `.env`.
+
 **T5-1. `framework/cli/main.py` is 1,651 lines** containing four interleaved
 layers. Natural seams: manifest handling, JSONL IO, transport, per-stage
 orchestration, argument parsing, progress rendering, summary formatting.

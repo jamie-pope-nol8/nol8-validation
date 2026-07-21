@@ -58,6 +58,7 @@ in `docs/issues/` (`ISSUE-NNN`), aligned 1:1 — **ISSUE-N = THM-N**.
 | FW-8 | Policy tests polluted the real deployment ledger | Low | **Fixed** |
 | FW-9 | Bearer token exposed on the command line (T2-3) | Medium | **Fixed** |
 | FW-10 | Dead transport scripts had unauthenticated/plaintext paths (T2-4/T2-5) | Low | **Fixed** |
+| FW-11 | Scattered atomic writes + crash-prone JSONL reader (T5-1) | Low | **Fixed** (layer-split deferred) |
 
 ### Observations - OBS
 
@@ -386,6 +387,30 @@ does not use: `scripts/process-message.sh`, `framework/execution/run_functional_
 live path (`run-validation.sh`) authenticates and sanitizes. Resolved by deleting
 the dead files outright - verified unreferenced by any live code or test. See
 OBS-3 for the remaining T2-4 residual on live artifacts.
+
+## FW-11 - Scattered atomic writes and a crash-prone JSONL reader (FIXED, pragmatic Tier 5)
+
+`main.py` (~2,200 lines) had four hand-rolled atomic writes sharing two defects
+the plan named (T5-1): fixed temp names (`.{name}.tmp`, collide between concurrent
+writers) and no `fsync` (a crash could leave the target partial or not-yet-durable).
+And an inline JSONL reader that called `json.loads` with no guard, so one torn
+line surfaced a raw `JSONDecodeError` in a CLI summary.
+
+Fixed: one `_atomic_write_bytes` primitive - unique `mkstemp` temp in the target
+directory, `fsync` of the file and the directory around the rename - that
+`write_manifest_atomic`, `_write_jsonl_atomic`, `_initialize_jsonl_atomic`, and
+`_repair_jsonl_tail` all route through (its `0600` temp also leaves run artifacts
+owner-only, aligning with OBS-3). `_read_cli_jsonl` is now robust (blank-tolerant,
+skips non-objects, raises a clear file+line error surfaced as a clean message).
+
+Also delivered under pragmatic Tier 5: **T5-2** an end-to-end pipeline test on a
+real generated corpus (`tests/test_end_to_end_pipeline.py`), catching inter-stage
+schema drift the fixture-based stage tests could not; **T5-3** hermetic transport
+tests via `NOL8_CONFIG_FILE`/`NOL8_SECRETS_FILE` overrides, so the suite needs no
+real `.env`.
+
+**Deferred (chosen scope):** the full architectural layer-split of `main.py` -
+high churn on a working core, "before external release" value not needed pre-demo.
 
 ---
 
