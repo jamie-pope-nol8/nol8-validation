@@ -321,12 +321,27 @@ drop/route via `THEMIS_DROP_TOKEN`/`THEMIS_ROUTE_TOKEN` policy sentinels).
 the 15-char truncation showed through, confirming real behaviour). Run tests:
 `python -m unittest discover -s demos/themis-adapter -p 'test_*.py'`.
 
-**Next demo steps:** (1) copy ONE datapoint's harness+datasets OUT of
-`preindex-benchmark-kit` into `demos/` (never edit the kit), point its
-`NOL8_ENDPOINT` at the adapter, and produce one real report replacing the
-`nol8sim` placeholder. (2) Extend the adapter's drop/route via a policy that maps
-governed values to sentinel tokens. (3) Clone + review the agentic repo when
-pushed.
+**Done: vanilla starter policies.** `demos/policies/` - a generator
+(`build_policy.py`) that turns categorized known-value lists (`values/*.txt`,
+copied from the kit) into a **safe** Themis literal policy. Themis governs KNOWN
+VALUES; Aergia/RE2 covers pattern classes (any SSN/CC) later - that split is the
+"vanilla policy" story. Two guards from our findings: tokens <=15 chars/distinct
+(ISSUE-005), no contained literals (ISSUE-004) - the generator refuses an unsafe
+policy. `starter-known-values.nol` = 42 rules / 7 categories. 7 tests.
+**Full loop live-verified against Themis:** starter policy -> Themis -> adapter ->
+`{action,text}`; `"...Red Flag Logistics...card 4111...Redwood Identity...203.0.113.45"`
+came back `mask` with `[DENIED]/[CARD]/[PROJECT]/[BLOCKED_IP]`.
+
+**Field workflow captured:** pick a starter policy (already matches the demo
+corpus -> real redactions); for a real customer, drop their own values into
+`values/*.txt` and regenerate. No hand-authoring rules.
+
+**Next demo steps:** (1) copy ONE datapoint's Go harness + full corpus OUT of
+`preindex-benchmark-kit` into `demos/`, point its `NOL8_ENDPOINT` at the adapter,
+run it against the deployed starter policy, and produce one real report replacing
+the `nol8sim` placeholder. (2) Extend drop/route via sentinel-token policy rules.
+(3) Wire Aergia (RE2) for pattern-class PII. (4) Clone + review the agentic repo
+when pushed.
 
 ---
 
