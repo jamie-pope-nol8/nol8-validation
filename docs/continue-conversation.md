@@ -140,9 +140,26 @@ our checkout, runs none of Themis.
 
 **Data-plane port map (confirmed 2026-07-21 by TLS probe + process call): 443 =
 Themis (FPGA), 444 = Aergia (RE2), both on `tenant001-v1demo.nol8.net`, both
-valid certs, both speaking `{"message"}->{"result":{"message"}}`.** Verified: the
-same string returned `[PROJECT]`/`[DENIED]` on :443 (Themis literal, starter
-policy live) and returned unchanged on :444 (Aergia, no RE2 policy deployed yet).
+valid certs, both speaking `{"message"}->{"result":{"message"}}`.**
+
+**Engines are policy-compatible (confirmed 2026-07-21).** The SAME
+`starter-known-values.nol` deployed to both (`--target themis` and `--target
+aergia`) produces BYTE-IDENTICAL literal masking:
+`[CARD]`/`[DENIED]`/`[PROJECT]`/`[BLOCKED_IP]` on both :443 and :444. So there is
+no separate "Themis policy" vs "Aergia policy" for literals - one file, both
+engines. Aergia is a superset: it ALSO does RE2 patterns (see below).
+
+**Aergia reload has a propagation delay.** The control-plane deploy returns 200
+before the :444 data plane swaps policy; the first read right after a deploy can
+return the STALE prior policy. Give it a few seconds (or poll until output
+matches) before trusting a fresh Aergia deploy.
+
+**We overwrote Aergia's prior policy.** Before our deploy, Aergia's active policy
+masked SSNs via regex (`123-45-6789 -> [SSN]`) - proof its RE2 capability is real
+and that a pattern policy already existed there. Our `REPLACE` deploy of the
+literal starter wiped it; Aergia currently masks the literal known values and no
+longer masks SSNs. To restore/author Aergia pattern rules we need its RE2 rule
+syntax (the remaining open item).
 
 **Treat `themis-demo` with care** - policy deploys via the API are fine (the
 recovery path); service restarts and system changes are not ours to make.
@@ -404,28 +421,27 @@ yet built - this is the active design conversation. What's already true:
   {themis,aergia}`, and EC2 env already defines `AERGIA_POLICY_ENDPOINT` +
   `AERGIA_TOKEN` (control plane at 10.10.1.127). So policy DEPLOY to Aergia is
   wired.
-- **Aergia data-plane endpoint - RESOLVED (2026-07-21).** It's
-  `https://tenant001-v1demo.nol8.net:444/v1/process` (port 444; 443 is Themis),
-  valid cert, and it speaks the **same** `{"message"}->{"result":{"message"}}`
-  contract as Themis. So the existing adapter works against Aergia unchanged -
-  just point the endpoint at :444. **Config gap to fix:** add
-  `AERGIA_PROCESS_ENDPOINT="https://tenant001-v1demo.nol8.net:444/v1/process"` to
-  `config/demo.env` (Themis' :443 endpoint is correct as-is). Auth: `AERGIA_TOKEN`
-  (already in `.env`).
-- **Remaining unknown before traffic is useful:**
-  1. **Aergia policy format = RE2 patterns, NOT literals.** `demos/policies/
-     build_policy.py` emits Themis literal rules; Aergia needs regex/pattern
-     rules (any-email, any-SSN, any-phone, card patterns). Needs a separate
-     pattern-policy source, deployed via `--target aergia` (already wired). Until
-     an RE2 policy is deployed, :444 returns text unchanged.
-- **Plan shape (once endpoint known):** mirror the Themis adapter as an Aergia
-  adapter (or a `--target`-style flag on one adapter), add an `aergia` benchmark
-  mode (or reuse `nol8_api` pointed at the Aergia adapter), run BOTH engines over
-  the same corpus, and emit ONE combined report. The demo thesis: **Themis
-  governs known values (literal/FPGA), Aergia governs pattern classes (RE2); a
-  real policy chains both** - in the run above Themis left emails/SSNs untouched;
-  Aergia is what catches them. Combined = comprehensive coverage + the per-engine
-  performance story.
+- **Aergia data-plane endpoint - RESOLVED + TESTED (2026-07-21).**
+  `https://tenant001-v1demo.nol8.net:444/v1/process`, valid cert, same contract as
+  Themis. `AERGIA_PROCESS_ENDPOINT` is now in `config/demo.env` (auth:
+  `AERGIA_TOKEN`, already in `.env`). The existing adapter works against Aergia
+  unchanged - just point its endpoint at :444.
+- **Same policy, both engines - CONFIRMED.** One `.nol` file deploys to Themis
+  AND Aergia and gives identical literal masking. No separate policy source for
+  literals. `demos/policies/build_policy.py` output is engine-agnostic.
+- **Remaining open item: Aergia RE2 pattern syntax.** Aergia is a superset - it
+  did native SSN regex before we overwrote it - so it can mask pattern classes
+  (any email/SSN/phone/card) that Themis (literal) structurally cannot. To use
+  that we need its RE2 rule syntax (how a pattern rule is written in the policy
+  file). Unknown; ask the user / engineering, or recover the prior Aergia policy.
+- **Plan shape:** run BOTH engines over the same corpus via the adapter (point at
+  :443, then :444) and emit ONE combined report. Two demo axes, both now real:
+  1. **Performance:** same policy, same corpus, Themis (FPGA) vs Aergia (RE2) -
+     the throughput/latency comparison. (Measure adapter overhead out, or run the
+     Go harness `nol8_api` mode twice with the endpoint swapped.)
+  2. **Coverage:** add RE2 pattern rules to the Aergia policy (once syntax known)
+     so Aergia ALSO catches emails/SSNs/phones the literal policy misses. Themis =
+     known values only; Aergia = known values + pattern classes.
 
 **Later demo steps (after Aergia):** extend drop/route via sentinel-token policy
 rules; clone + review the agentic repo when the user pushes it.
