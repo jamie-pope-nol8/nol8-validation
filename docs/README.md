@@ -53,9 +53,3 @@ Its README explains provenance.
 
 `artifacts/runs/` is **not** tracked. Anything that matters goes to
 `artifacts/evidence/`.
-
-## Placeholders - empty, do not cite
-
-`ARCHITECTURE.md`, `REPORTS.md`, and `product/validation-framework-overview.md`
-are 0-byte stubs. They are listed here so nobody hunts for content that was
-never written.
