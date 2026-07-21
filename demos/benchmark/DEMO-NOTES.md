@@ -53,9 +53,11 @@ The report is framed as three strategies for a chunk, because that is how a buye
 reads it:
 
 - **Do nothing** (nofilter) - forward everything. 0 governed.
-- **RE2** (incumbent software) - the traditional regex way, for context. Catches
-  pattern shapes + strips boilerplate; 395 chunks touched. NOT our engine - it's
-  the thing we compare against.
+- **Traditional regex (software)** - a local Go RE2 baseline on a CPU, the
+  incumbent way, for context. Catches pattern shapes + strips boilerplate; 395
+  chunks touched. NOT a NOL8 engine - it's the thing we compare against. (Labelled
+  "Traditional regex", never "RE2", to avoid colliding with Aergia, which the team
+  calls "the RE2 engine".)
 - **NOL8** (Themis + Aergia) - deterministic known-value governance. 535 governed,
   identical on both engines, sub-ms per call.
 

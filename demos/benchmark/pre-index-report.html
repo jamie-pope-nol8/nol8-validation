@@ -155,7 +155,8 @@
   <section>
     <div class="sec-head"><span class="tag">01</span><h2>Three ways to handle a chunk</h2></div>
     <p class="sec-sub">Each approach runs the same corpus. They target different things — read them as
-      distinct strategies, not a single leaderboard.</p>
+      distinct strategies, not a single leaderboard. (Traditional regex here is CPU software, the
+      incumbent baseline — not a NOL8 engine.)</p>
     <div class="approaches">
       <div class="card appr nil"><div class="rail"></div>
         <h3>Do nothing</h3>
@@ -164,10 +165,10 @@
         <p class="desc">Baseline. All 43,005 tokens forwarded downstream, sensitive values included.</p>
       </div>
       <div class="card appr re2"><div class="rail"></div>
-        <h3>RE2 · incumbent software</h3>
+        <h3>Traditional regex · software</h3>
         <div class="headline">Regex patterns + boilerplate strip</div>
         <div class="metric">395<small> touched</small></div>
-        <p class="desc">The traditional way: pattern-shaped matches and template-line removal.
+        <p class="desc">The incumbent way, on a CPU: pattern-shaped matches and template-line removal.
           Generic, not tied to your risk list — and it can't see a named entity it has no pattern for.</p>
       </div>
       <div class="card appr nol8"><div class="rail"></div>
@@ -262,11 +263,12 @@
 
   <footer>
     <p><b>Method.</b> 1,000-chunk synthetic pre-index corpus. "Do nothing" = forward everything;
-      "RE2" = the kit's local Go regex baseline (pattern masking + boilerplate strip); "NOL8" = the
-      same literal known-value policy deployed to Themis (:443) and Aergia (:444), measured over the
-      network via the adapter. Governance counts are exact ("chunks touched" for RE2 = masked + dropped;
-      "chunks governed" for NOL8 = chunks containing a governed value). RE2 and NOL8 target different
-      content, so their token counts are not a like-for-like comparison. Latency decomposed from the
+      "Traditional regex" = a local Go RE2 software baseline (pattern masking + boilerplate strip),
+      running on a CPU — the incumbent way, not a NOL8 engine; "NOL8" = the same literal known-value
+      policy deployed to Themis (:443) and Aergia (:444), measured over the network via the adapter.
+      Governance counts are exact ("chunks touched" for the regex baseline = masked + dropped;
+      "chunks governed" for NOL8 = chunks containing a governed value). The regex baseline and NOL8
+      target different content, so their token counts are not a like-for-like comparison. Latency decomposed from the
       field client box, N = 100 per layer, medians; engine time is bounded as (warm − network RTT) and
       lands within network jitter, so it is an <b>upper bound</b> — no server-side timing hook is
       exposed. Cold = new TLS connection per request (current adapter); warm = pooled. Not a
