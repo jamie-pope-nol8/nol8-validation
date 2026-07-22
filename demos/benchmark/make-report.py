@@ -734,22 +734,31 @@ def flows(d) -> str:
     cards = ""
     for it in f["items"]:
         called = it.get("inferenceCalled", True)
-        forwarded = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["forwarded"]))}</span>'
-                     if called else
-                     '<span style="color:' + WARN + ';font-style:italic;">stopped, the model is never called</span>')
-        model = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{esc(it["rawOutput"])}</span>'
-                 if called else '<span style="color:var(--fg3);font-style:italic;">not called</span>')
         step = lambda label_html, body: (
             f'<div><div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
             f'color:var(--fg3);margin-bottom:4px;display:flex;align-items:center;gap:8px;">{label_html}</div>'
             f'<div style="font-size:12.5px;line-height:1.6;">{body}</div></div>')
-        rows = "".join([
+        parts = [
             step("Prompt in", f'<span style="color:var(--fg1);">{esc(it["prompt"])}</span>'),
-            step(f"Pre-inference control &rsaquo; {_action_badge(it['pre'], it.get('preTags'))}", forwarded),
-            step("Model", model),
-            step(f"Post-inference control &rsaquo; {_action_badge(it['post'], it.get('postTags'))}",
-                 f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["final"])) if it.get("final") else "&mdash;"}</span>'),
-        ])
+            step(f"Pre-inference control &rsaquo; {_action_badge(it['pre'], it.get('preTags'))}", ""),
+        ]
+        if called:
+            # Full journey: the prompt reaches the model and both edges act.
+            parts[-1] = step(f"Pre-inference control &rsaquo; {_action_badge(it['pre'], it.get('preTags'))}",
+                             f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["forwarded"]))}</span>')
+            parts.append(step("Model",
+                              f'<span style="white-space:pre-wrap;color:var(--fg2);">{esc(it["rawOutput"])}</span>'))
+            parts.append(step(f"Post-inference control &rsaquo; {_action_badge(it['post'], it.get('postTags'))}",
+                              f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["final"])) if it.get("final") else "&mdash;"}</span>'))
+        else:
+            # Stopped at the boundary: the flow ends here. One clear outcome, no
+            # fake model/post rows (there is no post decision to show).
+            oc = it.get("outcome", "Stopped at the boundary. The model is never called.")
+            color = _ACTION_COLOR.get(it["pre"], WARN)
+            parts[-1] = step(f"Pre-inference control &rsaquo; {_action_badge(it['pre'], it.get('preTags'))}",
+                             f'<div style="border-left:2px solid {color};padding:2px 0 2px 12px;color:{color};'
+                             f'font-size:13px;line-height:1.55;">{esc(oc)}</div>')
+        rows = "".join(parts)
         cards += (
             f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
             f'padding:18px 20px;margin-top:14px;">'
