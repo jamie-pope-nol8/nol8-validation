@@ -1,36 +1,30 @@
 # Continue Conversation
 
-Last Updated: 2026-07-21
+Last Updated: 2026-07-22
 
-Durable memory of the project, so a new session (or a post-compaction session)
-can continue without reconstructing context from chat history.
+Durable memory of the project, so a new session (or a post-compaction session) can
+continue without reconstructing context from chat history.
 
-> **Handoff at 2026-07-21.** Two tracks: (1) product validation (Themis/NOL8
-> defects) is stable, **236 framework tests passing**; (2) the **demo environment**
-> is the active work.
+> **Handoff at 2026-07-22.** Two tracks: (1) product validation (Themis/NOL8 defects)
+> is stable, **236 framework tests passing**; (2) the **demo environment** is the
+> active work, and it now has THREE data points at different stages.
 >
-> **Data Point 1 (pre-index) is DONE and shipped.** It runs end-to-end against the
-> live engines and produces an on-brand report that now **leads with the
-> optimization use case** (clean the data before it becomes embeddings): Themis
-> forwards **64.3% fewer tokens** and is **oracle-verified correct 1000/1000**,
-> while the RE2 baseline (Aergia) **corrupts 876/1000** on the strip. Every number
-> comes from a **single fresh clean run** (2026-07-21) and the report's appendix is
-> a full "show your work" receipts block. See "Demo environment / DP1" below.
+> - **Data Point 1 (pre-index) - DONE, shipped.** On-brand report leads with the
+>   optimization use case: Themis forwards **64.3% fewer tokens**, oracle-verified
+>   **1000/1000**; the RE2 baseline (Aergia) **corrupts 876/1000** on strip. Single
+>   fresh clean run; full "show your work" receipts appendix.
+> - **Data Point 2 (pre/post-inference) - DONE, pending a stats conversation.** Real-
+>   engine modes govern a model boundary at both edges. **Themis == Aergia == oracle,
+>   52/52** (byte-for-byte parity AND provably correct; no corruption because the
+>   boundary redacts to sentinels, not strip-to-empty). Report, DEMO-NOTES, and
+>   oracle-verify all built. **OPEN: the user flagged the DP2 stats need a
+>   conversation before the copy is locked.**
+> - **Data Point 3 (agent-to-agent) - PLANNED only.** Full build spec in
+>   `demos/benchmark/DP3-PLAN.md`. It is DP2 generalized to many control points
+>   (governance at every agent hop / tool call / final output). Not built yet.
 >
-> **Current focus: Data Point 2 (pre/post-inference control).** Pack copied out to
-> `demos/benchmark/datapoint2/`. Boundary policy (step 1) and the real-engine
-> two-control-point modes (step 2) are BUILT and ran live: **Themis == Aergia
-> byte-for-byte on the boundary policy, 0 field-diffs over 52 prompts** (parity, no
-> corruption - the boundary policy redacts to sentinels rather than stripping to
-> empty). NEXT: run.json + on-brand report + oracle-verify (see "DP2" below).
->
-> **Template tweak applied (2026-07-21):** the user's small change was the stat band
-> background - it was on the full-width `<section>` (`background:var(--card)`), so the
-> card surface bled edge-to-edge past the outer cards. Moved it onto the stat GRID so
-> it stops at the first card's left border, with page background beyond. Full-width
-> top/bottom rules kept. Both themes. NOTE our report has intentionally diverged from
-> the Design template (optimization vs the template's governance copy); our renderer
-> is our own `make-report.py`.
+> **Current focus / NEXT:** (a) the DP2 stats conversation; (b) build DP3 per the
+> plan; (c) Track B, the `agentic-mesh-lab` visual demo, is separate and larger.
 
 This file is project *state*. Three companions carry the rest:
 
@@ -42,66 +36,60 @@ This file is project *state*. Three companions carry the rest:
 
 ## Maintaining this file
 
-- **On "update the project":** rewrite this file wholesale to current state. Do
-  not append or preserve stale sections - accuracy over history.
+- **On "update the project":** rewrite this file wholesale to current state. Do not
+  append or preserve stale sections - accuracy over history.
 - **Every turn:** keep it current as work happens, so `/compact` is safe anytime.
 
 ---
 
-# CRITICAL: engine identity (kept getting this wrong)
+# CRITICAL: engine identity + integrity
 
 - **Themis == NOL8** - the FPGA product we sell. Data plane `:443`.
-- **Aergia == RE2** - a *real RE2 (regex) engine* the team stood up and named
-  Aergia, used as the **known incumbent** to benchmark NOL8 against. Data plane
-  `:444`.
+- **Aergia == RE2** - a *real RE2 (regex) engine* the team stood up and named Aergia,
+  used as the **known incumbent** to benchmark NOL8 against. Data plane `:444`.
 - There is **NO "Themis + Aergia" pair of NOL8 engines.** It is **NOL8 vs RE2**.
-- **Demo scope: listMatch (literal) only** - that's what NOL8 does today; regex is
-  NOT a NOL8 capability yet. RE2/Aergia *is* a regex engine, but we run it on the
-  same literal policy as the incumbent reference. See [[demo-scope-listmatch-only]].
-- **Benchmark integrity:** same policy + same dataset flow to every engine. If they
-  behave differently, we report it honestly; we do NOT tune the test to force parity
-  or hide divergence. Verifying our own engine against an independent oracle is the
-  integrity check pointed at us, not rigging. See [[benchmark-integrity-no-rigging]].
+- **Demo scope: listMatch (literal) only** - that's what NOL8 does today; regex is not
+  a NOL8 capability yet. RE2/Aergia is a regex engine but runs the same literal policy
+  as the incumbent reference. [[demo-scope-listmatch-only]]
+- **Benchmark integrity:** same policy + same dataset to every engine. Report
+  divergence honestly; never tune for parity. Verifying our own engine against an
+  independent oracle is the integrity check pointed at us, not rigging.
+  [[benchmark-integrity-no-rigging]]
 
 ---
 
 # The Short Version
 
-Two separate tracks.
-
-**1. Product validation (Themis/NOL8 defects).** Headline: ISSUE-004 - two rules
-matching overlapping text make the runtime write the replacement at the wrong
-offset and destroy adjacent data, silently, HTTP 200. **Open, not yet reported to
-engineering** (the send is the user's; docs are ready). Full issue register in
-`docs/issues/`. The framework itself had defects (all fixed); a clean 5,000-rule /
+**1. Product validation (Themis/NOL8 defects).** Headline: ISSUE-004 - overlapping
+literals make the runtime write the replacement at the wrong offset and destroy
+adjacent data, silently, HTTP 200. **Open, not yet reported to engineering** (the send
+is the user's; docs ready). Register in `docs/issues/`. A clean 5,000-rule /
 10,000-record qualification passes 100%.
 
-**2. Demo environment (the current work).** DP1 (pre-index) done and shipped. DP2
-(pre/post-inference) kicked off. DP3 (agent-mesh) scoped for last.
+**2. Demo environment (the current work).** DP1 done, DP2 done (pending stats talk),
+DP3 planned. Plus Track B (agentic-mesh-lab), a separate larger visual demo.
 
 ---
 
 # CRITICAL CONTEXT - who wrote what
 
-**Engineering did not write this repository.** They handed over the v1.0 sandbox
-with docs and an invitation to use it. This validation framework is ours.
-Consequences for anything sent to engineering (the `docs/issues/` register already
-follows this):
-- Never reference a path in this repository.
-- Inline reproductions as literal curl against their endpoints and token.
-- Mention the framework only as provenance for finding the defect at scale.
+**Engineering did not write this repository.** They handed over the v1.0 sandbox with
+docs and an invitation to use it. This validation framework is ours. For anything sent
+to engineering (the `docs/issues/` register already follows this): never reference a
+repo path; inline reproductions as literal curl against their endpoints and token;
+mention the framework only as provenance for finding the defect at scale.
 
 ---
 
 # Session Operating Rules
 
-- **Announce before ANY git command (local or remote)** and run it plainly, so the
-  user can see it. Do NOT rsync around a blocked push. [[announce-before-git]]
-  (Push works this session; keep announcing anyway.)
-- **Every demo must be SA-runnable** - documented runbooks, copy-paste commands, the
-  two-host workflow, so the user and other SAs can run it live. [[demos-must-be-sa-runnable]]
-- The Themis tenant is the user's disposable sandbox - overwrite policy freely; do
-  not reflexively restore it. [[sandbox-policy-overwrite]]
+- **Announce before ANY git command (local or remote)** and run it plainly. Do NOT
+  rsync around a blocked push. Push works this session; keep announcing.
+  [[announce-before-git]]
+- **Every demo must be SA-runnable** - runbooks, copy-paste commands, the two-host
+  workflow. [[demos-must-be-sa-runnable]]
+- The Themis tenant is the user's disposable sandbox - overwrite policy freely; do not
+  reflexively restore it. [[sandbox-policy-overwrite]]
 - Reuse the external demo asset repos non-destructively - copy OUT of the kit, never
   edit it in place. [[preindex-kit-non-destructive]] [[demo-asset-repos]]
 - `validate` is the product surface. Do NOT call `scripts/*.sh` directly.
@@ -120,19 +108,18 @@ follows this):
 | go | (none) | 1.22.5 at `$HOME/.local/go` (on `.bashrc` PATH) |
 | host | - | `nol8-demo` (in `~/.ssh/config`; hostname `data-streamer`, 10.8.10.40) |
 
-Normal flow: edit/commit on Mac, `git push`, `git pull` on EC2, execute there. The
-Go demo benchmark runs on EC2 only (the box that can reach the engines). Git push
-and pull both work this session; EC2 is reconciled and current with origin/main.
+Edit/commit on Mac, `git push`, `git pull` on EC2, execute there. The Go demo
+benchmarks run on EC2 only (the box that reaches the engines). Git push/pull both work;
+EC2 is reconciled and current with origin.
 
-**SSH note:** `nol8-demo` depends on the VPN tunnel; if `data-streamer.sales.nol8.cloud`
+**SSH note:** `nol8-demo` depends on the VPN; if `data-streamer.sales.nol8.cloud`
 stops resolving, the VPN dropped - reconnect it. Long-running SSH commands must be
-detached (`setsid nohup ... </dev/null >log 2>&1 &`) and polled via a log marker;
-adapters/servers started in one ssh session die when it closes, so run adapter +
-harness inside ONE ssh command (run-live.sh does).
+detached (`setsid nohup ... </dev/null >log 2>&1 &`) and polled via a log marker; run
+adapter/engine calls + harness inside ONE ssh command (the run-live.sh scripts do).
 
 ---
 
-# Services & ports (confirmed 2026-07-21)
+# Services & ports (confirmed 2026-07-22)
 
 | | address | notes |
 |---|---|---|
@@ -142,14 +129,14 @@ harness inside ONE ssh command (run-live.sh does).
 | Aergia policy control plane | `aergia.sales.nol8.cloud:8444/policy` | self-signed - needs `--insecure` |
 | themis host (`themis-demo`, ssh) | 10.10.1.254 | runs iris+apollo+policyd; treat with care |
 
-Contract (both engines): `POST {"message": text}` -> `{"jid":.., "frameId":1,
-"last":true, "result":{"message": processed}}`. Config in `config/demo.env`
-(`THEMIS_PROCESS_ENDPOINT`=:443, `AERGIA_PROCESS_ENDPOINT`=:444, `*_POLICY_ENDPOINT`,
-`THEMIS_ALLOW_INSECURE_TLS=1`); tokens in `.env` (`THEMIS_TOKEN`, `AERGIA_TOKEN`).
-Aergia's :444 data plane has a **few-second reload propagation delay** after deploy.
+Contract (both engines): `POST {"message": text}` -> `{"jid":.., "result":{"message":
+processed}}`. Config in `config/demo.env` (`THEMIS_PROCESS_ENDPOINT`=:443,
+`AERGIA_PROCESS_ENDPOINT`=:444, `*_POLICY_ENDPOINT`, `THEMIS_ALLOW_INSECURE_TLS=1`);
+tokens in `.env`. Aergia's :444 has a **few-second reload propagation delay** after a
+deploy.
 
-**Tenant state:** `demos/policies/optimization.nol` is deployed to BOTH engines
-(from the last fresh DP1 run). Not the 5,000-rule qualification.
+**Tenant state:** `demos/policies/boundary.nol` (DP2) is deployed to BOTH engines from
+the last DP2 run. Redeploy the relevant policy before a different benchmark.
 
 ---
 
@@ -163,225 +150,133 @@ validate compare  --run <RUN_ID> [--replacement-max-length 15]
 validate report   --run <RUN_ID>
 ```
 
-Fully documented in `README.md`. Transport scripts read `NOL8_CONFIG_FILE`/
-`NOL8_SECRETS_FILE` (default `config/demo.env`, `.env`); the token is written to a
-`0600` temp file and passed with `-H @file` (never on argv - FW-9).
+Fully documented in `README.md`. Transports read `NOL8_CONFIG_FILE`/`NOL8_SECRETS_FILE`
+(default `config/demo.env`, `.env`); the token is written to a `0600` temp file and
+passed with `-H @file` (never on argv - FW-9).
 
 ---
 
 # Product-validation state
 
-## Authoritative qualification - 20260720T221534714262Z
-5,000 rules / 10,000 records / customer-record-csv / seed 42. 10,000 PASS, 0
-inconclusive, 0 collisions, report banner PASS. Regenerates byte-identically from
-seed 42 (post-FW-7). Policy + report in `artifacts/evidence/`; policy SHA `27fe47db`.
-
-## ISSUE-004 - OPEN, engineering docs ready but NOT SENT
-Overlapping/containing literals corrupt output (wrong start offset), silently, 200.
-Our generator stopped producing overlapping catalogs so our runs don't trip it, but
-the Themis defect is untouched. Report: `docs/issues/ISSUE-004-overlapping-matches-
-corrupt-output.md` (self-contained, inline curl, verified live).
-
-## Issue register + code review
-`docs/issues/` = `ISSUE-001..007`, one emailable self-contained report each, aligned
-1:1 to THM-1..7. Internal material in `docs/issues/internal/`. All code-review tiers
-(0-4 + pragmatic 5) DONE - `docs/CODE_REVIEW_PLAN.md`. Runtime-outage runbook (apollo
-boots data-plane PAUSED until a policy commits) in `docs/TROUBLESHOOTING.md` (OPS-1..3);
-`validate run` pre-flights.
+- **Authoritative qualification** 20260720T221534714262Z: 5,000 rules / 10,000 records
+  / seed 42. 10,000 PASS, 0 collisions. Regenerates byte-identically. Policy + report
+  in `artifacts/evidence/`; policy SHA `27fe47db`.
+- **ISSUE-004** (overlapping literals corrupt output, silently, 200) - OPEN, eng doc
+  ready but NOT SENT. Report: `docs/issues/ISSUE-004-overlapping-matches-corrupt-
+  output.md`. Our generator stopped producing overlapping catalogs; the defect is
+  untouched.
+- **Register + code review:** `docs/issues/` = ISSUE-001..007 (1:1 to THM-1..7), one
+  emailable report each; internal material in `docs/issues/internal/`. All code-review
+  tiers DONE. Runtime-outage runbook (apollo boots data-plane PAUSED until a policy
+  commits) in `docs/TROUBLESHOOTING.md` (OPS-1..3); `validate run` pre-flights.
 
 ---
 
 # Demo environment - THE CURRENT WORK (in `demos/`)
 
-Self-contained, isolated from `framework/`. Reuses live endpoints/config; does not
-import from `framework/` (except `verify-oracle.py`, which deliberately reuses the
-framework's tested matcher as the independent oracle).
+Self-contained, isolated from `framework/` (except the `verify-oracle.py` scripts,
+which deliberately reuse the framework's tested matcher as the independent oracle).
 
-## Shared pieces (built + live-verified)
+## Shared pieces
 
-- **`demos/themis-adapter/adapter.py`** - bridges the benchmark contract
-  `{"text"}->{"action","text"}` to the engine contract `{"message"}->{result.message}`.
-  Derives keep/mask; drop/route via optional sentinel tokens (`THEMIS_DROP_TOKEN`/
-  `THEMIS_ROUTE_TOKEN`). Reads generic `PROCESS_ENDPOINT`/`PROCESS_TOKEN` (falls back
-  to `THEMIS_*`) so one adapter serves either engine. 9 network-free tests.
+- **`demos/themis-adapter/adapter.py`** - bridges `{"text"}->{"action","text"}` to the
+  engine contract; keep/mask, drop/route via sentinel tokens. Used by DP1. (DP2/DP3
+  call the engine directly in Go instead - simpler for a Go harness we own.)
 - **`demos/policies/`** - `build_policy.py` -> `starter-known-values.nol` (42 govern
-  rules, safe: tokens <=15 chars, no contained literals). `build_optimization_policy.py`
-  -> `optimization.nol` (42 govern + 10 filler-strip rules). Parser note: trailing
-  inline comments after a rule are rejected; comments must be own-line.
-- **On-brand report pipeline:** `run.json` (data contract) + `make-report.py` ->
-  self-contained HTML (fonts/logos/pattern inlined). Web (dark, open the file) /
-  deck (Export -> PDF, `@media print` forces light cream). Content is visible by
-  default (no fade-gating; renamed away from "reveal" - a reveal.js preso wrapper was
-  injecting a spurious left hamburger; serve the report STANDALONE). Tracked:
-  `run.json`, `make-report.py`, `brand/`. Rendered HTML is gitignored.
+  rules); `build_optimization_policy.py` -> `optimization.nol` (DP1: govern + strip);
+  `build_boundary_policy.py` -> `boundary.nol` (DP2: 19 rules, literals -> sentinels).
+  All reuse ISSUE-005 (<=15 char tokens) / ISSUE-004 (no contained literals) guards.
+  Parser note: trailing inline comments after a rule are rejected; own-line only.
+- **On-brand report pipeline:** `demos/benchmark/run.json` (DP1) and
+  `demos/benchmark/datapoint2/run.json` (DP2), rendered by the SHARED
+  `demos/benchmark/make-report.py`. It dispatches on `run.get("kind")`: default (DP1)
+  and `dp2`. Hero CTAs, nav, and footer readout are run.json-driven. Self-contained
+  HTML (fonts/logos inlined); web (dark) / deck (Export->PDF, light). Content visible
+  by default (no fade-gating; serve standalone, not in a reveal.js/preso wrapper).
+  Rendered HTML is gitignored.
 
-## Data Point 1 - pre-index - DONE (in `demos/benchmark/`, corpus in `datapoint1/`)
+## Data Point 1 - pre-index - DONE (`demos/benchmark/`, corpus in `datapoint1/`)
 
-- **Story: leads with the OPTIMIZATION use case** (clean the data before it becomes
-  embeddings). Headline "Clean the data before it becomes embeddings, at hardware
-  speed"; "One policy. Two engines. Only one stays correct." Governance byte-identical
-  redaction is the trust anchor. Latency decomposition (engine is free, latency is the
-  network) is a supporting beat. Copy lives in `run.json`.
-- **The measured result (single fresh clean run, 2026-07-21, optimization.nol on both
-  live engines, oracle-adjudicated):**
-  | approach | bytes fwd | tokens fwd | vs do-nothing | oracle |
-  |---|---|---|---|---|
-  | Do nothing | 322 KB | 43,005 | baseline | n/a |
-  | Aergia (RE2) | 131 KB | 17,512 | -59.3% | 124/1000 |
-  | Themis (NOL8) | 117 KB | 15,343 | **-64.3%** | **1000/1000** |
-  Both kept 27 / masked 973. Latency (N=100 medians): engine <0.3 ms both (upper
-  bound, below the network floor); ~97% of a cold call is TLS + RTT; pooling is 3x
-  (cold 7.17 -> warm 2.38 ms).
-- **BIG FINDING - Aergia corrupts on strip:** every one of Aergia's 876 divergences
-  is a strip rule (zero on redaction). It leaves the tail of a stripped literal
-  (`default.`->`ault.`). Themis strips cleanly. Logged:
-  `demos/benchmark/findings/aergia-strip-corruption.md` (careful framing: Aergia is
-  our RE2 baseline; RE2-inherent vs Aergia-harness is an open follow-up).
-- **The oracle verifier:** `demos/benchmark/verify-oracle.py` adjudicates each
-  engine's recorded output against the framework's Aho-Corasick matcher. This is the
-  integrity check pointed at us. Reproduce (EC2):
-  ```
-  POLICY=demos/policies/optimization.nol MODES="nofilter re2 themis_api aergia_api" \
-    bash demos/benchmark/run-live.sh
-  python demos/benchmark/verify-oracle.py --results demos/benchmark/datapoint1/results \
-    themis_api aergia_api
-  ```
-- **The report appendix is a full "Show your work" receipts block:** the 64.3%
-  breakdown + oracle-verified stamp, the 10 strip rules with corpus repeat counts, 3
-  real before/after chunks (green token chips on Themis; RE2 corruption fragments
-  boxed in a semantic red), and the forwarded-payload aggregate.
-- **Runner:** `demos/benchmark/run-live.sh` (one command on EC2: deploy policy to
-  both, start one adapter per engine 8799->:443 / 8800->:444, run harness, build the
-  kit's raw report, clean up). Harness modes `themis_api`/`aergia_api` added to our
-  copy. Latency: `demos/benchmark/latency-decompose.py`.
-- **Narrative + honesty guardrails:** `demos/benchmark/DEMO-NOTES.md`.
-- Kit's own `datapoint1/report/report.html` is the raw backup only, not for showing.
+- **Leads with the OPTIMIZATION use case** (clean data before embeddings). Headline
+  "Clean the data before it becomes embeddings, at hardware speed." Governance
+  byte-identical redaction is the trust anchor; latency decomposition (engine is free,
+  latency is the network) supports.
+- **Result (single fresh clean run, optimization.nol on both engines, oracle-adjudicated):**
+  Themis 15,343 tokens / 117 KB / **1000-1000 oracle**, -64.3%; Aergia 17,512 / 131 KB
+  / **124-1000** (876 diverge), -59.3%; both kept 27 / masked 973. Latency: engine
+  <0.3 ms both (upper bound); ~97% of a cold call is TLS+RTT; pooling is 3x.
+- **Aergia corrupts on strip** - every one of the 876 divergences is a strip rule,
+  zero on redaction; leaves the tail of a stripped literal (`default.`->`ault.`).
+  Finding: `demos/benchmark/findings/aergia-strip-corruption.md`.
+- **Verifier:** `demos/benchmark/verify-oracle.py`. **Report appendix** is a full
+  "Show your work" receipts block (breakdown + oracle stamp, strip rules with counts,
+  before/after chunks with highlighted corruption, aggregate). Notes:
+  `demos/benchmark/DEMO-NOTES.md`. Runner: `demos/benchmark/run-live.sh`.
 
-## Data Point 2 - pre/post-inference control - KICKED OFF (in `demos/benchmark/datapoint2/`)
+## Data Point 2 - pre/post-inference control - DONE, pending stats talk (`demos/benchmark/datapoint2/`)
 
-- **Copied OUT of the kit** (`~/Code/nol8/preindex-benchmark-kit/
-  datapoint2_pre_post_inference_pack_v1`, non-destructive) into
-  `demos/benchmark/datapoint2/`. Baseline commit is the clean copy.
-- **Flow:** `Prompt -> Pre-Inference Control -> Model Stub -> Post-Inference Control
-  -> Output`. Govern what reaches the model AND what leaves it.
-- **Actions:** allow / mask / block / route / tag, at BOTH control points.
-- **Dataset:** `data/prompts/sample_prompts.jsonl` (each row: prompt_text,
-  expected_pre_action, expected_pre_tags, model_stub_profile). Reference lists in
-  `data/reference_lists/` (block_phrases, route_phrases, flagged_customers,
-  denied_entities, internal_projects, payment_cards, account_ids,
-  output_block_phrases, output_tag_phrases) - ALL literal, so listMatch-compatible.
-- **Harness** (`go/main.go`): modes `nocontrol`, `re2_guard` (regex), `listguard`
-  (literal, uses the reference lists - our closest analog), `nol8sim_infer` (uses the
-  expected actions, an oracle sim). Per-mode `applyPreInference*` / `applyPostInference*`
-  functions. The kit's `nol8_api_infer` mode calls a placeholder `/infer-control` API
-  that our engines do NOT have.
-- **>>> THE BUILD:**
-  1. **DONE - Boundary policy:** `demos/policies/build_boundary_policy.py` reads the
-     DP2 reference lists and emits `demos/policies/boundary.nol` (19 rules, 9 lists).
-     Sentinels: block_phrases->`[BLOCK]`, route/flagged/denied->`[ROUTE]`, payment->
-     `[MASK_CARD]`, account->`[MASK_ACCT]`, internal->`[TAG_INT]`, output_block->
-     `[BLOCK_OUT]`, output_tag->`[TAG_PRIV]` (all <=15 chars). Reuses build_policy's
-     ISSUE-005/004 guards; the real lists passed the containment check. Tracked.
-  2. **DONE - Real-engine modes** `themis_api_infer` / `aergia_api_infer`
-     (`demos/benchmark/datapoint2/go/engine_infer.go`): call the engine DIRECTLY
-     (not via the adapter - DP2 owns its Go harness) at BOTH control points, deriving
-     block/mask/route/tag from the boundary.nol sentinels. Runner:
-     `demos/benchmark/datapoint2/run-live.sh` (deploy boundary.nol to both, run all 6
-     modes, combine CSV). **Ran live on EC2 (52 prompts):**
-     - **Themis == Aergia byte-for-byte, 0 field-diffs across all 52 prompts.** On the
-       boundary policy (redact-to-sentinel, no strip-to-empty) the engines AGREE
-       exactly - unlike DP1 where strip-to-empty exposed Aergia's corruption. DP2
-       headline: NOL8 matches the incumbent on the whole pre/post boundary.
-     - Both engines: pre 31 allow / 0 mask / 5 block / 12 route / 4 tag; 35 inference
-       calls, 17 avoided; post 20 allow / 4 block / 11 tag. 379 prompt tokens
-       forwarded, 350 output tokens released. (34 of 52 prompts governed.)
-     - **listMatch scope note (honest):** literal modes (themis/aergia/listguard) show
-       0 masked because the prompts' card/account values are not exact list literals
-       (e.g. prompt_0006 `card 5555 6666 7777 8888`); re2_guard (regex) masks 12,
-       nol8sim (oracle) 9. NOL8 governs KNOWN values deterministically; arbitrary-
-       pattern masking is regex, out of listMatch scope. Surface this, don't hide it.
-  3. **DONE - `run.json` + on-brand report.** `demos/benchmark/datapoint2/run.json`
-     (kind=dp2) + `make-report.py` (now dispatches on `run.get("kind")`; DP2 adds
-     `boundary()`, `flows()`, `dp2_appendix()` sections and reuses hero/stat-band/
-     meaning/method/footer/chrome; `hero` CTAs, `top_bar` nav, and `footer` readout are
-     now run.json-driven). Renders `datapoint2/pre-post-report.html` (gitignored).
-     Story leads with the boundary use case: byte-for-byte parity, 17/52 stopped
-     before inference, block/route/mask/tag at both edges, honest listMatch scope
-     note. Verified in dark; the "Governance in action" flows section shows 4 real
-     prompts with colored action badges. DP1 report unchanged (regression-checked).
-  - **OPEN (user flagged 2026-07-22): "we will have to talk about the stats."** The
-    DP2 stat band / numbers need a conversation before the report is final - framing
-    or specific figures TBD by the user. Do not consider the DP2 report copy locked.
-  4. **DONE - oracle-verify + DEMO-NOTES + runbook.**
-     `demos/benchmark/datapoint2/verify-oracle.py` ran on EC2: **both engines match
-     the oracle 52/52** (framework Aho-Corasick on boundary.nol; action + tags at both
-     edges, plus byte-equality of forwarded text). So Themis is provably correct AND
-     byte-identical to Aergia - the strongest result, no corruption (boundary redacts
-     to sentinels, not strip-to-empty). `demos/benchmark/datapoint2/DEMO-NOTES.md` has
-     the narrative, numbers, honesty guardrails (listMatch scope 0-masked; exact
-     case-sensitive matching -> `Send raw notes...` allowed pre / caught post;
-     tag=redact-to-marker; deterministic stub), the SA-runnable reproduce commands,
-     and the report pipeline. **DP2 is functionally complete pending the stats
-     conversation (open item above).**
-- **DP2 remaining:** resolve the stats conversation with the user, then DP2 is done.
-- **Reuse:** policy-generator pattern (boundary.nol), report pipeline, the
-  oracle-verify discipline. Engine modes call the engine directly in Go (no adapter).
-  **New:** the pack's prompt corpus + reference lists (ship), the two-control-point
-  wiring, a boundary policy, DP2 report copy.
+- Copied out of the kit. Flow: `Prompt -> Pre-control -> Model stub -> Post-control ->
+  Output`; actions block/route/mask/tag at BOTH edges.
+- **Real-engine modes** `themis_api_infer` / `aergia_api_infer` (`go/engine_infer.go`):
+  call the engine directly at both control points, derive the action from the
+  `boundary.nol` sentinels. Runner: `datapoint2/run-live.sh`. Direct engine calls, no
+  adapter (DP2 owns its Go harness).
+- **Result (52 prompts, both live engines):** **Themis == Aergia == oracle, 52/52.**
+  0 field-diffs (byte-parity) AND both match the framework oracle at both edges
+  (`datapoint2/verify-oracle.py`). No corruption (boundary redacts to sentinels, not
+  strip-to-empty). Pre: 31 allow / 5 block / 12 route / 4 tag; post (of 35 inference):
+  20 allow / 4 block / 11 tag. 17/52 stopped before inference. 379 prompt tokens fwd,
+  350 output tokens out.
+- **Honest listMatch scope:** literal engines mask 0 arbitrary cards (only known
+  literals); re2 masks 12, nol8sim 9. Also exact/case-sensitive: `Send raw notes...`
+  (capital S) was allowed pre / caught post. tag = redact-to-marker (not metadata).
+  All in `datapoint2/DEMO-NOTES.md`.
+- **Report:** `datapoint2/run.json` (`kind: dp2`) via the shared make-report.py; adds
+  `boundary()`, `flows()` (agent-action cards with colored badges), `dp2_appendix()`.
+  Regenerate: `python demos/benchmark/make-report.py demos/benchmark/datapoint2/run.json
+  demos/benchmark/datapoint2/pre-post-report.html`.
+- **>>> OPEN: the DP2 stats conversation.** The user flagged (2026-07-22) that the DP2
+  stat band / numbers need a talk before the copy is locked. The DP2 report copy is
+  NOT locked. Likely applies to DP3 too.
+
+## Data Point 3 - agent-to-agent control - PLANNED (`demos/benchmark/DP3-PLAN.md`)
+
+- **Not built.** Full build spec in `demos/benchmark/DP3-PLAN.md`. DP3 is DP2
+  generalized: governance at every agent hop (handoff), tool call, and final output
+  across `Triage -> Research -> Decision -> Action -> Final`. Kit pack:
+  `~/Code/nol8/preindex-benchmark-kit/datapoint3_agent_mesh_pack_v1` (same structure as
+  DP1/DP2; literal policy lists; modes nocontrol/re2_mesh/listmesh/nol8sim_agent).
+- **Build mirrors DP2:** mesh policy generator (-> `mesh.nol`), real-engine modes
+  `themis_api_mesh`/`aergia_api_mesh` (`engine_mesh.go`, engine at each stage, derive
+  per-stage action from sentinel), run.json + report (`kind: dp3`, a mesh-flow
+  section), oracle-verify (framework matcher per stage), DEMO-NOTES + runbook.
+- **agentic-mesh-lab (Track B)** = a SEPARATE, larger visual demo
+  (`~/Code/nol8/agentic-mesh-lab`, PRD-stage): side-by-side traditional-vs-Nol8
+  insurance-claim workflow with a UI. Its framing ("AI Data Plane governing agent
+  communication"; "reduction before delivery, downstream agents receive only what they
+  need") should shape DP3 - push DP3 to measure **payload reduction across hops**, not
+  just action counts. The lab consumes DP3's wiring/numbers; building it is out of the
+  benchmark line's scope. See DP3-PLAN.md "Open decisions for the user".
 
 ---
 
 # Next horizon
 
-1. **DP2 build** (above) - the active task.
-2. **Apply the user's small template tweak** to `make-report.py` once they say what it
-   was (open loop in the header).
+1. **DP2 stats conversation** with the user (open item), then DP2 is fully done.
+2. **Build DP3** per `demos/benchmark/DP3-PLAN.md` (reuses everything from DP2).
 3. **Throughput / scale benchmark** - concurrency + server-side timing, the test that
    would let NOL8 (FPGA) visibly pull ahead of RE2. The honest "next measurement".
-4. **Agentic-mesh-lab review** - user's repo `~/Code/nol8/agentic-mesh-lab` (small,
-   in GitHub). Review non-destructively; it overlaps DP3, so it informs DP3's shape.
-5. **Data Point 3 - agent-to-agent control** - kit pack `datapoint3_agent_mesh_pack_v1`.
-   Flow: `Triage -> Research -> Decision -> Action`; govern each inter-agent hop
-   (ISSUE-006). More design; shape after the agentic-mesh-lab review.
-6. **EC2 general tidy** (checkout is reconciled and current; just housekeeping).
-
----
-
-# Queued - DP1 report: before/after cards do not show the divergence clearly
-
-User feedback (2026-07-21): the appendix before/after sample cards do not visibly
-contrast the Themis vs Aergia payload. `chunk-0000001` (the FIRST card) is the
-weakest example - it is govern+strip, so the redaction is byte-identical on both
-engines and dominates the card; the only difference is a tiny appended `ault.`
-fragment that nothing highlights, so the two payloads read as "the same." Fix (do
-NOT change other report behavior):
-1. Reorder so a PURE-STRIP chunk leads (`chunk-0000002` or `-0000006`: Themis blank
-   vs Aergia `ault. / ssed early.` - a stark clean-vs-garbage contrast). Demote or
-   drop the govern+strip card, or keep it last as the parity note.
-2. Visually HIGHLIGHT the leftover fragments in the RE2 box (marked/underlined span,
-   or a "Themis removed this, Aergia kept it" cue) so the divergence reads instantly
-   instead of being an easy-to-miss footnote.
-3. Optionally annotate `chunk-0000001` as "redaction identical (parity); Aergia added
-   a stray fragment," so it reinforces rather than dilutes.
-Implementation lives in `_samples()` / `_sample_row()` in `make-report.py` and the
-`raw.samples.items` order in `run.json`.
-
-# Deferred / backlog
-
-- Full `main.py` layer-split (Tier 5 remainder) - structural, skip until it matters.
-- Emailable HTML render of `docs/issues/` with copy buttons into gitignored `handoff/`.
-- Pre-generated demo datasets in t-shirt sizes.
-- Isolate whether Aergia's strip corruption is RE2-inherent or Aergia-harness (a
-  single-rule direct `:444` curl repro would help; needs RE2-the-library to fully
-  settle).
+4. **agentic-mesh-lab (Track B)** - the richer visual demo; larger, user-driven; decide
+   timing once DP1-3 are complete.
+5. **EC2 general tidy** (checkout reconciled; just housekeeping).
 
 ---
 
 # Immediate Next Actions
 
-1. **Build DP2** - start with the boundary policy generator (from the reference
-   lists), then the `themis_api_infer`/`aergia_api_infer` two-control-point modes.
-2. Await the user's answer on the small template change; apply to `make-report.py`.
+1. Have the **DP2 stats conversation**, then lock the DP2 report copy.
+2. **Build DP3** (start: copy the pack out to `demos/benchmark/datapoint3/`, then the
+   mesh policy generator, then the engine modes - follow DP3-PLAN.md).
 3. Announce before every git command ([[announce-before-git]]).
 
 **Not blocking (user handles):** send ISSUE-004 to engineering (report in
@@ -399,19 +294,22 @@ Implementation lives in `_samples()` / `_sample_row()` in `make-report.py` and t
 - Control-plane TLS self-signed is OBS-1, deliberately not a finding; `--insecure` required.
 - Demo scope is listMatch only; the report is NOL8 vs RE2, never "two NOL8 engines".
 - Benchmark integrity: same policy + dataset to every engine; report divergence
-  honestly; never rig for parity. [[benchmark-integrity-no-rigging]]
-- DP1 leads with the optimization use case (not governance); governance parity is the
-  trust anchor. (User's call, 2026-07-21.)
+  honestly. [[benchmark-integrity-no-rigging]]
+- DP1 leads with the optimization use case; governance parity is the trust anchor.
+- DP2/DP3 real-engine modes call the engine directly in Go (no Python adapter).
+- The report renderer is SHARED (`make-report.py`, `kind`-dispatched); do not fork it
+  per data point.
 
 ---
 
 # Repository Hygiene
 
-`validate generate` writes to `artifacts/runs/<RUN_ID>/` (gitignored). Survivors go
-in `artifacts/evidence/`. Gitignored: `.env`, `keys/`, `.venv/`, `artifacts/runs/`,
+`validate generate` writes to `artifacts/runs/<RUN_ID>/` (gitignored). Survivors ->
+`artifacts/evidence/`. Gitignored: `.env`, `keys/`, `.venv/`, `artifacts/runs/`,
 `*.pdf`, `handoff/`, and under `demos/benchmark/`: `**/results/*`, `**/report/
 report.html`, `**/report/report_data.json`, `**/go/benchmark_runner`, `**/.gocache/`,
-and `pre-index-report.html`. **Do not `git add -A`; stage specific files.**
+`pre-index-report.html`, `datapoint2/pre-post-report.html`. **Do not `git add -A`;
+stage specific files.**
 
 Tests: **236**, all passing.
 ```bash
