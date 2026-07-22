@@ -235,9 +235,25 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   `boundary()`, `flows()` (agent-action cards with colored badges), `dp2_appendix()`.
   Regenerate: `python demos/benchmark/make-report.py demos/benchmark/datapoint2/run.json
   demos/benchmark/datapoint2/pre-post-report.html`.
-- **>>> OPEN: the DP2 stats conversation.** The user flagged (2026-07-22) that the DP2
-  stat band / numbers need a talk before the copy is locked. The DP2 report copy is
-  NOT locked. Likely applies to DP3 too.
+- **Flow cards fixed (2026-07-22):** the block/route flow cards used to render fake
+  MODEL/POST rows (incl. a misleading "POST ALLOW"); now stopped flows show one clear
+  outcome line and full-journey cards lead. That WAS the user's specific screenshot
+  complaint.
+- **>>> STATS - strategic direction set (2026-07-22), reframe still TO DO.** The user
+  steered the stats concern into positioning. Decisions ([[demo-positioning-and-data-
+  strategy]]): (1) Position NOL8 as **"the deterministic guardrail for known policy"** -
+  100% precision/recall on the KNOWN set, wire speed, deterministic; complementary to
+  (not competing with) classifiers. Frame listMatch as a differentiator, not an
+  apology. (2) **Do NOT headline test-set counts** ("34/52 governed", "17/52 stopped")
+  - they describe the harness, not NOL8. Lead with what NOL8 EARNED: parity vs the
+  incumbent (52/52 identical), oracle-correctness (52/52), payload + calls avoided.
+  (3) **Every use case needs >1 dataset:** the functional-test set we have (keep) PLUS
+  a **representative-policy** dataset (realistic customer policy/traffic) - user said
+  yes to drafting these. (4) **Classification is a separate concern** (partner/roadmap/
+  own data point); **regex IS on the NOL8 roadmap** ("soon") but not today, so keep all
+  copy listMatch-honest and do NOT overrotate to the future. **NEXT on DP2: reframe the
+  stat band + takeaways to the "deterministic guardrail" story; then draft a
+  representative-policy dataset.** DP2 report copy is NOT locked.
 
 ## Data Point 3 - agent-to-agent control - PLANNED (`demos/benchmark/DP3-PLAN.md`)
 
@@ -274,10 +290,15 @@ which deliberately reuse the framework's tested matcher as the independent oracl
 
 # Immediate Next Actions
 
-1. Have the **DP2 stats conversation**, then lock the DP2 report copy.
-2. **Build DP3** (start: copy the pack out to `demos/benchmark/datapoint3/`, then the
-   mesh policy generator, then the engine modes - follow DP3-PLAN.md).
-3. Announce before every git command ([[announce-before-git]]).
+1. **Reframe the DP2 stats/copy** to "the deterministic guardrail for known policy"
+   (lead with parity/correctness + payload/calls-avoided; demote test-set counts to
+   the appendix). Direction set; execution TO DO. [[demo-positioning-and-data-strategy]]
+2. **Draft a representative-policy dataset** for DP2 (realistic customer pre/post
+   policy + traffic), alongside the functional-test set. Then the same multi-dataset
+   pattern for DP1/DP3. (User said yes.)
+3. **Build DP3** (copy pack out, mesh policy generator, engine modes - follow
+   DP3-PLAN.md). Apply the same positioning + multi-dataset principle.
+4. Announce before every git command ([[announce-before-git]]).
 
 **Not blocking (user handles):** send ISSUE-004 to engineering (report in
 `docs/issues/`, Slack drafts in `docs/issues/internal/outbound-slack-comms.md`).
