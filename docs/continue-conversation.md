@@ -312,11 +312,18 @@ framework's tested matcher as the independent oracle).
   - **OPEN (user flagged 2026-07-22): "we will have to talk about the stats."** The
     DP2 stat band / numbers need a conversation before the report is final - framing
     or specific figures TBD by the user. Do not consider the DP2 report copy locked.
-  4. **NEXT - oracle-verify + DEMO-NOTES + SA runbook for DP2.** Oracle-verify the
-     engine outputs against the framework matcher applied to boundary.nol (DP1
-     discipline). Write DP2 DEMO-NOTES (narrative + the case-sensitivity nuance: the
-     literal engines are exact/case-sensitive, so `Send raw notes...` was allowed pre
-     and caught post - an honest characteristic to note) and an SA runbook.
+  4. **DONE - oracle-verify + DEMO-NOTES + runbook.**
+     `demos/benchmark/datapoint2/verify-oracle.py` ran on EC2: **both engines match
+     the oracle 52/52** (framework Aho-Corasick on boundary.nol; action + tags at both
+     edges, plus byte-equality of forwarded text). So Themis is provably correct AND
+     byte-identical to Aergia - the strongest result, no corruption (boundary redacts
+     to sentinels, not strip-to-empty). `demos/benchmark/datapoint2/DEMO-NOTES.md` has
+     the narrative, numbers, honesty guardrails (listMatch scope 0-masked; exact
+     case-sensitive matching -> `Send raw notes...` allowed pre / caught post;
+     tag=redact-to-marker; deterministic stub), the SA-runnable reproduce commands,
+     and the report pipeline. **DP2 is functionally complete pending the stats
+     conversation (open item above).**
+- **DP2 remaining:** resolve the stats conversation with the user, then DP2 is done.
 - **Reuse:** policy-generator pattern (boundary.nol), report pipeline, the
   oracle-verify discipline. Engine modes call the engine directly in Go (no adapter).
   **New:** the pack's prompt corpus + reference lists (ship), the two-control-point
