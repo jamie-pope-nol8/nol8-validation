@@ -135,8 +135,10 @@ processed}}`. Config in `config/demo.env` (`THEMIS_PROCESS_ENDPOINT`=:443,
 tokens in `.env`. Aergia's :444 has a **few-second reload propagation delay** after a
 deploy.
 
-**Tenant state:** `demos/policies/boundary.nol` (DP2) is deployed to BOTH engines from
-the last DP2 run. Redeploy the relevant policy before a different benchmark.
+**Tenant state:** `demos/policies/boundary-representative.nol` was last deployed to BOTH
+engines (the representative-run attempt). Redeploy the relevant policy before a
+different benchmark. NOTE (2026-07-22): both engine DATA planes (:443/:444) were
+unreachable from EC2 at end of session (transient); control plane deploys still worked.
 
 ---
 
@@ -251,9 +253,23 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   a **representative-policy** dataset (realistic customer policy/traffic) - user said
   yes to drafting these. (4) **Classification is a separate concern** (partner/roadmap/
   own data point); **regex IS on the NOL8 roadmap** ("soon") but not today, so keep all
-  copy listMatch-honest and do NOT overrotate to the future. **NEXT on DP2: reframe the
-  stat band + takeaways to the "deterministic guardrail" story; then draft a
-  representative-policy dataset.** DP2 report copy is NOT locked.
+  copy listMatch-honest and do NOT overrotate to the future.
+  **DONE (2026-07-22):** (a) **Stat band + copy reframed** to the deterministic-
+  guardrail story - stats are now 52/52 oracle-verified, 100% incumbent match, 0 false
+  pos/neg, 2 edges (NO test-set counts up top; moved to the appendix, labeled as
+  test-data composition). Headline "The deterministic guardrail for the model
+  boundary"; takeaways carry the deterministic-vs-probabilistic (complementary to
+  classifiers) framing. (b) **Representative-policy dataset built + committed:**
+  `demos/benchmark/datapoint2/representative/` (insurer claims-support scenario, 9
+  curated lists + 24 real-shaped prompts incl. false-pressure rows); generator takes
+  `--list-dir/--output`; `run-live.sh` takes `DP2_INPUT/LISTS/RESULTS`; policy
+  `demos/policies/boundary-representative.nol` generated + safety-checked. Local modes
+  validated it (masking FIRES now: listguard masked 3 / blocked 2 / routed 3 / tagged 2
+  - the gap the functional-test set had). See representative/README.md.
+  **PENDING: the LIVE engine run of the representative set** - blocked 2026-07-22
+  because both data planes (:443/:444) went unreachable from EC2 (curl times out,
+  http_code 000; transient infra/network - they worked earlier today). Retry when
+  connectivity returns (command in representative/README.md; policy already deployed).
 
 ## Data Point 3 - agent-to-agent control - PLANNED (`demos/benchmark/DP3-PLAN.md`)
 
