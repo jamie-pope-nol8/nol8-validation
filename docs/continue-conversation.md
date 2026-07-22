@@ -309,6 +309,9 @@ framework's tested matcher as the independent oracle).
      before inference, block/route/mask/tag at both edges, honest listMatch scope
      note. Verified in dark; the "Governance in action" flows section shows 4 real
      prompts with colored action badges. DP1 report unchanged (regression-checked).
+  - **OPEN (user flagged 2026-07-22): "we will have to talk about the stats."** The
+    DP2 stat band / numbers need a conversation before the report is final - framing
+    or specific figures TBD by the user. Do not consider the DP2 report copy locked.
   4. **NEXT - oracle-verify + DEMO-NOTES + SA runbook for DP2.** Oracle-verify the
      engine outputs against the framework matcher applied to boundary.nol (DP1
      discipline). Write DP2 DEMO-NOTES (narrative + the case-sensitivity nuance: the
