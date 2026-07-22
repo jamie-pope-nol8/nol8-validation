@@ -1092,6 +1092,22 @@ func main() {
 			os.Exit(1)
 		}
 		stats, err = runNol8APIInfer(prompts, *outputDir, cfg)
+	case "themis_api_infer":
+		var cfg EngineConfig
+		cfg, err = loadEngineConfig("themis_api_infer", "THEMIS_ENDPOINT", "THEMIS_TOKEN")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load themis engine config: %v\n", err)
+			os.Exit(1)
+		}
+		stats, err = runEngineInfer(prompts, *outputDir, cfg)
+	case "aergia_api_infer":
+		var cfg EngineConfig
+		cfg, err = loadEngineConfig("aergia_api_infer", "AERGIA_ENDPOINT", "AERGIA_TOKEN")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load aergia engine config: %v\n", err)
+			os.Exit(1)
+		}
+		stats, err = runEngineInfer(prompts, *outputDir, cfg)
 	default:
 		fmt.Fprintf(os.Stderr, "mode %q not implemented yet\n", *mode)
 		os.Exit(1)
