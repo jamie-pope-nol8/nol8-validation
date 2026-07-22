@@ -28,9 +28,11 @@ echo ">> waiting for Aergia reload to propagate"
 sleep 6
 
 PACK="demos/benchmark/datapoint2"
-RESULTS="$ROOT/$PACK/results"
-INPUT="$ROOT/$PACK/data/prompts/sample_prompts.jsonl"
-LISTS="$ROOT/$PACK/data/reference_lists"
+# Overridable so the same runner drives either dataset (functional-test default, or
+# the representative-policy set). See representative/README.md.
+RESULTS="${DP2_RESULTS:-$ROOT/$PACK/results}"
+INPUT="${DP2_INPUT:-$ROOT/$PACK/data/prompts/sample_prompts.jsonl}"
+LISTS="${DP2_LISTS:-$ROOT/$PACK/data/reference_lists}"
 COMBINED="$RESULTS/run_all.csv"
 mkdir -p "$RESULTS"
 rm -f "$COMBINED"

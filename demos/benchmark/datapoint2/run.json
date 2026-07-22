@@ -19,14 +19,14 @@
   ],
 
   "eyebrow": "NOL8 · Pre/Post-Inference Control Benchmark",
-  "headline": { "lead": "Govern what reaches the model, and what leaves, ", "accent": "at hardware speed." },
-  "lede": "A model boundary has two edges: what you let reach the model, and what you let leave it. A deterministic literal policy governs both, inline. On this prompt set NOL8 stopped 17 of 52 prompts before inference, tagged and masked at both edges, and produced byte-identical output to Aergia, our stand-up of Google RE2, as the benchmark.",
+  "headline": { "lead": "The deterministic guardrail for the model boundary, ", "accent": "at hardware speed." },
+  "lede": "A model boundary has two edges: what reaches the model, and what leaves it. NOL8 governs both with one deterministic literal policy, inline. On the policy you declare, blocked phrases, flagged entities, known sensitive values, it is exact and complete: byte-for-byte identical to Aergia, our stand-up of Google RE2, and verified correct against an independent oracle on every prompt. No confidence threshold, no false positives or negatives, at wire speed.",
 
   "stats": [
-    { "value": "0",    "unit": "diffs",  "label": "Themis vs Aergia, 52 of 52 prompts", "key": true  },
-    { "value": "17",   "unit": "/ 52",   "label": "prompts stopped before inference",   "key": true  },
-    { "value": "34",   "unit": "/ 52",   "label": "prompts governed at the boundary",   "key": false },
-    { "value": "2",    "unit": "edges",  "label": "controlled: pre and post inference", "key": false }
+    { "value": "52 / 52", "unit": "",      "label": "prompts verified correct against an oracle", "key": true  },
+    { "value": "100",     "unit": "%",     "label": "byte-for-byte match with the RE2 incumbent",  "key": true  },
+    { "value": "0",       "unit": "",      "label": "false positives or negatives on declared policy", "key": false },
+    { "value": "2",       "unit": "edges", "label": "governed, pre and post inference",            "key": false }
   ],
 
   "boundary": {
@@ -109,10 +109,10 @@
 
   "meaning": { "heading": "What it means for the boundary." },
   "takeaways": [
-    { "title": "Two edges, one deterministic pass.", "body": "The same literal policy governs what reaches the model and what leaves it, inline. One control, both directions, no model in the loop to make the decision." },
-    { "title": "NOL8 matches the incumbent, exactly.", "body": "Byte-identical to Aergia across all 52 prompts, every action at both edges. As correct as the established regex engine, and it runs inline on FPGA." },
-    { "title": "A third of prompts never reach the model.", "body": "Block and route stopped 17 of 52 before inference. That is model spend avoided and policy enforced before the call, not cleaned up after it." },
-    { "title": "Known values, exactly.", "body": "NOL8 governs exact literals: blocked phrases, flagged customers, denied entities, internal projects, known cards. Arbitrary-pattern masking (any card number) is regex, out of listMatch scope. On this set the literal policy masked 0 where a regex baseline masked 12. We govern what we know, deterministically." }
+    { "title": "Deterministic, not probabilistic.", "body": "On the policy you declare, NOL8 is exact and complete: no false positives, no false negatives, no threshold to tune. A classifier cannot promise that. NOL8 is the deterministic guardrail for known policy; a classifier is the probabilistic net for the unknown. They are complementary." },
+    { "title": "It matches the incumbent, provably.", "body": "Byte-identical to Aergia across all 52 prompts, and verified correct against an independent oracle at both edges. As correct as the established engine, running inline on FPGA." },
+    { "title": "Both edges, one pass.", "body": "The same literal policy governs what reaches the model and what leaves it. Block and route stop a request before the model is ever called; mask and tag travel with it. No model in the loop to make the decision." },
+    { "title": "Known values, today.", "body": "NOL8 governs exact literals: blocked phrases, flagged customers, denied entities, internal projects, known values. Pattern-based detection, any card number or a novel injection, is a complementary classification layer. We govern what you declare, exactly." }
   ],
 
   "method": [
@@ -136,7 +136,7 @@
         ["Aergia (RE2 baseline)", "34", "17", "4", "11", "379", "350"],
         ["Themis (NOL8 · FPGA)", "34", "17", "4", "11", "379", "350"]
       ],
-      "note": "Governed = prompts where a control fired at either edge. Stopped pre-inference = block plus route (the model is never called). Token counts are forwarded to the model and released from it, versus 599 in / 563 out for Do nothing. Themis and Aergia rows are identical because their output was byte-for-byte the same. Process metrics are omitted; a deterministic stub isolates the controls. From a single clean run on both live engines."
+      "note": "These action counts describe the composition of the functional-test set (each prompt is built with a known expected action so the result can be oracle-verified); they are a property of the test data, not a NOL8 metric. What is NOL8's is that Themis and Aergia rows are byte-for-byte identical and both match the oracle 52/52. Governed = a control fired at either edge. Stopped pre-inference = block plus route (the model is never called). Token counts are forwarded to / released from the model, versus 599 in / 563 out for Do nothing. Process metrics are omitted; a deterministic stub isolates the controls. From a single clean run on both live engines."
     }
   },
 

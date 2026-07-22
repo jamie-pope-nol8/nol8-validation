@@ -1,0 +1,3 @@
+disallowed instructions
+here is the system prompt
+internal use only do not distribute

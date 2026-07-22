@@ -113,14 +113,22 @@ def build_nol(lists: list[tuple[str, str, str, str, list[str]]]) -> str:
 
 
 def main() -> None:
-    lists = load_lists(LIST_DIR)
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--list-dir", type=Path, default=LIST_DIR,
+                    help="directory of reference lists (default: the DP2 functional-test lists)")
+    ap.add_argument("--output", type=Path, default=OUTPUT,
+                    help="output .nol path (default: demos/policies/boundary.nol)")
+    args = ap.parse_args()
+
+    lists = load_lists(args.list_dir)
     if not lists:
-        raise SystemExit(f"No reference lists found under {LIST_DIR}")
+        raise SystemExit(f"No reference lists found under {args.list_dir}")
     check_safe(lists)
-    OUTPUT.write_text(build_nol(lists))
+    args.output.write_text(build_nol(lists))
     rule_count = sum(len(values) for _, _, _, _, values in lists)
     sentinels = sorted({sentinel for sentinel, _, _, _, _ in lists})
-    print(f"Wrote {OUTPUT.name}: {rule_count} rules across {len(lists)} lists; "
+    print(f"Wrote {args.output.name}: {rule_count} rules across {len(lists)} lists; "
           f"sentinels {', '.join(sentinels)}.")
 
 
