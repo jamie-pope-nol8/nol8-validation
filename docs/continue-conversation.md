@@ -192,9 +192,13 @@ which deliberately reuse the framework's tested matcher as the independent oracl
 
 - **`demos/check-engines.sh`** - preflight ("are things where they need to be?"). Per
   engine, checks DNS + control-plane policy deploy + data-plane round-trip transform
-  independently, so a failure points at the right plane. Deploys a harmless probe
-  policy; exits non-zero if anything fails. Run on EC2 before any benchmark. Built from
-  the observed outage (control planes OK, data planes unreachable).
+  independently, so a failure points at the right plane. On a data-plane failure (or
+  with `--diagnose`) it deep-probes (TCP-connect timing + ICMP ping + raw nc) and
+  interprets: packets DROPPED (host down/firewalled) vs TCP RST (service down) vs HTTP
+  503 (paused, deploy a policy); cross-refs `docs/TROUBLESHOOTING.md`. Deploys a
+  harmless probe policy; exits non-zero if anything fails. Run on EC2 before any
+  benchmark. **Confirmed the 2026-07-22 outage: argus edge (10.8.11.254) drops all
+  ICMP+TCP - host down or firewalled, infra-side.**
 - **`demos/themis-adapter/adapter.py`** - bridges `{"text"}->{"action","text"}` to the
   engine contract; keep/mask, drop/route via sentinel tokens. Used by DP1. (DP2/DP3
   call the engine directly in Go instead - simpler for a Go harness we own.)
