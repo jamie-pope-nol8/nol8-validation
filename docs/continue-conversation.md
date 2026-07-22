@@ -17,9 +17,12 @@ can continue without reconstructing context from chat history.
 > comes from a **single fresh clean run** (2026-07-21) and the report's appendix is
 > a full "show your work" receipts block. See "Demo environment / DP1" below.
 >
-> **Current focus: Data Point 2 (pre/post-inference control).** The kit pack is
-> **copied out** into `demos/benchmark/datapoint2/`. Scoped and ready to build; the
-> real-engine wiring is the main task (see "DP2" below).
+> **Current focus: Data Point 2 (pre/post-inference control).** Pack copied out to
+> `demos/benchmark/datapoint2/`. Boundary policy (step 1) and the real-engine
+> two-control-point modes (step 2) are BUILT and ran live: **Themis == Aergia
+> byte-for-byte on the boundary policy, 0 field-diffs over 52 prompts** (parity, no
+> corruption - the boundary policy redacts to sentinels rather than stripping to
+> empty). NEXT: run.json + on-brand report + oracle-verify (see "DP2" below).
 >
 > **Template tweak applied (2026-07-21):** the user's small change was the stat band
 > background - it was on the full-width `<section>` (`background:var(--card)`), so the
@@ -279,18 +282,34 @@ framework's tested matcher as the independent oracle).
      `[MASK_CARD]`, account->`[MASK_ACCT]`, internal->`[TAG_INT]`, output_block->
      `[BLOCK_OUT]`, output_tag->`[TAG_PRIV]` (all <=15 chars). Reuses build_policy's
      ISSUE-005/004 guards; the real lists passed the containment check. Tracked.
-  2. **NEXT - Real-engine modes** `themis_api_infer` / `aergia_api_infer`: call the engine at
-     BOTH control points (govern the prompt, then govern the model-stub output) via
-     the sentinel-extended adapter, deriving block/mask/route/tag from which sentinel
-     appears. This is the DP1 drop-sentinel pattern generalized. (The adapter already
-     supports drop/route sentinels; extend for block/tag as needed.)
-  3. `run.json` + reuse `make-report.py` (or a DP2 copy) for the on-brand report;
-     modes map onto the DP1 story: `nocontrol`=Do nothing, `aergia`=RE2 baseline,
-     `themis`=NOL8. Oracle-verify each engine (same integrity discipline as DP1).
+  2. **DONE - Real-engine modes** `themis_api_infer` / `aergia_api_infer`
+     (`demos/benchmark/datapoint2/go/engine_infer.go`): call the engine DIRECTLY
+     (not via the adapter - DP2 owns its Go harness) at BOTH control points, deriving
+     block/mask/route/tag from the boundary.nol sentinels. Runner:
+     `demos/benchmark/datapoint2/run-live.sh` (deploy boundary.nol to both, run all 6
+     modes, combine CSV). **Ran live on EC2 (52 prompts):**
+     - **Themis == Aergia byte-for-byte, 0 field-diffs across all 52 prompts.** On the
+       boundary policy (redact-to-sentinel, no strip-to-empty) the engines AGREE
+       exactly - unlike DP1 where strip-to-empty exposed Aergia's corruption. DP2
+       headline: NOL8 matches the incumbent on the whole pre/post boundary.
+     - Both engines: pre 31 allow / 0 mask / 5 block / 12 route / 4 tag; 35 inference
+       calls, 17 avoided; post 20 allow / 4 block / 11 tag. 379 prompt tokens
+       forwarded, 350 output tokens released. (34 of 52 prompts governed.)
+     - **listMatch scope note (honest):** literal modes (themis/aergia/listguard) show
+       0 masked because the prompts' card/account values are not exact list literals
+       (e.g. prompt_0006 `card 5555 6666 7777 8888`); re2_guard (regex) masks 12,
+       nol8sim (oracle) 9. NOL8 governs KNOWN values deterministically; arbitrary-
+       pattern masking is regex, out of listMatch scope. Surface this, don't hide it.
+  3. **NEXT - `run.json` + report + oracle-verify.** Reuse `make-report.py` (or a DP2
+     variant). Story: nocontrol=Do nothing, aergia=RE2 baseline, themis=NOL8; headline
+     is byte-for-byte parity on the boundary + inference-calls-avoided (block/route
+     stop 17 of 52 before the model) + the honest listMatch scope note. Oracle-verify
+     the engine outputs against the framework matcher applied to boundary.nol.
   4. SA runbook + DEMO-NOTES for DP2.
-- **Reuse:** adapter (extend sentinels), policy-generator pattern, report pipeline,
-  the oracle-verify discipline. **New:** the pack's prompt corpus + reference lists
-  (ship), the two-control-point wiring, a boundary policy, DP2 report copy.
+- **Reuse:** policy-generator pattern (boundary.nol), report pipeline, the
+  oracle-verify discipline. Engine modes call the engine directly in Go (no adapter).
+  **New:** the pack's prompt corpus + reference lists (ship), the two-control-point
+  wiring, a boundary policy, DP2 report copy.
 
 ---
 
