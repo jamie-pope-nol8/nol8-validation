@@ -13,18 +13,27 @@ continue without reconstructing context from chat history.
 >   optimization use case: Themis forwards **64.3% fewer tokens**, oracle-verified
 >   **1000/1000**; the RE2 baseline (Aergia) **corrupts 876/1000** on strip. Single
 >   fresh clean run; full "show your work" receipts appendix.
-> - **Data Point 2 (pre/post-inference) - DONE, pending a stats conversation.** Real-
->   engine modes govern a model boundary at both edges. **Themis == Aergia == oracle,
->   52/52** (byte-for-byte parity AND provably correct; no corruption because the
->   boundary redacts to sentinels, not strip-to-empty). Report, DEMO-NOTES, and
->   oracle-verify all built. **OPEN: the user flagged the DP2 stats need a
->   conversation before the copy is locked.**
+> - **Data Point 2 (pre/post-inference) - DONE (stats reframed).** Real-engine modes
+>   govern a model boundary at both edges. **Themis == Aergia == oracle, 52/52**. The
+>   stats were reframed to the **"deterministic guardrail for known policy"** story
+>   (no test-set counts up top) and a **representative-policy dataset** was built
+>   (`datapoint2/representative/`, insurer scenario). Report/DEMO-NOTES/oracle-verify
+>   built. Only gap: the LIVE run of the representative set (blocked by the outage
+>   below). See the DP2 section + [[demo-positioning-and-data-strategy]].
 > - **Data Point 3 (agent-to-agent) - PLANNED only.** Full build spec in
->   `demos/benchmark/DP3-PLAN.md`. It is DP2 generalized to many control points
->   (governance at every agent hop / tool call / final output). Not built yet.
+>   `demos/benchmark/DP3-PLAN.md`. DP2 generalized to many control points. Not built.
 >
-> **Current focus / NEXT:** (a) the DP2 stats conversation; (b) build DP3 per the
-> plan; (c) Track B, the `agentic-mesh-lab` visual demo, is separate and larger.
+> **>>> CURRENT OPERATIONAL BLOCKER (2026-07-22 end of session): the engine DATA
+> planes (:443/:444) are UNREACHABLE from EC2.** Control planes (:8444) are healthy
+> (policy deploys return 200); DNS resolves (`tenant001-v1demo.nol8.net` ->
+> 10.8.11.254); but the data-plane ports time out at the TCP level (curl exit 28).
+> Diagnose/confirm with **`bash demos/check-engines.sh`** on EC2 (built this session).
+> Likely a data-plane service/firewall/VPN-route issue on the engine side - NOT our
+> code. Any live benchmark is blocked until this clears; the framework code is fine.
+>
+> **Current focus / NEXT:** (a) clear the data-plane outage, then the pending live
+> representative run; (b) final DP2 copy look; (c) build DP3 per the plan; (d) Track B
+> (`agentic-mesh-lab`) is separate and larger.
 
 This file is project *state*. Three companions carry the rest:
 
@@ -181,6 +190,11 @@ which deliberately reuse the framework's tested matcher as the independent oracl
 
 ## Shared pieces
 
+- **`demos/check-engines.sh`** - preflight ("are things where they need to be?"). Per
+  engine, checks DNS + control-plane policy deploy + data-plane round-trip transform
+  independently, so a failure points at the right plane. Deploys a harmless probe
+  policy; exits non-zero if anything fails. Run on EC2 before any benchmark. Built from
+  the observed outage (control planes OK, data planes unreachable).
 - **`demos/themis-adapter/adapter.py`** - bridges `{"text"}->{"action","text"}` to the
   engine contract; keep/mask, drop/route via sentinel tokens. Used by DP1. (DP2/DP3
   call the engine directly in Go instead - simpler for a Go harness we own.)
@@ -306,14 +320,14 @@ which deliberately reuse the framework's tested matcher as the independent oracl
 
 # Immediate Next Actions
 
-1. **Reframe the DP2 stats/copy** to "the deterministic guardrail for known policy"
-   (lead with parity/correctness + payload/calls-avoided; demote test-set counts to
-   the appendix). Direction set; execution TO DO. [[demo-positioning-and-data-strategy]]
-2. **Draft a representative-policy dataset** for DP2 (realistic customer pre/post
-   policy + traffic), alongside the functional-test set. Then the same multi-dataset
-   pattern for DP1/DP3. (User said yes.)
+1. **Clear the data-plane outage, then verify** with `bash demos/check-engines.sh` on
+   EC2 (want all checks OK). Then run the pending LIVE representative run (command in
+   `datapoint2/representative/README.md`) and DP2 is fully done.
+2. **DP2 stats/copy reframe + representative dataset are DONE** (this session). Apply
+   the same positioning + multi-dataset principle to DP1/DP3.
+   [[demo-positioning-and-data-strategy]]
 3. **Build DP3** (copy pack out, mesh policy generator, engine modes - follow
-   DP3-PLAN.md). Apply the same positioning + multi-dataset principle.
+   DP3-PLAN.md).
 4. Announce before every git command ([[announce-before-git]]).
 
 **Not blocking (user handles):** send ISSUE-004 to engineering (report in
