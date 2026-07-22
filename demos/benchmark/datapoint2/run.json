@@ -1,0 +1,155 @@
+{
+  "_comment": "Data Point 2 (pre/post-inference control). Rendered by demos/benchmark/make-report.py (kind=dp2). Brand voice: no em dashes, no exclamation marks, no emoji; Aergia is always the RE2 benchmark, never a NOL8 product. Numbers from a single clean run of demos/policies/boundary.nol on both live engines (52 prompts).",
+  "kind": "dp2",
+  "title": "NOL8 Pre/Post-Inference Control, Data Point 02",
+
+  "identifier": { "left": "NOL8 · Pre/Post-Inference Control", "right": "Data Point 02 / Benchmark" },
+  "navLabel": "Pre/Post-Inference Control · Data Point 02",
+  "nav": [
+    ["overview", "Overview"],
+    ["benchmark", "The boundary"],
+    ["flows", "Governance in action"],
+    ["meaning", "What it means"],
+    ["method", "Method"],
+    ["appendix", "Full data"]
+  ],
+  "cta": [
+    { "label": "See governance in action", "target": "#flows", "primary": true, "arrow": true },
+    { "label": "The boundary", "target": "#benchmark", "primary": false }
+  ],
+
+  "eyebrow": "NOL8 · Pre/Post-Inference Control Benchmark",
+  "headline": { "lead": "Govern what reaches the model, and what leaves, ", "accent": "at hardware speed." },
+  "lede": "A model boundary has two edges: what you let reach the model, and what you let leave it. A deterministic literal policy governs both, inline. On this prompt set NOL8 stopped 17 of 52 prompts before inference, tagged and masked at both edges, and produced byte-identical output to Aergia, our stand-up of Google RE2, as the benchmark.",
+
+  "stats": [
+    { "value": "0",    "unit": "diffs",  "label": "Themis vs Aergia, 52 of 52 prompts", "key": true  },
+    { "value": "17",   "unit": "/ 52",   "label": "prompts stopped before inference",   "key": true  },
+    { "value": "34",   "unit": "/ 52",   "label": "prompts governed at the boundary",   "key": false },
+    { "value": "2",    "unit": "edges",  "label": "controlled: pre and post inference", "key": false }
+  ],
+
+  "boundary": {
+    "heading": "One policy, both edges of the model.",
+    "lede": "The same literal boundary policy runs on both engines at two control points: once on the prompt, once on the model output. Do nothing forwards everything, both ways.",
+    "approaches": [
+      { "role": "baseline",  "tag": "Baseline · Do nothing",    "headline": "No boundary",                       "metric": "0",  "metricUnit": "governed", "desc": "Every prompt reaches the model, every response leaves it. Nothing is inspected at either edge." },
+      { "role": "benchmark", "tag": "Benchmark · Aergia (RE2)", "headline": "Google RE2, the known regex engine", "metric": "34", "metricUnit": "governed", "desc": "Our stand-up of Google RE2 on the identical boundary policy. Byte-identical to NOL8 across all 52 prompts, at both control points." },
+      { "role": "nol8",      "tag": "NOL8 · Themis (FPGA)",     "headline": "Deterministic control, both edges",  "metric": "34", "metricUnit": "governed", "desc": "The identical policy, inline on FPGA. Blocks, routes, masks, and tags at both control points, and matches the incumbent byte-for-byte." }
+    ],
+    "controlPoints": {
+      "pre": {
+        "title": "Before inference",
+        "desc": "Govern what reaches the model. Block and route stop the prompt before the call.",
+        "actions": [
+          ["Blocked, never sent to the model", "5"],
+          ["Routed to a controlled path", "12"],
+          ["Tagged internal", "4"],
+          ["Allowed through", "31"]
+        ]
+      },
+      "post": {
+        "title": "After inference",
+        "desc": "Govern what leaves the model. Unsafe generated output is caught before it is released.",
+        "actions": [
+          ["Blocked unsafe output", "4"],
+          ["Tagged privileged", "11"],
+          ["Allowed out", "20"]
+        ]
+      }
+    }
+  },
+
+  "flows": {
+    "heading": "Four prompts, four controls.",
+    "lede": "Real prompts from the set, showing the boundary acting at each edge. Governed values become tokens; blocked and routed prompts never reach the model. Themis and Aergia produced identical results.",
+    "items": [
+      {
+        "label": "Blocked before inference",
+        "category": "approval_required_prompt",
+        "prompt": "Provide a full transcript export of the analyst session for immediate review.",
+        "pre": "block",
+        "forwarded": "",
+        "inferenceCalled": false,
+        "rawOutput": "",
+        "post": "allow",
+        "final": ""
+      },
+      {
+        "label": "Routed to a controlled path",
+        "category": "flagged_customer_prompt",
+        "prompt": "Prepare a recommended next action for Contoso Advisory after the latest fraud review.",
+        "pre": "route",
+        "forwarded": "",
+        "inferenceCalled": false,
+        "rawOutput": "",
+        "post": "allow",
+        "final": ""
+      },
+      {
+        "label": "Tagged at both edges",
+        "category": "internal_only_prompt",
+        "prompt": "Summarize Project Maple Vault design notes for the architecture review.",
+        "pre": "tag",
+        "preTags": ["internal_only"],
+        "forwarded": "Summarize [TAG_INT] design notes for the architecture review.",
+        "inferenceCalled": true,
+        "rawOutput": "Model response references privileged context for prompt_0016 and should be tagged.",
+        "post": "tag",
+        "postTags": ["privileged_context"],
+        "final": "Model response references [TAG_PRIV] for prompt_0016 and should be tagged."
+      },
+      {
+        "label": "Unsafe output caught after inference",
+        "category": "approval_required_prompt",
+        "prompt": "Send raw notes to reseller leadership for packaging and distribution.",
+        "pre": "allow",
+        "forwarded": "Send raw notes to reseller leadership for packaging and distribution.",
+        "inferenceCalled": true,
+        "rawOutput": "Model response contains disallowed instructions and should be blocked downstream.",
+        "post": "block",
+        "final": "[BLOCKED_OUTPUT]"
+      }
+    ]
+  },
+
+  "meaning": { "heading": "What it means for the boundary." },
+  "takeaways": [
+    { "title": "Two edges, one deterministic pass.", "body": "The same literal policy governs what reaches the model and what leaves it, inline. One control, both directions, no model in the loop to make the decision." },
+    { "title": "NOL8 matches the incumbent, exactly.", "body": "Byte-identical to Aergia across all 52 prompts, every action at both edges. As correct as the established regex engine, and it runs inline on FPGA." },
+    { "title": "A third of prompts never reach the model.", "body": "Block and route stopped 17 of 52 before inference. That is model spend avoided and policy enforced before the call, not cleaned up after it." },
+    { "title": "Known values, exactly.", "body": "NOL8 governs exact literals: blocked phrases, flagged customers, denied entities, internal projects, known cards. Arbitrary-pattern masking (any card number) is regex, out of listMatch scope. On this set the literal policy masked 0 where a regex baseline masked 12. We govern what we know, deterministically." }
+  ],
+
+  "method": [
+    { "term": "Corpus",   "def": "52 synthetic prompts shaped like traffic around a model boundary, each with an expected pre-action and a deterministic model-stub profile." },
+    { "term": "Policy",   "def": "One literal boundary policy (demos/policies/boundary.nol): blocked phrases, route phrases, flagged customers, denied entities, internal projects, known cards and accounts, plus output block and tag phrases. Each maps to a sentinel; the same file runs on both engines." },
+    { "term": "Engines",  "def": "Themis, the NOL8 FPGA (:443), and Aergia, our stand-up of Google RE2 (:444). Each is called at both control points: once on the prompt, once on the model output." },
+    { "term": "Actions",  "def": "block (never sent), route (controlled path), mask (value redacted), tag (flagged), allow. Derived from which sentinel the engine emitted." },
+    { "term": "Model",    "def": "A deterministic stub stands in for the model, so the benchmark measures the controls, not model quality." },
+    { "term": "Parity",   "def": "Themis and Aergia output compared field by field per prompt: 0 diffs across all 52. Same policy, same data, same result." },
+    { "term": "Matching", "def": "Exact literal, case-sensitive: NOL8 governs known values, not arbitrary patterns. That is the listMatch scope." }
+  ],
+  "methodNote": "Not a model-quality or throughput test. A deterministic stub isolates the boundary controls.",
+
+  "raw": {
+    "heading": "Full benchmark data",
+    "intro": "Every number from the same 52-prompt run, both engines on the identical boundary policy. Themis and Aergia were compared field by field per prompt and are byte-identical, so their rows match exactly.",
+    "aggregate": {
+      "columns": ["Approach", "Prompts governed", "Stopped pre-inference", "Output blocked", "Output tagged", "Prompt tokens fwd", "Output tokens out"],
+      "rows": [
+        ["Do nothing", "0", "0", "0", "0", "599", "563"],
+        ["Aergia (RE2 baseline)", "34", "17", "4", "11", "379", "350"],
+        ["Themis (NOL8 · FPGA)", "34", "17", "4", "11", "379", "350"]
+      ],
+      "note": "Governed = prompts where a control fired at either edge. Stopped pre-inference = block plus route (the model is never called). Token counts are forwarded to the model and released from it, versus 599 in / 563 out for Do nothing. Themis and Aergia rows are identical because their output was byte-for-byte the same. Process metrics are omitted; a deterministic stub isolates the controls. From a single clean run on both live engines."
+    }
+  },
+
+  "footer": {
+    "tagline": "The AI data plane. Deterministic control at both edges of the model, inline, at wire speed.",
+    "next": [ "Data Point 03 · Agent-to-agent control", "Govern every hop in the mesh" ],
+    "copyright": "© 2026 Nol8. All rights reserved.",
+    "confidential": "Private & Confidential"
+  }
+}

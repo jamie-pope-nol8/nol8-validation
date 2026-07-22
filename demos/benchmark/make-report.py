@@ -116,6 +116,27 @@ a.foot:hover{{color:var(--accent) !important;}}
 
 
 # ---- section builders ----
+_DEFAULT_CTAS = [
+    {"label": "See where the time goes", "target": "#latency", "primary": True, "arrow": True},
+    {"label": "The benchmark", "target": "#benchmark", "primary": False},
+]
+
+
+def _hero_ctas(d) -> str:
+    out = ""
+    for c in d.get("cta", _DEFAULT_CTAS):
+        arrow = ' <span style="font-weight:700;">&rsaquo;</span>' if c.get("arrow") else ""
+        if c.get("primary"):
+            out += (f'\n          <a class="cta" href="{esc(c["target"])}" style="display:inline-flex;'
+                    f'align-items:center;gap:9px;background:var(--accent);color:#fff;font-weight:600;'
+                    f'font-size:15px;padding:13px 22px;border-radius:8px;text-decoration:none;">{esc(c["label"])}{arrow}</a>')
+        else:
+            out += (f'\n          <a class="ghost" href="{esc(c["target"])}" style="display:inline-flex;'
+                    f'align-items:center;background:transparent;color:var(--fg1);font-weight:600;font-size:15px;'
+                    f'padding:13px 22px;border-radius:8px;border:1px solid var(--hairline);text-decoration:none;">{esc(c["label"])}</a>')
+    return out
+
+
 def hero(d) -> str:
     h = d["headline"]
     return f"""
@@ -128,9 +149,7 @@ def hero(d) -> str:
         <div style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">{esc(d["eyebrow"])}</div>
         <h1 style="font-family:var(--font-display);font-weight:500;font-size:56px;line-height:1.03;letter-spacing:-.015em;color:var(--fg1);margin:22px 0 0;">{esc(h["lead"])}<span style="color:var(--accent);">{esc(h["accent"])}</span></h1>
         <p style="color:var(--fg2);font-size:18px;line-height:1.6;max-width:60ch;margin:24px 0 0;">{esc(d["lede"])}</p>
-        <div class="no-print" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:32px;">
-          <a class="cta" href="#latency" style="display:inline-flex;align-items:center;gap:9px;background:var(--accent);color:#fff;font-weight:600;font-size:15px;padding:13px 22px;border-radius:8px;text-decoration:none;">See where the time goes <span style="font-weight:700;">&rsaquo;</span></a>
-          <a class="ghost" href="#benchmark" style="display:inline-flex;align-items:center;background:transparent;color:var(--fg1);font-weight:600;font-size:15px;padding:13px 22px;border-radius:8px;border:1px solid var(--hairline);text-decoration:none;">The benchmark</a>
+        <div class="no-print" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:32px;">{_hero_ctas(d)}
         </div>
       </div>
     </div>
@@ -166,10 +185,9 @@ APPROACH_STYLE = {
 }
 
 
-def benchmark(d) -> str:
-    b = d["benchmark"]
+def _approach_cards(approaches) -> str:
     cards = ""
-    for a in d["approaches"]:
+    for a in approaches:
         s = APPROACH_STYLE[a["role"]]
         cards += f"""
           <div data-card style="position:relative;background:{s['surface']};border:1px solid {s['border']};border-left:4px solid {s['rail']};border-radius:10px;padding:24px 24px 26px;opacity:{s['opacity']};box-shadow:{s['shadow']};">
@@ -178,6 +196,12 @@ def benchmark(d) -> str:
             <div style="font-family:var(--font-display);font-weight:700;font-size:42px;line-height:1;color:{s['metric']};margin-top:18px;">{esc(a['metric'])}<span style="font-size:.32em;color:var(--fg2);font-weight:600;margin-left:5px;">{esc(a['metricUnit'])}</span></div>
             <p style="color:var(--fg3);font-size:13px;line-height:1.5;margin:14px 0 0;">{esc(a['desc'])}</p>
           </div>"""
+    return cards
+
+
+def benchmark(d) -> str:
+    b = d["benchmark"]
+    cards = _approach_cards(d["approaches"])
     r = d["redaction"]
     after = ""
     for part in r["after"]:
@@ -519,6 +543,11 @@ def raw_section(d) -> str:
 def footer(d) -> str:
     f = d["footer"]
     nxt = "".join(f'<span style="color:var(--fg2);font-size:14px;">{esc(x)}</span>' for x in f["next"])
+    nav = d.get("nav", [("overview", "Overview"), ("benchmark", "The benchmark"),
+                        ("latency", "Where the time goes"), ("method", "Method")])
+    readout = "".join(
+        f'<a class="foot" href="#{sid}" style="color:var(--fg2);font-size:14px;text-decoration:none;">{esc(label)}</a>'
+        for sid, label in nav if sid not in ("overview", "appendix"))
     return f"""
   <footer style="border-top:1px solid var(--hairline);background:var(--card);">
     <div style="max-width:1200px;margin:0 auto;padding:52px 40px 30px;display:flex;gap:48px;flex-wrap:wrap;align-items:flex-start;">
@@ -529,10 +558,7 @@ def footer(d) -> str:
       </div>
       <div>
         <div style="color:var(--fg3);font-size:11px;letter-spacing:.14em;text-transform:uppercase;">This readout</div>
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">
-          <a class="foot" href="#benchmark" style="color:var(--fg2);font-size:14px;text-decoration:none;">The benchmark</a>
-          <a class="foot" href="#latency" style="color:var(--fg2);font-size:14px;text-decoration:none;">Where the time goes</a>
-          <a class="foot" href="#method" style="color:var(--fg2);font-size:14px;text-decoration:none;">Method</a>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;">{readout}
         </div>
       </div>
       <div>
@@ -573,7 +599,7 @@ def top_bar(d) -> str:
     <div id="nav-scrim" style="position:fixed;inset:66px 0 0 0;z-index:40;background:rgba(0,0,0,0.35);"></div>
     <div style="position:fixed;top:66px;right:0;z-index:45;width:min(340px,86vw);background:var(--bg);border-left:1px solid var(--hairline);border-bottom:1px solid var(--hairline);padding:20px 20px 26px;animation:navIn .28s cubic-bezier(.2,.6,.2,1);">
       <div style="color:var(--fg3);font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:0 8px 10px;">On this page</div>
-      {"".join(f'<a class="navlink" data-target="{sid}" href="#{sid}" style="display:flex;align-items:center;gap:12px;padding:12px 8px;border-radius:8px;text-decoration:none;font-size:16px;border-bottom:1px solid var(--hairline-soft);"><span class="navdot" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;"></span>{label}</a>' for sid, label in [("overview","Overview"),("benchmark","The benchmark"),("latency","Where the time goes"),("meaning","What it means"),("method","Method"),("appendix","Full data")])}
+      {"".join(f'<a class="navlink" data-target="{sid}" href="#{sid}" style="display:flex;align-items:center;gap:12px;padding:12px 8px;border-radius:8px;text-decoration:none;font-size:16px;border-bottom:1px solid var(--hairline-soft);"><span class="navdot" style="width:6px;height:6px;border-radius:50%;flex-shrink:0;"></span>{label}</a>' for sid, label in d.get("nav", [("overview","Overview"),("benchmark","The benchmark"),("latency","Where the time goes"),("meaning","What it means"),("method","Method"),("appendix","Full data")]))}
     </div>
   </div>"""
 
@@ -648,18 +674,130 @@ SCRIPT = """
 </script>"""
 
 
-def build(run: dict) -> str:
-    body = "".join([
-        top_bar(run), hero(run), stat_band(run), benchmark(run),
-        latency(run), meaning(run), method(run), raw_section(run), footer(run), BACK_TO_TOP,
-    ])
+# ---- DP2 (pre/post-inference control) sections ----
+_ACTION_COLOR = {"block": WARN, "route": "var(--accent)", "mask": "var(--accent)",
+                 "tag": "var(--accent)", "allow": "var(--fg3)"}
+
+
+def _action_badge(action: str, tags=None) -> str:
+    color = _ACTION_COLOR.get(action, "var(--fg3)")
+    label = action.upper()
+    if tags:
+        label += " · " + ", ".join(tags)
+    return (f'<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;'
+            f'text-transform:uppercase;color:{color};border:1px solid {color};border-radius:999px;'
+            f'padding:2px 9px;white-space:nowrap;">{esc(label)}</span>')
+
+
+def boundary(d) -> str:
+    b = d["boundary"]
+    cards = _approach_cards(b["approaches"])
+    cp = b["controlPoints"]
+
+    def point(p, num):
+        rows = "".join(
+            f'<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;'
+            f'border-bottom:1px solid var(--hairline-soft);">'
+            f'<span style="color:var(--fg2);font-size:13.5px;">{esc(a)}</span>'
+            f'<span style="color:var(--accent);font-weight:600;font-size:13.5px;'
+            f'font-variant-numeric:tabular-nums;white-space:nowrap;">{esc(n)}</span></div>'
+            for a, n in p["actions"])
+        return (f'<div data-card style="background:var(--card);border:1px solid var(--cardline);'
+                f'border-radius:12px;padding:24px 26px;">'
+                f'<div style="color:var(--accent);font-weight:600;font-size:11px;letter-spacing:.14em;'
+                f'text-transform:uppercase;">{esc(num)}</div>'
+                f'<div style="color:var(--fg1);font-weight:700;font-size:19px;margin-top:8px;">{esc(p["title"])}</div>'
+                f'<p style="color:var(--fg3);font-size:13px;line-height:1.55;margin:8px 0 14px;">{esc(p["desc"])}</p>'
+                f'{rows}</div>')
+
+    return f"""
+  <section id="benchmark" data-section="benchmark" style="scroll-margin-top:80px;">
+    <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">01 · The boundary</span>
+        <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
+      </div>
+      <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;max-width:22ch;">{esc(b['heading'])}</h2>
+      <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:70ch;margin:14px 0 0;">{esc(b['lede'])}</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:36px;">{cards}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-top:18px;">
+        {point(cp['pre'], 'Control point 1')}
+        {point(cp['post'], 'Control point 2')}
+      </div>
+    </div>
+  </section>"""
+
+
+def flows(d) -> str:
+    f = d["flows"]
+    cards = ""
+    for it in f["items"]:
+        called = it.get("inferenceCalled", True)
+        forwarded = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["forwarded"]))}</span>'
+                     if called else
+                     '<span style="color:' + WARN + ';font-style:italic;">stopped, the model is never called</span>')
+        model = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{esc(it["rawOutput"])}</span>'
+                 if called else '<span style="color:var(--fg3);font-style:italic;">not called</span>')
+        step = lambda label_html, body: (
+            f'<div><div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
+            f'color:var(--fg3);margin-bottom:4px;display:flex;align-items:center;gap:8px;">{label_html}</div>'
+            f'<div style="font-size:12.5px;line-height:1.6;">{body}</div></div>')
+        rows = "".join([
+            step("Prompt in", f'<span style="color:var(--fg1);">{esc(it["prompt"])}</span>'),
+            step(f"Pre-inference control &rsaquo; {_action_badge(it['pre'], it.get('preTags'))}", forwarded),
+            step("Model", model),
+            step(f"Post-inference control &rsaquo; {_action_badge(it['post'], it.get('postTags'))}",
+                 f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(it["final"])) if it.get("final") else "&mdash;"}</span>'),
+        ])
+        cards += (
+            f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
+            f'padding:18px 20px;margin-top:14px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">'
+            f'<span style="color:var(--fg1);font-size:13px;font-weight:700;">{esc(it["label"])}</span>'
+            f'<span style="color:var(--fg3);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;">{esc(it.get("category",""))}</span>'
+            f'</div><div style="display:grid;gap:13px;">{rows}</div></div>')
+    return f"""
+  <section id="flows" data-section="flows" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
+    <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">02 · Governance in action</span>
+        <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
+      </div>
+      <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;max-width:22ch;">{esc(f['heading'])}</h2>
+      <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:70ch;margin:14px 0 0;">{esc(f['lede'])}</p>
+      <div style="margin-top:24px;">{cards}</div>
+    </div>
+  </section>"""
+
+
+def dp2_appendix(d) -> str:
+    raw = d["raw"]
+    ag = raw["aggregate"]
+    return f"""
+  <section id="appendix" data-section="appendix" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
+    <div style="max-width:1200px;margin:0 auto;padding:64px 40px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">Appendix · {esc(raw['heading'])}</span>
+        <button id="raw-toggle" class="no-print" style="border:1px solid var(--hairline);background:transparent;color:var(--fg2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;">Show</button>
+      </div>
+      <div class="raw-body" style="display:none;margin-top:22px;">
+        <p style="color:var(--fg2);font-size:14px;line-height:1.6;max-width:88ch;margin:0 0 14px;">{esc(raw['intro'])}</p>
+        {_num_table(ag['columns'], ag['rows'], min_width=760)}
+        <p style="color:var(--fg3);font-size:12px;line-height:1.55;max-width:92ch;margin:16px 0 0;">{esc(ag['note'])}</p>
+      </div>
+    </div>
+  </section>"""
+
+
+def _document(body: str, title: str) -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="omelette-owns-print" content="true">
-<title>NOL8 Pre-Index Governance, Data Point 01</title>
+<title>{esc(title)}</title>
 <style>{build_css()}</style>
 </head>
 <body>
@@ -669,6 +807,18 @@ def build(run: dict) -> str:
 {SCRIPT}
 </body>
 </html>"""
+
+
+def build(run: dict) -> str:
+    if run.get("kind") == "dp2":
+        sections = [top_bar(run), hero(run), stat_band(run), boundary(run),
+                    flows(run), meaning(run), method(run), dp2_appendix(run), footer(run), BACK_TO_TOP]
+        return _document("".join(sections), run.get("title", "NOL8 Pre/Post-Inference Control, Data Point 02"))
+    body = "".join([
+        top_bar(run), hero(run), stat_band(run), benchmark(run),
+        latency(run), meaning(run), method(run), raw_section(run), footer(run), BACK_TO_TOP,
+    ])
+    return _document(body, run.get("title", "NOL8 Pre-Index Governance, Data Point 01"))
 
 
 def main() -> None:

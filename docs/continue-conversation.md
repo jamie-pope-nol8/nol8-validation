@@ -300,12 +300,20 @@ framework's tested matcher as the independent oracle).
        (e.g. prompt_0006 `card 5555 6666 7777 8888`); re2_guard (regex) masks 12,
        nol8sim (oracle) 9. NOL8 governs KNOWN values deterministically; arbitrary-
        pattern masking is regex, out of listMatch scope. Surface this, don't hide it.
-  3. **NEXT - `run.json` + report + oracle-verify.** Reuse `make-report.py` (or a DP2
-     variant). Story: nocontrol=Do nothing, aergia=RE2 baseline, themis=NOL8; headline
-     is byte-for-byte parity on the boundary + inference-calls-avoided (block/route
-     stop 17 of 52 before the model) + the honest listMatch scope note. Oracle-verify
-     the engine outputs against the framework matcher applied to boundary.nol.
-  4. SA runbook + DEMO-NOTES for DP2.
+  3. **DONE - `run.json` + on-brand report.** `demos/benchmark/datapoint2/run.json`
+     (kind=dp2) + `make-report.py` (now dispatches on `run.get("kind")`; DP2 adds
+     `boundary()`, `flows()`, `dp2_appendix()` sections and reuses hero/stat-band/
+     meaning/method/footer/chrome; `hero` CTAs, `top_bar` nav, and `footer` readout are
+     now run.json-driven). Renders `datapoint2/pre-post-report.html` (gitignored).
+     Story leads with the boundary use case: byte-for-byte parity, 17/52 stopped
+     before inference, block/route/mask/tag at both edges, honest listMatch scope
+     note. Verified in dark; the "Governance in action" flows section shows 4 real
+     prompts with colored action badges. DP1 report unchanged (regression-checked).
+  4. **NEXT - oracle-verify + DEMO-NOTES + SA runbook for DP2.** Oracle-verify the
+     engine outputs against the framework matcher applied to boundary.nol (DP1
+     discipline). Write DP2 DEMO-NOTES (narrative + the case-sensitivity nuance: the
+     literal engines are exact/case-sensitive, so `Send raw notes...` was allowed pre
+     and caught post - an honest characteristic to note) and an SA runbook.
 - **Reuse:** policy-generator pattern (boundary.nol), report pipeline, the
   oracle-verify discipline. Engine modes call the engine directly in Go (no adapter).
   **New:** the pack's prompt corpus + reference lists (ship), the two-control-point

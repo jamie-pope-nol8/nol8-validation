@@ -43,6 +43,7 @@ demos/benchmark/**/report/report_data.json
 # The on-brand report is generated from run.json by make-report.py (run.json,
 # make-report.py, and brand/ are tracked; the rendered HTML is not).
 demos/benchmark/pre-index-report.html
+demos/benchmark/datapoint2/pre-post-report.html
 
 # PDF renders of docs (yzane.markdown-pdf), generated on demand to share with
 # engineering. Regenerated when needed, so not versioned. The extension is
