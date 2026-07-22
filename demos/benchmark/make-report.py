@@ -16,6 +16,7 @@ assets: demos/benchmark/brand/ (fonts/, assets/).
 from __future__ import annotations
 
 import base64
+import difflib
 import html
 import json
 import re
@@ -401,28 +402,54 @@ def _chipify(escaped_text: str) -> str:
     )
 
 
+def _row_label(text: str, color: str) -> str:
+    return (f'<div style="font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;'
+            f'font-weight:600;color:{color};margin-bottom:5px;">{esc(text)}</div>')
+
+
 def _sample_row(label: str, label_color: str, text: str, role: str) -> str:
+    """The 'Original in' and 'NOL8 Themis' rows (the clean/reference side)."""
     stripped = text.strip()
     if role == "in":
-        inner = esc(text)
-        color = "var(--fg3)"
-        wrap = ""
-    elif role == "themis":
+        color, inner = "var(--fg3)", esc(text)
+    else:  # themis
         color = "var(--fg1)"
         inner = (_chipify(esc(text)) if stripped
                  else '<span style="color:var(--fg3);font-style:italic;">nothing forwarded, stripped to blank</span>')
-        wrap = ""
-    else:  # aergia
-        color = WARN
-        inner = (esc(text) if stripped
-                 else '<span style="color:var(--fg3);font-style:italic;">nothing forwarded</span>')
-        wrap = (f"background:rgba(207,106,74,0.09);border:1px solid rgba(207,106,74,0.28);"
-                f"border-radius:6px;padding:8px 11px;")
-    return (
-        f'<div><div style="font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
-        f'color:{label_color};margin-bottom:5px;">{esc(label)}</div>'
-        f'<div style="white-space:pre-wrap;color:{color};font-size:12.5px;line-height:1.7;{wrap}">{inner}</div></div>'
-    )
+    return (f'<div>{_row_label(label, label_color)}'
+            f'<div style="white-space:pre-wrap;color:{color};font-size:12.5px;line-height:1.7;">{inner}</div></div>')
+
+
+def _highlight_corruption(themis_text: str, aergia_text: str) -> str:
+    """Render Aergia's output with the parts it forwarded that Themis correctly
+    removed marked, so the divergence reads at a glance. Themis == the oracle, so
+    the diff against it is exactly the corruption Aergia added.
+    """
+    hl = ("background:rgba(207,106,74,0.32);border-radius:3px;padding:0 2px;"
+          "text-decoration:underline;text-decoration-color:#cf6a4a;text-underline-offset:2px;")
+    out = []
+    for tag, _i1, _i2, j1, j2 in difflib.SequenceMatcher(
+            None, themis_text, aergia_text, autojunk=False).get_opcodes():
+        seg = aergia_text[j1:j2]
+        if not seg:
+            continue
+        out.append(esc(seg) if tag == "equal" else f'<span style="{hl}">{esc(seg)}</span>')
+    return "".join(out)
+
+
+def _aergia_row(aergia_text: str, themis_text: str) -> str:
+    """The RE2 (Aergia) row: corruption-highlighted, in a warning-tinted box."""
+    box = ("background:rgba(207,106,74,0.09);border:1px solid rgba(207,106,74,0.28);"
+           "border-radius:6px;padding:8px 11px;")
+    if not aergia_text.strip():
+        inner, caption = '<span style="color:var(--fg3);font-style:italic;">nothing forwarded</span>', ""
+    else:
+        inner = _highlight_corruption(themis_text, aergia_text)
+        caption = (f'<div style="font-size:10.5px;color:{WARN};margin-top:7px;line-height:1.5;">'
+                   f'Highlighted: forwarded by Aergia, correctly removed by Themis. It becomes vector garbage.</div>')
+    return (f'<div>{_row_label("RE2 (Aergia) · forwarded", WARN)}'
+            f'<div style="white-space:pre-wrap;color:{WARN};font-size:12.5px;line-height:1.7;{box}">{inner}</div>'
+            f'{caption}</div>')
 
 
 def _samples(items) -> str:
@@ -431,15 +458,19 @@ def _samples(items) -> str:
         rows = (
             _sample_row("Original in", "var(--fg3)", it["in"], "in")
             + _sample_row("NOL8 Themis · forwarded", "var(--accent)", it["themis"], "themis")
-            + _sample_row("RE2 (Aergia) · forwarded", WARN, it["aergia"], "aergia")
+            + _aergia_row(it["aergia"], it["themis"])
         )
+        note = ""
+        if it.get("note"):
+            note = (f'<div style="font-size:11.5px;color:var(--fg3);line-height:1.55;margin-top:14px;'
+                    f'padding-top:12px;border-top:1px solid var(--hairline-soft);">{esc(it["note"])}</div>')
         cards += (
             f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
             f'padding:18px 20px;margin-top:14px;">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">'
             f'<span style="color:var(--fg2);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;">{esc(it["id"])}</span>'
             f'<span style="color:var(--fg3);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;">{esc(it.get("kind",""))}</span>'
-            f'</div><div style="display:grid;gap:14px;">{rows}</div></div>'
+            f'</div><div style="display:grid;gap:14px;">{rows}</div>{note}</div>'
         )
     return cards
 

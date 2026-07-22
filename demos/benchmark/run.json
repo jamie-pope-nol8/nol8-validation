@@ -106,15 +106,8 @@
     },
     "samples": {
       "title": "Before and after, real corpus chunks",
-      "note": "Original chunk in, forwarded payload out. Governed values become tokens; stripped filler is gone. The RE2 benchmark column shows where Aergia leaves fragments behind (default. becomes ault.), the corruption that pollutes the vectors.",
+      "note": "Original chunk in, forwarded payload out. Governed values become tokens; stripped filler is gone. Themis forwards clean text (verified against the oracle). The RE2 benchmark leaves match tails behind, highlighted below, which are forwarded into the vectors as garbage.",
       "items": [
-        {
-          "id": "chunk-0000001",
-          "kind": "govern + strip",
-          "in": "Customer review: Westbridge Merchant Services requested accelerated enablement for the Redwood Identity workflow.\nThe fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context.\nGovernance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.",
-          "themis": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\n",
-          "aergia": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\nault."
-        },
         {
           "id": "chunk-0000002",
           "kind": "strip only (three filler sentences)",
@@ -128,6 +121,14 @@
           "in": "Governance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.\nThe analyst assistant should prioritize incident timelines, account context, and remediation notes over boilerplate.\nTier-2 support escalated the case after the customer reported repeated sign-in failures from a new device profile.",
           "themis": "\n\n",
           "aergia": "ault.\nlerplate.\nrofile."
+        },
+        {
+          "id": "chunk-0000001",
+          "kind": "govern + strip",
+          "in": "Customer review: Westbridge Merchant Services requested accelerated enablement for the Redwood Identity workflow.\nThe fraud queue contains a mix of confirmed abuse, false positives, and cases awaiting additional context.\nGovernance teams want deterministic pre-index controls so sensitive text does not land in embeddings by default.",
+          "themis": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\n",
+          "aergia": "Customer review: [CUSTOMER] requested accelerated enablement for the [PROJECT] workflow.\n\nault.",
+          "note": "Redaction is byte-identical on both engines here (this is the parity case). The only difference is the stray fragment Aergia left when stripping the two filler sentences; Themis removed them cleanly."
         }
       ]
     },
