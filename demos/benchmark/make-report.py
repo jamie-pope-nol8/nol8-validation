@@ -919,8 +919,11 @@ def _document(body: str, title: str) -> str:
 
 def build(run: dict) -> str:
     if run.get("kind") == "dp2":
-        sections = [top_bar(run), hero(run), stat_band(run), boundary(run),
-                    flows(run), meaning(run), method(run), dp2_appendix(run), footer(run), BACK_TO_TOP]
+        # DP2's honest action model is the same as DP3's, so it reuses the mesh/mesh_flows
+        # sections (redact/mask live, route/block Roadmap). The older boundary()/flows()
+        # renderers are retained but unused.
+        sections = [top_bar(run), hero(run), stat_band(run), mesh(run),
+                    mesh_flows(run), meaning(run), method(run), dp2_appendix(run), footer(run), BACK_TO_TOP]
         return _document("".join(sections), run.get("title", "NOL8 Pre/Post-Inference Control, Data Point 02"))
     if run.get("kind") == "dp3":
         sections = [top_bar(run), hero(run), stat_band(run), mesh(run),
