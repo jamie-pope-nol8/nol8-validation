@@ -13,16 +13,16 @@ continue without reconstructing context from chat history.
 >   optimization use case: Themis forwards **64.3% fewer tokens**, oracle-verified
 >   **1000/1000**; the RE2 baseline (Aergia) **corrupts 876/1000** on strip. Single
 >   fresh clean run; full "show your work" receipts appendix.
-> - **Data Point 2 (pre/post-inference) - DONE (stats reframed).** Real-engine modes
->   govern a model boundary at both edges. **Themis == Aergia == oracle, 52/52**. The
->   stats were reframed to the **"deterministic guardrail for known policy"** story
->   (no test-set counts up top) and a **representative-policy dataset** was built
->   (`datapoint2/representative/`, insurer scenario). Report/DEMO-NOTES/oracle-verify
->   built. **Representative LIVE run - Themis half DONE (2026-07-23):** ran against
->   real Themis, masking fires (pre 15 allow/3 mask/1 block/3 route/2 tag; 4 stopped;
->   244->189 tokens fwd) and **oracle-verified 24/24**. Parity column (Aergia==Themis)
->   still pending - blocked only by :444 being down (below). See the DP2 section +
->   [[demo-positioning-and-data-strategy]].
+> - **Data Point 2 (pre/post-inference) - HONEST-MODEL reframe DONE (2026-07-23).**
+>   Same honest split as DP3 ([[nol8-is-substitution-not-enforcement]]): **redact / mask
+>   LIVE** (NOL8 transforms the prompt + output, oracle-verified), **route / block
+>   ROADMAP** signals. No-stop: the model is always called on the redacted prompt.
+>   Live run (53 prompts, BOTH engines): **Themis == Aergia == oracle, 53/53**;
+>   **25 secrets stripped** (4 prompts redacted + 1 card masked `XXXX 1111` pre; 20
+>   outputs redacted post); 12 route + 14 block signals; prompt tokens 613->562, output
+>   566->537. RE2 incumbent parity restored (Aergia :444 back). Full pipeline reframed
+>   (build_boundary_policy.py + `boundary-actions.json`, engine_infer.go, verify-oracle,
+>   run.json reuses mesh/mesh_flows + Roadmap badges, DEMO-NOTES). See the DP2 section.
 > - **Data Point 3 (agent-to-agent) - BUILT + live, HONEST-MODEL reframe done (2026-07-23).**
 >   NOL8 does deterministic literal REPLACEMENT only, so DP3 splits actions honestly
 >   ([[nol8-is-substitution-not-enforcement]]): **redact / mask / drop are LIVE** (NOL8
@@ -37,14 +37,12 @@ continue without reconstructing context from chat history.
 >   `run-live.sh`, DEMO-NOTES. REMAINING: update RE2 baseline (in-process + Aergia :444)
 >   to the new action model; DP3 representative insurer set; native route/block (roadmap).
 >
-> **>>> OPERATIONAL STATUS (2026-07-23): Themis :443 is BACK; Aergia :444 still down.**
-> `check-engines.sh` on EC2: Themis (NOL8) DNS + control plane + data-plane round-trip
-> all OK (`ping test` -> `[PONG] test`). Aergia :444 times out - but it's the SAME host
-> (`10.8.11.254`) and :443 round-trips, so the host is UP; this is **port-444-specific**
-> (Aergia listener down, or an SG/route allowing 443 but not 444), NOT a host outage.
-> (Caveat: the diagnose script's ICMP-loss heuristic is unreliable here - ICMP is
-> blocked even for the working 443; it should compare sibling ports. Minor TODO.)
-> The engine framework code is fine.
+> **>>> OPERATIONAL STATUS (2026-07-23 later): BOTH engines UP.** Themis :443 and Aergia
+> :444 both reachable and round-tripping. Ran the full DP2 + DP3 live flows on both.
+> (Note: `check-engines.sh` shows a FALSE FAIL for Aergia right after deploy - the probe
+> round-trips but returns untransformed because Aergia has a few-second reload delay; and
+> the diagnose ICMP-loss heuristic is unreliable (nc succeeds even at 100% ICMP loss).
+> Both are known check-script weaknesses to fix, not engine faults.)
 >
 > **>>> MAC DIRECT ACCESS - blocked, two independent walls (2026-07-23).** Engineering
 > asked whether we can drop the EC2 requirement and hit the engines from the Mac.
@@ -261,7 +259,26 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   before/after chunks with highlighted corruption, aggregate). Notes:
   `demos/benchmark/DEMO-NOTES.md`. Runner: `demos/benchmark/run-live.sh`.
 
-## Data Point 2 - pre/post-inference control - DONE, pending stats talk (`demos/benchmark/datapoint2/`)
+## Data Point 2 - pre/post-inference control - HONEST-MODEL, live on both engines (`demos/benchmark/datapoint2/`)
+
+- **>>> HONEST-MODEL reframe (2026-07-23), same as DP3 [[nol8-is-substitution-not-enforcement]]:**
+  **redact / mask are LIVE** (NOL8 transforms the prompt + output; `[REDACT]`, card ->
+  `XXXX <last4>`), **route / block are ROADMAP signals** (`[ROUTE]`/`[BLOCK]`; NOL8 does
+  NOT stop a prompt or withhold an output today). **No-stop:** the model is always called
+  on the redacted prompt. Live run (53 prompts, Themis + Aergia): **Themis == Aergia ==
+  oracle, 53/53**; 25 secrets stripped (pre 4 redact + 1 mask; post 20 redact); 12 route +
+  14 block signals; prompt tokens 613->562, output 566->537. Pipeline reframed:
+  `build_boundary_policy.py` emits `boundary.nol` (19 rules) + `boundary-actions.json`
+  sidecar; `go/engine_infer.go` (new `BoundaryActions`/`deriveAction`/`runEngineInfer`/
+  `BoundaryStats`, no-stop, sidecar-driven; old sim modes left dead); `go/main.go` runs
+  nocontrol + themis_api_infer + aergia_api_infer; `verify-oracle.py` (no-stop, both
+  edges); `run.json` (`kind:dp2`) reuses `mesh()`/`mesh_flows()` + Roadmap badges;
+  `run-live.sh` (MODES incl aergia, passes `--actions`, oracle-verifies); DEMO-NOTES
+  rewritten. Added a card-only prompt (prompt_0053) so mask fires live. Render ->
+  `datapoint2/pre-post-report.html` (gitignored). **REMAINING:** update the DP2
+  representative set (`representative/`) to the new action model (pending, like DP3's).
+- **The bullets below are the PRE-reframe (old sentinel/stop model) history, superseded.**
+
 
 - Copied out of the kit. Flow: `Prompt -> Pre-control -> Model stub -> Post-control ->
   Output`; actions block/route/mask/tag at BOTH edges.

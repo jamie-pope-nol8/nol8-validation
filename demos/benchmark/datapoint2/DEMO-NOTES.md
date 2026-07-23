@@ -1,106 +1,80 @@
-# Data Point 2 demo, pre/post-inference control, narrative + numbers
+# Data Point 2 - pre/post-inference control: demo notes
 
-The story behind the pre/post-inference benchmark. Audience lens: a team putting an
-LLM into production that has to govern a model boundary. Everything here is measured
-on the live engines, not simulated. Companion to the DP1 notes; same honesty rules.
+What DP2 proves, how to run it, and the honest scope. DP2 governs a model boundary: what
+reaches the model, and what leaves it.
 
-## The one-line thesis
+## What NOL8 actually does (read this first)
 
-**A model boundary has two edges. NOL8 (Themis, FPGA) governs both deterministically,
-inline, with the same literal policy, and produces byte-identical output to a real
-RE2 incumbent (Aergia).** Block and route stop a third of prompts before the model is
-ever called; masking and tagging happen at both edges; unsafe generated output is
-caught on the way out.
+NOL8 does **deterministic literal replacement only** - text in, text out. Two honest
+families of action, and the demo keeps them separate (same split as DP3):
 
-## The three beats
+- **LIVE today (NOL8 transforms the data, oracle-verified):**
+  - **redact** - replace a known value with a marker (`Project Aurora Ledger` -> `[REDACT]`)
+  - **mask** - replace a known value with a usable stand-in (`4111 1111 1111 1111` -> `XXXX 1111`, last four kept)
+- **ROADMAP (NOL8 emits a signal; a control plane enforces; native enforcement later):**
+  - **route** - flag for a controlled path (`Contoso Advisory` -> `[ROUTE]`)
+  - **block** - flag to refuse / do not call the model (`Ignore prior safeguards` -> `[BLOCK]`)
 
-1. **Two edges, one policy.** `demos/policies/boundary.nol` (19 literal rules) deploys
-   to both engines. Each engine is called twice per prompt: once on the prompt
-   (pre-inference), once on the model-stub output (post-inference). The action
-   (block, route, mask, tag, allow) is derived from which sentinel the engine emitted
-   (`[BLOCK]`, `[ROUTE]`, `[MASK_CARD]`, `[MASK_ACCT]`, `[TAG_INT]`, `[BLOCK_OUT]`,
-   `[TAG_PRIV]`).
+**NOL8 does not stop a prompt reaching the model, or withhold an output, today.** It
+redacts/masks the text and emits the signal; the model is always called, on the redacted
+prompt. The report marks route/block `Roadmap`. Never say NOL8 "blocked" or "routed" a
+prompt - say it redacted/masked the data and emitted a signal a control plane acts on.
 
-2. **NOL8 matches the incumbent, and is provably correct.** Over 52 prompts, Themis
-   and Aergia produced **0 field-diffs** (byte-for-byte identical at both edges), and
-   **both matched an independent oracle 52 of 52** (`verify-oracle.py`, the framework's
-   Aho-Corasick matcher applied to the boundary policy). So the parity is not two
-   engines agreeing on a mistake; both are correct. No corruption here, because the
-   boundary policy redacts to sentinels rather than stripping to empty (contrast DP1,
-   where strip-to-empty exposed an Aergia defect).
+## The claim (one clean run on live Themis AND Aergia, 53 prompts)
 
-3. **A third of prompts never reach the model.** Block (5) and route (12) stopped 17
-   of 52 prompts before inference. That is model spend avoided and policy enforced
-   *before* the call. At the output edge, 4 unsafe responses were blocked and 11 were
-   tagged privileged.
+- **Secrets never reach the model, or the response.** NOL8 redacts and masks known values
+  at both edges: **25 secrets stripped** (4 prompts redacted + 1 card masked before the
+  model; 20 outputs redacted before the response). Prompt tokens to the model 613 -> 562;
+  output tokens released 566 -> 537.
+- **Byte-identical to the incumbent, verified.** **Themis == Aergia == oracle, 53 / 53.**
+  Aergia is our stand-up of Google RE2 (the incumbent). Both engines produced identical
+  output at both edges, and both match an independent oracle.
+- **Signals for the roadmap.** NOL8 emits **12 route + 14 block** signals a control plane
+  can act on; native enforcement is on the roadmap.
 
-## The measured result (single clean run, 52 prompts, both live engines)
+## How the oracle works
 
-| edge | action | count |
-|---|---|---|
-| pre | blocked (never sent) | 5 |
-| pre | routed (controlled path) | 12 |
-| pre | tagged internal | 4 |
-| pre | allowed through | 31 |
-| post | blocked unsafe output | 4 |
-| post | tagged privileged | 11 |
-| post | allowed out | 20 |
+`verify-oracle.py` independently computes the correct leftmost-longest replacement of
+`boundary.nol` with the framework's Aho-Corasick matcher at each edge (prompt, then model
+output), derives the action from the same `boundary-actions.json` action map, and compares
+to what each engine produced - action and processed text, both edges. The thing verified
+is the engine's literal matching and replacement. Themis == Aergia == oracle, 53/53.
 
-- **Parity:** Themis vs Aergia, 0 diffs / 52. Both vs oracle, 52/52.
-- **Tokens:** 379 forwarded to the model, 350 released from it (vs 599 in / 563 out
-  for Do nothing).
+## Honest scope (say this out loud)
 
-## Honesty guardrails (say these; do not let anyone over-read the numbers)
+- **listMatch only. Literal, case-insensitive.** No regex, no patterns. Regex is on the
+  roadmap; it is not in this demo.
+- **Substring-exact, so it can over-trigger.** A value can match inside a longer phrase
+  that contains it. Word-boundary regex and classification are the roadmap layer.
+- **Masks are capped at 15 characters (ISSUE-005),** our own documented truncation bug, so
+  the card mask is compact (`XXXX 1111`), not a full 16-character PAN.
+- **Precedence is deterministic.** A prompt naming a flagged customer AND a card signals
+  route (stronger control) rather than masking the card - route beats mask. That is
+  defensible ordering, and one prompt in the set demonstrates it.
+- **The model is a deterministic stub,** not a real model. Not a model-quality or
+  throughput test.
 
-- **listMatch scope, the important one.** NOL8 governs KNOWN literal values, not
-  arbitrary patterns. On this set the literal engines (Themis, Aergia, listguard)
-  masked **0** payment cards, because the prompts' card numbers are not exact list
-  literals (e.g. `card 5555 6666 7777 8888`). A regex baseline (re2_guard) masked 12,
-  and the oracle-sim expected 9. This is not a bug; it is the scope. Say: "NOL8
-  governs the values you give it, exactly. Arbitrary-pattern masking, any card
-  number, is regex, which NOL8 does not do yet." Do NOT imply NOL8 masks unknown
-  patterns.
-- **Exact, case-sensitive matching.** Literal matching is case-sensitive, so a block
-  phrase only fires on the exact casing in the list. In the set, `Send raw notes to
-  reseller leadership...` was ALLOWED pre-inference (the list has `send raw notes to
-  reseller`, lower case) and was instead caught by the OUTPUT control post-inference.
-  That is a legitimate defence-in-depth story (the second edge caught it), but be
-  honest about the cause: a production policy should carry the casings the customer
-  uses, or the customer should supply their own list. Both engines behave identically
-  here (parity holds).
-- **Tag is redact-to-marker, not metadata.** A literal engine can only replace, so a
-  "tag" replaces the governed value with a sentinel (`Project Maple Vault` ->
-  `[TAG_INT]`) rather than attaching metadata while preserving the text. Both engines
-  do this identically. If a customer needs the original value preserved-and-flagged,
-  that is a different control than literal redaction.
-- **The model is a deterministic stub.** This measures the CONTROLS, not model
-  quality, latency, or throughput. Do not present it as an LLM benchmark.
-- **Same policy, same data, both engines.** No per-engine tuning. The result is the
-  result.
-
-## Reproduce (SA-runnable, on EC2, the box that reaches the engines)
+## Reproduce (SA-runnable, on EC2)
 
 ```bash
-# 1. build the boundary policy from the reference lists (only if lists changed)
-python demos/policies/build_boundary_policy.py        # -> demos/policies/boundary.nol
+# 0. preflight - both engines reachable (Themis :443, Aergia :444)
+bash demos/check-engines.sh
 
-# 2. deploy to both engines and run all modes (nocontrol re2_guard listguard
-#    nol8sim_infer themis_api_infer aergia_api_infer), combine the CSV
+# 1. regenerate the boundary policy + action map (safe: ISSUE-004/005 guards)
+python demos/policies/build_boundary_policy.py   # -> boundary.nol, boundary-actions.json
+
+# 2. deploy + run nocontrol, Themis, Aergia; combine; oracle-verify both engines
 bash demos/benchmark/datapoint2/run-live.sh
 
-# 3. adjudicate each engine against the independent oracle
+# 3. (verify only) adjudicate the engine output against the oracle
 python demos/benchmark/datapoint2/verify-oracle.py \
-  --results demos/benchmark/datapoint2/results themis_api_infer aergia_api_infer
+  --policy demos/policies/boundary.nol \
+  --actions demos/policies/boundary-actions.json \
+  --results demos/benchmark/datapoint2/results \
+  themis_api_infer aergia_api_infer
 ```
 
-The `themis_api_infer` / `aergia_api_infer` modes call the engine directly (no
-adapter); they read `THEMIS_ENDPOINT` / `AERGIA_ENDPOINT` and the tokens, which
-`run-live.sh` exports from `config/demo.env` + `.env`.
-
 ## The report
-
-`demos/benchmark/datapoint2/run.json` (a `kind: dp2` data contract) is rendered by the
-shared `demos/benchmark/make-report.py`:
 
 ```bash
 python demos/benchmark/make-report.py \
@@ -108,9 +82,12 @@ python demos/benchmark/make-report.py \
   demos/benchmark/datapoint2/pre-post-report.html
 ```
 
-Web (dark, open the file) / deck (Export -> PDF, light). The renderer is shared with
-DP1; DP2 adds the `boundary`, `flows`, and appendix sections and drives the hero
-CTAs, nav, and footer from `run.json`. The rendered HTML is gitignored.
+Self-contained HTML (fonts/logos inlined), web (dark) / deck (Export to PDF, light).
+`run.json` (`kind: dp2`) reuses the mesh/mesh_flows sections; regenerate after any edit.
+Rendered HTML is gitignored.
 
-**Open item:** the user flagged that the DP2 stat band / numbers need a conversation
-before the copy is locked. Framing TBD.
+## Representative set
+
+`representative/` (insurer "Northwind Mutual") is the realistic-policy companion to this
+functional-test set. Its generator and run-live overrides still need updating to the new
+action model (a pending follow-up), the same as the DP3 representative set.
