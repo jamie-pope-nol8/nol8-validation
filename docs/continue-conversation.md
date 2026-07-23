@@ -1,6 +1,6 @@
 # Continue Conversation
 
-Last Updated: 2026-07-22
+Last Updated: 2026-07-23
 
 Durable memory of the project, so a new session (or a post-compaction session) can
 continue without reconstructing context from chat history.
@@ -18,22 +18,38 @@ continue without reconstructing context from chat history.
 >   stats were reframed to the **"deterministic guardrail for known policy"** story
 >   (no test-set counts up top) and a **representative-policy dataset** was built
 >   (`datapoint2/representative/`, insurer scenario). Report/DEMO-NOTES/oracle-verify
->   built. Only gap: the LIVE run of the representative set (blocked by the outage
->   below). See the DP2 section + [[demo-positioning-and-data-strategy]].
+>   built. **Representative LIVE run - Themis half DONE (2026-07-23):** ran against
+>   real Themis, masking fires (pre 15 allow/3 mask/1 block/3 route/2 tag; 4 stopped;
+>   244->189 tokens fwd) and **oracle-verified 24/24**. Parity column (Aergia==Themis)
+>   still pending - blocked only by :444 being down (below). See the DP2 section +
+>   [[demo-positioning-and-data-strategy]].
 > - **Data Point 3 (agent-to-agent) - PLANNED only.** Full build spec in
 >   `demos/benchmark/DP3-PLAN.md`. DP2 generalized to many control points. Not built.
 >
-> **>>> CURRENT OPERATIONAL BLOCKER (2026-07-22 end of session): the engine DATA
-> planes (:443/:444) are UNREACHABLE from EC2.** Control planes (:8444) are healthy
-> (policy deploys return 200); DNS resolves (`tenant001-v1demo.nol8.net` ->
-> 10.8.11.254); but the data-plane ports time out at the TCP level (curl exit 28).
-> Diagnose/confirm with **`bash demos/check-engines.sh`** on EC2 (built this session).
-> Likely a data-plane service/firewall/VPN-route issue on the engine side - NOT our
-> code. Any live benchmark is blocked until this clears; the framework code is fine.
+> **>>> OPERATIONAL STATUS (2026-07-23): Themis :443 is BACK; Aergia :444 still down.**
+> `check-engines.sh` on EC2: Themis (NOL8) DNS + control plane + data-plane round-trip
+> all OK (`ping test` -> `[PONG] test`). Aergia :444 times out - but it's the SAME host
+> (`10.8.11.254`) and :443 round-trips, so the host is UP; this is **port-444-specific**
+> (Aergia listener down, or an SG/route allowing 443 but not 444), NOT a host outage.
+> (Caveat: the diagnose script's ICMP-loss heuristic is unreliable here - ICMP is
+> blocked even for the working 443; it should compare sibling ports. Minor TODO.)
+> The engine framework code is fine.
 >
-> **Current focus / NEXT:** (a) clear the data-plane outage, then the pending live
-> representative run; (b) final DP2 copy look; (c) build DP3 per the plan; (d) Track B
-> (`agentic-mesh-lab`) is separate and larger.
+> **>>> MAC DIRECT ACCESS - blocked, two independent walls (2026-07-23).** Engineering
+> asked whether we can drop the EC2 requirement and hit the engines from the Mac.
+> Answer today: no, and it needs TWO fixes. (1) **DNS split-horizon:**
+> `tenant001-v1demo.nol8.net` (data plane) resolves ONLY inside the VPC (-> 10.8.11.254);
+> the Mac's VPN resolver was never given that record (control-plane names DO resolve for
+> the Mac: 10.10.1.254/.127). (2) **Routing:** even the resolvable control-plane IPs time
+> out on :8444 from the Mac - the VPN isn't advertising 10.10.1.0/24 (control) or
+> 10.8.11.0/24 (data) to VPN peers (100.83.0.0/8). Fixing DNS alone won't help - you'd
+> resolve the IP and still have no route. Ask for engineering: publish the data-plane
+> DNS record to the VPN resolver AND advertise+allow those subnets/ports (:443/:444/:8444)
+> to VPN clients. All execution stays on EC2 until both land.
+>
+> **Current focus / NEXT:** (a) run the Aergia parity column of the representative set
+> once :444 returns -> DP2 fully done; (b) final DP2 copy look; (c) build DP3 per the
+> plan; (d) Track B (`agentic-mesh-lab`) is separate and larger.
 
 This file is project *state*. Three companions carry the rest:
 
@@ -144,10 +160,11 @@ processed}}`. Config in `config/demo.env` (`THEMIS_PROCESS_ENDPOINT`=:443,
 tokens in `.env`. Aergia's :444 has a **few-second reload propagation delay** after a
 deploy.
 
-**Tenant state:** `demos/policies/boundary-representative.nol` was last deployed to BOTH
-engines (the representative-run attempt). Redeploy the relevant policy before a
-different benchmark. NOTE (2026-07-22): both engine DATA planes (:443/:444) were
-unreachable from EC2 at end of session (transient); control plane deploys still worked.
+**Tenant state:** `demos/policies/boundary-representative.nol` is deployed to both
+control planes (last representative run, 2026-07-23). Redeploy the relevant policy
+before a different benchmark. STATUS (2026-07-23): Themis :443 data plane is healthy
+(verified round-trip); Aergia :444 data plane still times out (port-specific - :443 on
+the same host works); both control planes (:8444) deploy fine.
 
 ---
 
@@ -284,10 +301,16 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   `demos/policies/boundary-representative.nol` generated + safety-checked. Local modes
   validated it (masking FIRES now: listguard masked 3 / blocked 2 / routed 3 / tagged 2
   - the gap the functional-test set had). See representative/README.md.
-  **PENDING: the LIVE engine run of the representative set** - blocked 2026-07-22
-  because both data planes (:443/:444) went unreachable from EC2 (curl times out,
-  http_code 000; transient infra/network - they worked earlier today). Retry when
-  connectivity returns (command in representative/README.md; policy already deployed).
+  **Representative LIVE run - Themis half DONE (2026-07-23).** Ran on EC2 against the
+  real Themis engine (`MODES="nocontrol themis_api_infer"`, representative traffic).
+  Masking FIRES on the real engine: pre 15 allow / 3 mask / 1 block / 3 route / 2 tag;
+  4 prompts stopped before inference; 244->189 prompt tokens forwarded (~23% trimmed);
+  post 15 allow / 2 mask / 1 block / 2 tag. **Oracle-verified 24/24** against
+  `boundary-representative.nol` (`verify-oracle.py themis_api_infer` -> MATCHES ORACLE).
+  Results in `representative/results/` (gitignored). **STILL PENDING: the Aergia parity
+  column** (`aergia_api_infer`) - blocked only by :444 being down (see header). When
+  :444 returns, rerun with `MODES="themis_api_infer aergia_api_infer"` and verify both;
+  that closes DP2 fully. Command in representative/README.md.
 
 ## Data Point 3 - agent-to-agent control - PLANNED (`demos/benchmark/DP3-PLAN.md`)
 
