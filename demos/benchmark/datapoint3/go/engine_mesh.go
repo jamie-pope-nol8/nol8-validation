@@ -222,6 +222,11 @@ func runEngineMesh(tasks []TaskRecord, outputDir string, cfg EngineConfig) (Summ
 				ProcessedText: processed,
 			}, &stats)
 			text = processed
+			// allow/mask forward the (possibly redacted) message to the next agent;
+			// route/block_handoff stop it, so nothing is delivered downstream.
+			if action == "allow" || action == "mask" {
+				stats.DownstreamTokensDelivered += tokenEstimate(processed)
+			}
 			if action == "block_handoff" {
 				meshStopped = true
 				terminalBlocked = true
@@ -258,6 +263,8 @@ func runEngineMesh(tasks []TaskRecord, outputDir string, cfg EngineConfig) (Summ
 				meshAction = "block_tool"
 			} else {
 				text = processed
+				// an allowed tool call delivers its payload to the external tool.
+				stats.DownstreamTokensDelivered += tokenEstimate(processed)
 			}
 		}
 
@@ -270,6 +277,10 @@ func runEngineMesh(tasks []TaskRecord, outputDir string, cfg EngineConfig) (Summ
 				return stats, fmt.Errorf("task %s final: %w", task.TaskID, err)
 			}
 			finalAction, finalProcessed = deriveFinalAction(finalText, processed)
+		}
+		// a delivered final response (allow/mask/tag) reaches the user; block delivers nothing.
+		if finalAction != "block" {
+			stats.DownstreamTokensDelivered += tokenEstimate(finalProcessed)
 		}
 		writeEvent(encoder, EventRecord{
 			TaskID:        task.TaskID,

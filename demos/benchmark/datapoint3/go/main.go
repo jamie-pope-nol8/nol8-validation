@@ -52,8 +52,15 @@ type SummaryStats struct {
 	FinalOutputsMasked          int
 	SensitiveExposuresPrevented int
 	ContractAlignmentCount      int
+	DownstreamTokensDelivered   int
 	PreprocessMs                float64
 	EventsPerSec                float64
+}
+
+// tokenEstimate is a coarse, deterministic token count (whitespace words). Used only
+// for relative payload comparison across modes, so the exact tokenizer does not matter.
+func tokenEstimate(s string) int {
+	return len(strings.Fields(s))
 }
 
 type PolicyConfig struct {
@@ -405,6 +412,11 @@ func runMode(tasks []TaskRecord, mode string, outputDir string, cfg PolicyConfig
 				ProcessedText: processed,
 			}, &stats)
 			text = processed
+			// allow/mask forward the (possibly redacted) message to the next agent;
+			// route/block_handoff stop it, so nothing is delivered downstream.
+			if action == "allow" || action == "mask" {
+				stats.DownstreamTokensDelivered += tokenEstimate(processed)
+			}
 			if action == "block_handoff" {
 				meshStopped = true
 				terminalBlocked = true
@@ -431,6 +443,10 @@ func runMode(tasks []TaskRecord, mode string, outputDir string, cfg PolicyConfig
 				OriginalText:  task.UserTask,
 				ProcessedText: text,
 			}, &stats)
+			// an allowed tool call delivers its payload to the external tool.
+			if toolAction == "allow" {
+				stats.DownstreamTokensDelivered += tokenEstimate(text)
+			}
 			if toolAction == "block_tool" {
 				meshStopped = true
 				terminalBlocked = true
@@ -443,6 +459,10 @@ func runMode(tasks []TaskRecord, mode string, outputDir string, cfg PolicyConfig
 		finalProcessed := "[BLOCKED_OUTPUT]"
 		if !terminalBlocked {
 			finalAction, finalProcessed = applyControl(mode, "final", finalText, task, cfg)
+		}
+		// a delivered final response (allow/mask/tag) reaches the user; block delivers nothing.
+		if finalAction != "block" {
+			stats.DownstreamTokensDelivered += tokenEstimate(finalProcessed)
 		}
 		writeEvent(encoder, EventRecord{
 			TaskID:        task.TaskID,
@@ -494,6 +514,7 @@ func writeCSV(path string, stats []SummaryStats) error {
 		"final_outputs_masked",
 		"sensitive_exposures_prevented",
 		"contract_alignment_count",
+		"downstream_tokens_delivered",
 		"preprocess_ms",
 		"events_per_sec",
 	}
@@ -516,6 +537,7 @@ func writeCSV(path string, stats []SummaryStats) error {
 			fmt.Sprintf("%d", s.FinalOutputsMasked),
 			fmt.Sprintf("%d", s.SensitiveExposuresPrevented),
 			fmt.Sprintf("%d", s.ContractAlignmentCount),
+			fmt.Sprintf("%d", s.DownstreamTokensDelivered),
 			fmt.Sprintf("%.3f", s.PreprocessMs),
 			fmt.Sprintf("%.2f", s.EventsPerSec),
 		}
