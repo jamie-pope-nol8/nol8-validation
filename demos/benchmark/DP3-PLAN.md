@@ -97,7 +97,49 @@ lists).
   few example task flows toward the claim scenario for continuity with the lab, but do
   not rebuild the dataset for it.
 
-## Open decisions for the user (before the build)
+## Decisions (resolved 2026-07-23) and build progress
+
+- **Headline: BOTH** - governance-survives-the-chain as the trust anchor PLUS
+  payload-reduction-across-hops as the differentiator. Needs token instrumentation in
+  the harness (downstream tokens delivered per hop; reduction vs the nocontrol row).
+- **Scenario: keep the kit's generic enterprise tasks** for the DP3 benchmark. The
+  insurance/agentic story is sequenced separately: (1) DP2 already plants it (the
+  representative set is insurer "Northwind Mutual"); (2) near-term bridge = a DP3
+  *representative* insurer-agent-mesh dataset mirroring DP2's representative set (reuses
+  all wiring, no rewrite of the functional-test dataset); (3) flagship = Track B
+  (agentic-mesh-lab), the full UI experience that consumes DP3's numbers, scheduled once
+  DP1-3 are locked. Proof -> coherent insurer thread -> full experience.
+- **ISSUE-004 curation:** our copy of `blocked_tool_phrases.txt` drops "external
+  distribution" because it is a substring of the output-block phrase "external
+  distribution package"; a single deployable policy cannot hold both (overlapping
+  literals corrupt, ISSUE-004). No task outcome changes - it was never the decisive
+  trigger. Documented in DEMO-NOTES.
+- **Sentinel map:** `[BLOCK_TOOL]` (tool->block_tool), `[BLOCK_HAND]` (handoff->
+  block_handoff), `[ROUTE]` (flagged+denied), `[MASK_CARD]`, `[MASK_ACCT]`,
+  `[BLOCK_OUT]` (final->block), `[TAG_PRIV]` (final->tag). Unique per action, all <=15.
+- **Three honest listMatch behaviours the oracle surfaced** (all are oracle-vs-dataset-
+  label, NOT oracle-vs-engine - the engine reproduces the oracle, so engine==oracle
+  still holds; these go in DEMO-NOTES as the deterministic guardrail's real edges):
+  1. **Substring false-positive:** "Contoso Advisory Board" (task_0011) contains the
+     flagged-customer literal "Contoso Advisory" -> routes when it shouldn't. (Contrast
+     task_0012: "Project Maple Syrup" does NOT match "Project Maple Vault" - listMatch
+     passes the different-words near-miss, trips the containment one. Word-boundary
+     regex / classification, on the roadmap, is where this is solved.)
+  2. **Precedence:** a task naming a flagged customer (task_0004) routes at the handoff
+     before its tool-block phrase is evaluated - route wins over block_tool.
+  3. **Sentinel carry-forward:** a value masked at a handoff stays `[MASK_CARD]` in the
+     final text, so the final stage also reports "mask" (task_0002/0003) - honest, the
+     output is masked, just not the "allow" the label expected.
+
+**Build status (2026-07-23):** pack copied to `datapoint3/`; lists curated;
+`build_mesh_policy.py` -> `mesh.nol` (17 rules, guard passes); `engine_mesh.go` +
+`main.go` dispatch written (needs EC2 to compile - no Go on Mac); `verify-oracle.py`
+(full-flow re-simulation oracle) written and its flow logic validated on Mac. TODO:
+token/payload instrumentation for the BOTH headline; run.json (`kind: dp3`) + the
+make-report.py dp3 path; run-live.sh; DEMO-NOTES; then one EC2 pass (compile, live
+Themis run - :443 is back, oracle-verify, render). Aergia parity column waits on :444.
+
+## Open decisions for the user (before the build) [RESOLVED ABOVE]
 
 1. **DP3 headline:** payload reduction across hops (reduction-before-delivery), or
    governance-survives-the-chain (block/mask/route/tag at every hop), or both.

@@ -1,0 +1,16 @@
+# Local build artifacts
+go/agent_mesh_runner
+.gocache/
+report/__pycache__/
+*.pyc
+
+# Generated outputs
+results/*.csv
+results/*_events.jsonl
+report/report.html
+report/report_data.json
+
+# Keep docs and templates
+!results/README.md
+!report/README.md
+!report/report_template.html
