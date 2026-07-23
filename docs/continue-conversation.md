@@ -31,18 +31,19 @@ continue without reconstructing context from chat history.
 >   flow. Live run (13 tasks, real Themis): **themis_api_mesh == oracle, 13/13 event-for-
 >   event**; **8 secrets stripped** (6 redact / 1 mask-to-last-4 `XXXX 1111` / 1 fraud
 >   drop); **878 -> 737 downstream tokens, 16% less** (from redaction alone; the bigger
->   stop-based reduction is roadmap). Real mask capped at 15 chars by ISSUE-005. Full
->   pipeline: `build_mesh_policy.py` (+ `mesh-actions.json` sidecar), `engine_mesh.go`
->   (new model), `verify-oracle.py`, `run.json`+`kind:dp3` report (Roadmap badges),
->   `run-live.sh`, DEMO-NOTES. REMAINING: update RE2 baseline (in-process + Aergia :444)
->   to the new action model; DP3 representative insurer set; native route/block (roadmap).
+>   stop-based reduction is roadmap). Real mask capped at 15 chars by ISSUE-005. **Aergia/
+>   RE2 parity added: themis == aergia == oracle, 13/13, byte-identical; report has the RE2
+>   column + 100% incumbent-match stat.** Full pipeline: `build_mesh_policy.py` (+
+>   `mesh-actions.json`), `engine_mesh.go`, `verify-oracle.py`, `run.json`+`kind:dp3`
+>   report (Roadmap badges), `run-live.sh`, DEMO-NOTES. REMAINING: DP3 representative
+>   insurer set; native route/block (roadmap).
 >
 > **>>> OPERATIONAL STATUS (2026-07-23 later): BOTH engines UP.** Themis :443 and Aergia
-> :444 both reachable and round-tripping. Ran the full DP2 + DP3 live flows on both.
-> (Note: `check-engines.sh` shows a FALSE FAIL for Aergia right after deploy - the probe
-> round-trips but returns untransformed because Aergia has a few-second reload delay; and
-> the diagnose ICMP-loss heuristic is unreliable (nc succeeds even at 100% ICMP loss).
-> Both are known check-script weaknesses to fix, not engine faults.)
+> :444 both reachable and round-tripping; `check-engines.sh` passes 6/6. Ran the full DP2
+> + DP3 live flows on both, with the RE2/Aergia parity column. **check-engines.sh fixed
+> this session:** round-trip now retries (RELOAD_WAIT/ROUNDTRIP_TRIES) so Aergia's reload
+> delay no longer false-fails; diagnose now treats TCP (nc/connect) as authoritative over
+> ICMP loss (which is blocked even when the port works).
 >
 > **>>> MAC DIRECT ACCESS - blocked, two independent walls (2026-07-23).** Engineering
 > asked whether we can drop the EC2 requirement and hit the engines from the Mac.
