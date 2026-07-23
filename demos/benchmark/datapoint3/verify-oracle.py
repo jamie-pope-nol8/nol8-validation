@@ -75,12 +75,22 @@ def oracle_output(text: str, matcher: LiteralMatcher, rules: dict[str, str]) -> 
 
 
 # The harness's per-stage action derivation, mirrored from engine_mesh.go.
-def derive_handoff(processed: str) -> str:
+def _mask_added_this_stage(input_text: str, processed: str) -> bool:
+    """A NEW mask sentinel appeared while processing this stage (a value redacted here).
+    A sentinel already present in the input (masked at an earlier hop, carried forward)
+    does not count - masking is a governance action once, at the first hop."""
+    for s in ("[MASK_CARD]", "[MASK_ACCT]"):
+        if s in processed and s not in input_text:
+            return True
+    return False
+
+
+def derive_handoff(input_text: str, processed: str) -> str:
     if "[ROUTE]" in processed:
         return "route"
     if "[BLOCK_HAND]" in processed:
         return "block_handoff"
-    if "[MASK_CARD]" in processed or "[MASK_ACCT]" in processed:
+    if _mask_added_this_stage(input_text, processed):
         return "mask"
     return "allow"
 
@@ -89,12 +99,12 @@ def derive_tool(processed: str) -> str:
     return "block_tool" if "[BLOCK_TOOL]" in processed else "allow"
 
 
-def derive_final(processed: str) -> tuple[str, str]:
+def derive_final(input_text: str, processed: str) -> tuple[str, str]:
     if "[BLOCK_OUT]" in processed:
         return "block", "[BLOCKED_OUTPUT]"
     if "[TAG_PRIV]" in processed:
         return "tag", processed
-    if "[MASK_CARD]" in processed or "[MASK_ACCT]" in processed:
+    if _mask_added_this_stage(input_text, processed):
         return "mask", processed
     return "allow", processed
 
@@ -125,7 +135,7 @@ def oracle_events(task: dict, matcher: LiteralMatcher, rules: dict[str, str]) ->
 
     for stage_name, _src, _dst in _HANDOFF_STAGES:
         processed = oracle_output(text, matcher, rules)
-        action = derive_handoff(processed)
+        action = derive_handoff(text, processed)
         events.append({"stage": stage_name, "event_type": "agent_message",
                        "action": action, "processed_text": processed})
         text = processed
@@ -151,7 +161,7 @@ def oracle_events(task: dict, matcher: LiteralMatcher, rules: dict[str, str]) ->
         final_action, final_processed = "block", "[BLOCKED_OUTPUT]"
     else:
         processed = oracle_output(final_text, matcher, rules)
-        final_action, final_processed = derive_final(processed)
+        final_action, final_processed = derive_final(final_text, processed)
     events.append({"stage": "final", "event_type": "final_output",
                    "action": final_action, "processed_text": final_processed})
     return events

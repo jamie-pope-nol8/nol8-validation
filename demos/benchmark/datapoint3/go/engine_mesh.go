@@ -103,20 +103,30 @@ const (
 	meshTagPriv   = "[TAG_PRIV]"
 )
 
-func meshHasMask(s string) bool {
-	return strings.Contains(s, meshMaskCard) || strings.Contains(s, meshMaskAcct)
+// maskAddedThisStage reports whether the engine introduced a NEW mask sentinel while
+// processing this stage's input - i.e. a card/account literal was redacted here. A mask
+// sentinel that was already present in the input (a value masked at an earlier hop and
+// carried forward) does not count: masking is a governance action once, at the hop where
+// the value is first redacted; downstream hops merely forward the already-masked message.
+func maskAddedThisStage(input, processed string) bool {
+	for _, s := range []string{meshMaskCard, meshMaskAcct} {
+		if strings.Contains(processed, s) && !strings.Contains(input, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // deriveHandoffAction maps the engine's processed handoff message to an action, in the
 // same precedence as the listmesh mode: route (flagged/denied) > block_handoff
-// (internal project) > mask (card/account) > allow.
-func deriveHandoffAction(processed string) string {
+// (internal project) > mask (a card/account redacted at THIS hop) > allow.
+func deriveHandoffAction(input, processed string) string {
 	switch {
 	case strings.Contains(processed, meshRoute):
 		return "route"
 	case strings.Contains(processed, meshBlockHand):
 		return "block_handoff"
-	case meshHasMask(processed):
+	case maskAddedThisStage(input, processed):
 		return "mask"
 	default:
 		return "allow"
@@ -132,14 +142,14 @@ func deriveToolAction(processed string) string {
 }
 
 // deriveFinalAction maps the engine's processed final output to an action, mirroring
-// listmesh: block (output-block) > tag (privileged) > mask (card/account) > allow.
-func deriveFinalAction(processed string) (string, string) {
+// listmesh: block (output-block) > tag (privileged) > mask (redacted at THIS stage) > allow.
+func deriveFinalAction(input, processed string) (string, string) {
 	switch {
 	case strings.Contains(processed, meshBlockOut):
 		return "block", "[BLOCKED_OUTPUT]"
 	case strings.Contains(processed, meshTagPriv):
 		return "tag", processed
-	case meshHasMask(processed):
+	case maskAddedThisStage(input, processed):
 		return "mask", processed
 	default:
 		return "allow", processed
@@ -196,7 +206,7 @@ func runEngineMesh(tasks []TaskRecord, outputDir string, cfg EngineConfig) (Summ
 			if err != nil {
 				return stats, fmt.Errorf("task %s handoff %s: %w", task.TaskID, stage.name, err)
 			}
-			action := deriveHandoffAction(processed)
+			action := deriveHandoffAction(text, processed)
 			if action != "allow" {
 				meshAction = action
 			}
@@ -259,7 +269,7 @@ func runEngineMesh(tasks []TaskRecord, outputDir string, cfg EngineConfig) (Summ
 			if err != nil {
 				return stats, fmt.Errorf("task %s final: %w", task.TaskID, err)
 			}
-			finalAction, finalProcessed = deriveFinalAction(processed)
+			finalAction, finalProcessed = deriveFinalAction(finalText, processed)
 		}
 		writeEvent(encoder, EventRecord{
 			TaskID:        task.TaskID,
