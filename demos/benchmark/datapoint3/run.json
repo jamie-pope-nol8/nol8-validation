@@ -1,5 +1,5 @@
 {
-  "_comment": "Data Point 3 (agent-to-agent mesh control), honest action model. Rendered by demos/benchmark/make-report.py (kind=dp3). Brand voice: no em dashes, no exclamation marks, no emoji. NOL8 does deterministic literal replacement only: redact/mask/drop transform the data (LIVE, oracle-verified); route/block are signals a control plane acts on (ROADMAP for native enforcement, tagged as such). NOL8 does not itself route/block/stop a message today. Numbers from a single clean run of demos/policies/mesh.nol on the live Themis engine (13 agent tasks); Themis oracle-verified 13/13 event-for-event. Networked RE2 (Aergia :444) baseline pending an engine-side outage.",
+  "_comment": "Data Point 3 (agent-to-agent mesh control), honest action model. Rendered by demos/benchmark/make-report.py (kind=dp3). Brand voice: no em dashes, no exclamation marks, no emoji. NOL8 does deterministic literal replacement only: redact/mask/drop transform the data (LIVE, oracle-verified); route/block are signals a control plane acts on (ROADMAP for native enforcement, tagged as such). NOL8 does not itself route/block/stop a message today. Numbers from a single clean run of demos/policies/mesh.nol on the live Themis AND Aergia engines (13 agent tasks); Themis == Aergia == oracle, 13/13 event-for-event. Aergia is the stand-up of Google RE2, the incumbent benchmark, never a NOL8 product.",
   "kind": "dp3",
   "title": "NOL8 Agent-to-Agent Control, Data Point 03",
 
@@ -20,13 +20,13 @@
 
   "eyebrow": "NOL8 · Agent-to-Agent Control Benchmark",
   "headline": { "lead": "Strip known secrets at every hop, ", "accent": "verified byte-for-byte." },
-  "lede": "An agent workflow hands a task from one model to the next, calls tools, and returns an answer. At every hop, NOL8 deterministically redacts, masks, or drops the known sensitive values in the message, so each downstream agent receives only what it needs. It is exact, verified correct against an independent oracle on all 13 tasks. It also emits route and block signals a control plane can act on, with native enforcement on the roadmap.",
+  "lede": "An agent workflow hands a task from one model to the next, calls tools, and returns an answer. At every hop, NOL8 deterministically redacts, masks, or drops the known sensitive values in the message, so each downstream agent receives only what it needs. It is exact, verified correct against an independent oracle on all 13 tasks, and byte-for-byte identical to Aergia, our stand-up of Google RE2. It also emits route and block signals a control plane can act on, with native enforcement on the roadmap.",
 
   "stats": [
     { "value": "13 / 13", "unit": "",  "label": "tasks verified correct against an independent oracle", "key": true  },
-    { "value": "8",       "unit": "",   "label": "known secrets redacted, masked, or dropped before the next hop", "key": true  },
-    { "value": "16",      "unit": "%",  "label": "less content delivered downstream today, secrets stripped first", "key": false },
-    { "value": "6",       "unit": "",   "label": "route and block signals emitted for a control plane (roadmap)", "key": false }
+    { "value": "100",     "unit": "%",  "label": "byte-for-byte match with the RE2 incumbent (Aergia)", "key": true  },
+    { "value": "8",       "unit": "",   "label": "known secrets redacted, masked, or dropped before the next hop", "key": false },
+    { "value": "16",      "unit": "%",  "label": "less content delivered downstream today, secrets stripped first", "key": false }
   ],
 
   "mesh": {
@@ -35,7 +35,8 @@
     "chain": ["Triage", "Research", "Decision", "Action", "Final"],
     "approaches": [
       { "role": "baseline", "tag": "Baseline · Do nothing", "headline": "No control in the path", "metric": "878", "metricUnit": "tokens delivered", "desc": "Every message reaches every downstream agent unchanged. Every known secret, card, and codename flows to the next hop." },
-      { "role": "nol8", "tag": "NOL8 · Themis (FPGA)", "headline": "Deterministic control, every hop", "metric": "737", "metricUnit": "tokens delivered", "desc": "Redacts, masks, and drops known secrets at every hop: 16% less delivered, every declared value stripped, verified correct against an independent oracle 13 of 13 tasks. Route and block signals are emitted for a control plane (roadmap)." }
+      { "role": "benchmark", "tag": "Benchmark · Aergia (RE2)", "headline": "Google RE2, the known regex engine", "metric": "737", "metricUnit": "tokens delivered", "desc": "Our stand-up of Google RE2 on the identical policy. Byte-for-byte identical to NOL8 across all 13 tasks at every hop, and it matches the same oracle." },
+      { "role": "nol8", "tag": "NOL8 · Themis (FPGA)", "headline": "Deterministic control, every hop", "metric": "737", "metricUnit": "tokens delivered", "desc": "Redacts, masks, and drops known secrets at every hop: 16% less delivered, every declared value stripped, verified correct against an independent oracle 13 of 13 tasks, and byte-identical to the incumbent. Route and block signals are emitted for a control plane (roadmap)." }
     ],
     "controlPoints": [
       {
@@ -140,28 +141,29 @@
     { "term": "Policy",   "def": "One literal mesh policy (demos/policies/mesh.nol) plus an action map (mesh-actions.json), both generated by build_mesh_policy.py: internal projects and accounts redacted, customer cards masked to last four, a fraud denylist of rogue cards dropped, flagged entities and exfil phrases signalled. The same file deploys to the engine." },
     { "term": "Actions",  "def": "LIVE (NOL8 transforms the data): redact (value -> [REDACT]), mask (card -> XXXX <last4>), drop (value -> removed). ROADMAP (NOL8 emits a signal; a control plane enforces): route (-> [ROUTE]), block (-> [BLOCK]). Replacements are capped at 15 characters by ISSUE-005, which is why the mask is compact." },
     { "term": "Engine",   "def": "Themis, the NOL8 FPGA (:443), called at every control point. The harness labels each hop from the engine output plus the action map. NOL8 does not route, block, or stop a message today; it emits the signal and the redacted text flows on." },
-    { "term": "Oracle",   "def": "The framework Aho-Corasick matcher re-runs the entire mesh flow independently over mesh.nol, leftmost-longest and non-overlapping. Themis reproduces it 13 of 13 tasks, event for event." },
+    { "term": "Oracle",   "def": "The framework Aho-Corasick matcher re-runs the entire mesh flow independently over mesh.nol, leftmost-longest and non-overlapping. Themis and Aergia both reproduce it, 13 of 13 tasks, event for event." },
     { "term": "Payload",  "def": "Downstream tokens delivered is the content each recipient receives summed across every hop: 878 with no control, 737 with NOL8, 16% less. This reduction is from redaction alone; native route/block enforcement (roadmap) would stop diverted and refused work and deliver far less." },
-    { "term": "Baseline", "def": "A no-control run. The RE2 comparison (in-process Go regexp, and the networked Aergia :444 baseline) is being updated to this action model and is a pending follow-up." }
+    { "term": "Engines",  "def": "Themis, the NOL8 FPGA (:443), and Aergia, our stand-up of Google RE2 (:444), the incumbent. Both are called at every control point and are byte-for-byte identical across all 13 tasks. A no-control run is the payload baseline." }
   ],
   "methodNote": "Not a model-quality or throughput test. Deterministic agent stubs isolate the mesh controls. Route and block are roadmap signals, marked as such.",
 
   "raw": {
     "heading": "Full benchmark data",
-    "intro": "Every number from the same 13-task run: the live Themis engine on the mesh policy, against a no-control baseline. Themis is oracle-verified 13 of 13, event for event.",
+    "intro": "Every number from the same 13-task run: the live Themis and Aergia engines on the identical mesh policy, against a no-control baseline. Themis and Aergia are byte-identical and both oracle-verified 13 of 13, event for event.",
     "aggregate": {
       "columns": ["Approach", "Redacted", "Masked", "Dropped", "Route signals", "Block signals", "Downstream tokens"],
       "rows": [
         ["Do nothing", "0", "0", "0", "0", "0", "878"],
+        ["Aergia (RE2 baseline)", "6", "1", "1", "3", "3", "737"],
         ["Themis (NOL8 · FPGA)", "6", "1", "1", "3", "3", "737"]
       ],
-      "note": "Themis is verified correct against an independent oracle 13 of 13 tasks, event for event. Redact, mask, and drop are live: NOL8 transforms the payload, and downstream delivery falls from 878 to 737 tokens (16% less) with every declared secret stripped. That reduction is from redaction alone, because nothing is stopped today; route and block are signals NOL8 emits for a control plane, and native enforcement (which would stop diverted and refused work and deliver far less) is on the roadmap. Masked forms are capped at 15 characters (ISSUE-005), so the card mask is compact (XXXX 1111). One honest edge: Contoso Advisory Board contains the flagged literal Contoso Advisory, so literal matching signals it. The RE2 baseline (in-process Go regexp and the networked Aergia :444) is being updated to this action model, a pending follow-up. From a single clean run of demos/policies/mesh.nol on the live Themis engine."
+      "note": "Themis and Aergia are byte-for-byte identical and both match an independent oracle 13 of 13 tasks, event for event. Redact, mask, and drop are live: NOL8 transforms the payload, and downstream delivery falls from 878 to 737 tokens (16% less) with every declared secret stripped. That reduction is from redaction alone, because nothing is stopped today; route and block are signals NOL8 emits for a control plane, and native enforcement (which would stop diverted and refused work and deliver far less) is on the roadmap. Masked forms are capped at 15 characters (ISSUE-005), so the card mask is compact (XXXX 1111). One honest edge: Contoso Advisory Board contains the flagged literal Contoso Advisory, so literal matching signals it. From a single clean run of demos/policies/mesh.nol on the live Themis and Aergia engines."
     }
   },
 
   "footer": {
     "tagline": "The AI data plane. Deterministic redaction at every hop of the agent mesh, inline, at wire speed.",
-    "next": [ "Next · RE2 parity on the new model, then a representative insurer mesh", "Then native route and block enforcement" ],
+    "next": [ "Next · A representative insurer mesh", "Then native route and block enforcement" ],
     "copyright": "© 2026 Nol8. All rights reserved.",
     "confidential": "Private & Confidential"
   }

@@ -55,22 +55,29 @@ diagnose_dataplane() {
   if command -v nc >/dev/null; then ncout="$(nc -vz -w 5 "$host" "$port" 2>&1 | tail -1)"; else ncout="(nc not installed)"; fi
 
   printf '     tcp connect: %ss (0.000000 = never connected)\n' "${ct:-n/a}"
-  printf '     icmp loss  : %s%%\n' "$ploss"
+  printf '     icmp loss  : %s%% (note: ICMP is often blocked even when the port works; TCP is authoritative)\n' "$ploss"
   printf '     nc %s:%s : %s\n' "$host" "$port" "$ncout"
 
-  if printf '%s' "$ncout" | grep -qi 'refused'; then
+  # TCP is authoritative. A successful connect (nc succeeded, or a non-zero connect time)
+  # means the host is UP and the port is reachable, regardless of ICMP loss.
+  local tcp_ok=0
+  printf '%s' "$ncout" | grep -qi 'succeeded' && tcp_ok=1
+  [ -n "$ct" ] && [ "$ct" != "0.000000" ] && [ "$ct" != "n/a" ] && tcp_ok=1
+
+  if [ "$tcp_ok" = "1" ]; then
+    printf '     => TCP connects: the host is UP and port %s is reachable. This is NOT a\n' "$port"
+    printf '        connectivity problem. If the round-trip was wrong, it is policy or\n'
+    printf '        propagation: the probe policy may not have reloaded yet (raise RELOAD_WAIT),\n'
+    printf '        or HTTP 503 = paused awaiting a policy (deploy one).\n'
+  elif printf '%s' "$ncout" | grep -qi 'refused'; then
     printf '     => TCP reset (refused): the host is UP but nothing is listening on %s.\n' "$port"
-    printf '        argus/service is down on that port. (Not policy or creds.)\n'
-  elif [ "$ploss" = "100" ]; then
-    printf '     => No ICMP and TCP times out: packets are DROPPED, not refused. The\n'
-    printf '        data-plane host (%s, argus edge) is DOWN or a firewall / security\n' "$host"
-    printf '        group / route is blocking it. Network/infra side, not our code.\n'
+    printf '        The service is down on that port. (Not policy or creds.)\n'
   else
-    printf '     => Host answers ICMP but the TCP port times out: port %s is filtered\n' "$port"
-    printf '        by a firewall/security group.\n'
+    printf '     => TCP never connects (timeout, not refused): packets are DROPPED. The\n'
+    printf '        data-plane host (%s, argus edge) is DOWN or a firewall / security\n' "$host"
+    printf '        group / route is blocking %s. Network/infra side, not our code.\n' "$port"
   fi
-  printf '     (If instead you get HTTP 503 with a body: the data plane is paused awaiting\n'
-  printf '     a policy - deploy any policy. See docs/TROUBLESHOOTING.md, "Health check by hand".)\n'
+  printf '     See docs/TROUBLESHOOTING.md, "Health check by hand".\n'
 }
 
 check_engine() {
@@ -89,20 +96,34 @@ check_engine() {
   if [ "$code" = "200" ]; then ok "control plane: policy deploy HTTP 200 ($policy_ep)"
   else bad "control plane: policy deploy HTTP ${code:-000} ($policy_ep)"; fi
 
-  # 2. data plane: round-trip one message
-  local body rc failed=0
-  body="$(printf '{"message":"%s"}' "$PROBE_MSG" | curl -skS -m "$TIMEOUT" -X POST "$process_ep" \
-    -H 'Content-Type: application/json' -H "Authorization: Bearer $token" --data-binary @- 2>/dev/null)"
-  rc=$?
-  if [ $rc -ne 0 ] || [ -z "$body" ]; then
-    bad "data plane: UNREACHABLE (curl exit $rc) - $process_ep"; failed=1
-  elif printf '%s' "$body" | grep -qF "$EXPECT"; then
-    ok "data plane: round-trip transform correct ('$PROBE_MSG' -> contains '$EXPECT')"
-  else
-    bad "data plane: reachable but unexpected response"; failed=1
-    printf '         body: %s\n' "$body"
-    printf '         (HTTP 503 = paused awaiting policy; 401/403 = creds; 404 = wrong path.)\n'
-  fi
+  # 2. data plane: round-trip one message. Retry, because a just-deployed policy takes a
+  #    few seconds to propagate (Aergia especially); a reachable-but-untransformed response
+  #    means the probe has not reloaded yet, not that the engine is down.
+  local body rc failed=0 attempt=1 tries="${ROUNDTRIP_TRIES:-4}" wait="${RELOAD_WAIT:-3}"
+  while : ; do
+    body="$(printf '{"message":"%s"}' "$PROBE_MSG" | curl -skS -m "$TIMEOUT" -X POST "$process_ep" \
+      -H 'Content-Type: application/json' -H "Authorization: Bearer $token" --data-binary @- 2>/dev/null)"
+    rc=$?
+    if [ $rc -eq 0 ] && printf '%s' "$body" | grep -qF "$EXPECT"; then
+      ok "data plane: round-trip transform correct ('$PROBE_MSG' -> contains '$EXPECT')"
+      break
+    fi
+    if [ "$attempt" -ge "$tries" ]; then
+      if [ $rc -ne 0 ] || [ -z "$body" ]; then
+        bad "data plane: UNREACHABLE (curl exit $rc) - $process_ep"
+      else
+        bad "data plane: reachable but probe not applied after $tries tries - $process_ep"
+        printf '         body: %s\n' "$body"
+        printf '         (Reachable + valid response but UNtransformed usually means the probe policy\n'
+        printf '          has not propagated yet - raise RELOAD_WAIT. HTTP 503 = paused awaiting policy;\n'
+        printf '          401/403 = creds; 404 = wrong path.)\n'
+      fi
+      failed=1
+      break
+    fi
+    attempt=$((attempt+1))
+    sleep "$wait"
+  done
 
   # deep probe on failure, or when --diagnose is set
   if [ "$failed" = "1" ] || [ "$DIAGNOSE" = "1" ]; then diagnose_dataplane "$process_ep"; fi
