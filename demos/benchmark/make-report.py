@@ -675,7 +675,8 @@ SCRIPT = """
 
 
 # ---- DP2 (pre/post-inference control) sections ----
-_ACTION_COLOR = {"block": WARN, "route": "var(--accent)", "mask": "var(--accent)",
+_ACTION_COLOR = {"block": WARN, "block_handoff": WARN, "block_tool": WARN,
+                 "route": "var(--accent)", "mask": "var(--accent)",
                  "tag": "var(--accent)", "allow": "var(--fg3)"}
 
 
@@ -799,6 +800,95 @@ def dp2_appendix(d) -> str:
   </section>"""
 
 
+# ---- DP3 (agent-to-agent mesh control) sections ----
+def mesh(d) -> str:
+    m = d["mesh"]
+    cards = _approach_cards(m["approaches"])
+    chain = m.get("chain", [])
+    chain_html = ""
+    for i, stg in enumerate(chain):
+        if i:
+            chain_html += '<span style="color:var(--fg3);font-size:15px;">&rsaquo;</span>'
+        chain_html += (f'<span style="color:var(--fg1);font-weight:600;font-size:13px;'
+                       f'border:1px solid var(--cardline);border-radius:999px;padding:6px 14px;'
+                       f'background:var(--card);white-space:nowrap;">{esc(stg)}</span>')
+
+    def point(p, num):
+        rows = "".join(
+            f'<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;'
+            f'border-bottom:1px solid var(--hairline-soft);">'
+            f'<span style="color:var(--fg2);font-size:13.5px;">{esc(a)}</span>'
+            f'<span style="color:var(--accent);font-weight:600;font-size:13.5px;'
+            f'font-variant-numeric:tabular-nums;white-space:nowrap;">{esc(str(n))}</span></div>'
+            for a, n in p["actions"])
+        return (f'<div data-card style="background:var(--card);border:1px solid var(--cardline);'
+                f'border-radius:12px;padding:24px 26px;">'
+                f'<div style="color:var(--accent);font-weight:600;font-size:11px;letter-spacing:.14em;'
+                f'text-transform:uppercase;">{esc(num)}</div>'
+                f'<div style="color:var(--fg1);font-weight:700;font-size:19px;margin-top:8px;">{esc(p["title"])}</div>'
+                f'<p style="color:var(--fg3);font-size:13px;line-height:1.55;margin:8px 0 14px;">{esc(p["desc"])}</p>'
+                f'{rows}</div>')
+
+    points = "".join(point(p, f"Control point {i+1}") for i, p in enumerate(m["controlPoints"]))
+    return f"""
+  <section id="benchmark" data-section="benchmark" style="scroll-margin-top:80px;">
+    <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">01 · The mesh</span>
+        <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
+      </div>
+      <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;max-width:22ch;">{esc(m['heading'])}</h2>
+      <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:70ch;margin:14px 0 0;">{esc(m['lede'])}</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:30px;">{chain_html}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:30px;">{cards}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:18px;">{points}
+      </div>
+    </div>
+  </section>"""
+
+
+def mesh_flows(d) -> str:
+    f = d["meshFlows"]
+    cards = ""
+    for it in f["items"]:
+        steps = ""
+        for st in it["steps"]:
+            badge = _action_badge(st["action"])
+            body = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(st["text"]))}</span>'
+                    if st.get("text") else "")
+            steps += (f'<div><div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
+                      f'color:var(--fg3);margin-bottom:4px;display:flex;align-items:center;gap:8px;">'
+                      f'{esc(st["stage"])} &rsaquo; {badge}</div>'
+                      f'<div style="font-size:12.5px;line-height:1.6;">{body}</div></div>')
+        oc = it.get("outcome", "")
+        oc_color = _ACTION_COLOR.get(it.get("outcomeAction", ""), "var(--fg3)")
+        outcome_html = (f'<div style="border-left:2px solid {oc_color};padding:2px 0 2px 12px;color:{oc_color};'
+                        f'font-size:13px;line-height:1.55;margin-top:2px;">{esc(oc)}</div>') if oc else ""
+        cards += (
+            f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
+            f'padding:18px 20px;margin-top:14px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">'
+            f'<span style="color:var(--fg1);font-size:13px;font-weight:700;">{esc(it["label"])}</span>'
+            f'<span style="color:var(--fg3);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;">{esc(it.get("category",""))}</span>'
+            f'</div>'
+            f'<div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;color:var(--fg3);margin-bottom:4px;">Task in</div>'
+            f'<div style="font-size:12.5px;line-height:1.6;color:var(--fg1);margin-bottom:13px;">{esc(it["task"])}</div>'
+            f'<div style="display:grid;gap:13px;">{steps}</div>{outcome_html}</div>')
+    return f"""
+  <section id="flows" data-section="flows" style="scroll-margin-top:80px;border-top:1px solid var(--hairline-soft);">
+    <div style="max-width:1200px;margin:0 auto;padding:88px 40px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+        <span style="color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.18em;text-transform:uppercase;">02 · Governance across the chain</span>
+        <span style="flex:1;height:1px;background:var(--hairline-soft);"></span>
+      </div>
+      <h2 style="font-weight:700;font-size:38px;line-height:1.08;letter-spacing:-.01em;color:var(--fg1);margin:0;max-width:22ch;">{esc(f['heading'])}</h2>
+      <p style="color:var(--fg2);font-size:17px;line-height:1.6;max-width:70ch;margin:14px 0 0;">{esc(f['lede'])}</p>
+      <div style="margin-top:24px;">{cards}</div>
+    </div>
+  </section>"""
+
+
 def _document(body: str, title: str) -> str:
     return f"""<!doctype html>
 <html lang="en">
@@ -823,6 +913,10 @@ def build(run: dict) -> str:
         sections = [top_bar(run), hero(run), stat_band(run), boundary(run),
                     flows(run), meaning(run), method(run), dp2_appendix(run), footer(run), BACK_TO_TOP]
         return _document("".join(sections), run.get("title", "NOL8 Pre/Post-Inference Control, Data Point 02"))
+    if run.get("kind") == "dp3":
+        sections = [top_bar(run), hero(run), stat_band(run), mesh(run),
+                    mesh_flows(run), meaning(run), method(run), dp2_appendix(run), footer(run), BACK_TO_TOP]
+        return _document("".join(sections), run.get("title", "NOL8 Agent-to-Agent Control, Data Point 03"))
     body = "".join([
         top_bar(run), hero(run), stat_band(run), benchmark(run),
         latency(run), meaning(run), method(run), raw_section(run), footer(run), BACK_TO_TOP,
