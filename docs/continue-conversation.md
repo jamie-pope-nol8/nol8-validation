@@ -23,14 +23,19 @@ continue without reconstructing context from chat history.
 >   244->189 tokens fwd) and **oracle-verified 24/24**. Parity column (Aergia==Themis)
 >   still pending - blocked only by :444 being down (below). See the DP2 section +
 >   [[demo-positioning-and-data-strategy]].
-> - **Data Point 3 (agent-to-agent) - BUILT + live, report done (2026-07-23).** DP2
->   generalized to many control points: live Themis governs every hop of a 5-stage agent
->   mesh (4 handoffs -> tool -> final). **themis_api_mesh == oracle, 12/12 event-for-event.**
->   "Both" headline live: governance-survives (12/12) + payload-reduction (**797 -> 378
->   downstream tokens, 52.6% less delivered**). Full pipeline built and validated on EC2:
->   `mesh.nol` generator, `engine_mesh.go`, `verify-oracle.py`, payload instrumentation,
->   `run.json`+`kind:dp3` report (mesh + mesh_flows sections), `run-live.sh`, DEMO-NOTES.
->   ONLY REMAINING: Aergia parity column (waits on :444) + a DP3 representative insurer set.
+> - **Data Point 3 (agent-to-agent) - BUILT + live, HONEST-MODEL reframe done (2026-07-23).**
+>   NOL8 does deterministic literal REPLACEMENT only, so DP3 splits actions honestly
+>   ([[nol8-is-substitution-not-enforcement]]): **redact / mask / drop are LIVE** (NOL8
+>   transforms the data, oracle-verified); **route / block are ROADMAP signals** (NOL8
+>   emits a token a control plane acts on; it does NOT route/block/stop today). No-stop
+>   flow. Live run (13 tasks, real Themis): **themis_api_mesh == oracle, 13/13 event-for-
+>   event**; **8 secrets stripped** (6 redact / 1 mask-to-last-4 `XXXX 1111` / 1 fraud
+>   drop); **878 -> 737 downstream tokens, 16% less** (from redaction alone; the bigger
+>   stop-based reduction is roadmap). Real mask capped at 15 chars by ISSUE-005. Full
+>   pipeline: `build_mesh_policy.py` (+ `mesh-actions.json` sidecar), `engine_mesh.go`
+>   (new model), `verify-oracle.py`, `run.json`+`kind:dp3` report (Roadmap badges),
+>   `run-live.sh`, DEMO-NOTES. REMAINING: update RE2 baseline (in-process + Aergia :444)
+>   to the new action model; DP3 representative insurer set; native route/block (roadmap).
 >
 > **>>> OPERATIONAL STATUS (2026-07-23): Themis :443 is BACK; Aergia :444 still down.**
 > `check-engines.sh` on EC2: Themis (NOL8) DNS + control plane + data-plane round-trip
@@ -318,30 +323,37 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   :444 returns, rerun with `MODES="themis_api_infer aergia_api_infer"` and verify both;
   that closes DP2 fully. Command in representative/README.md.
 
-## Data Point 3 - agent-to-agent control - CORE BUILT + oracle-verified (`demos/benchmark/datapoint3/`)
+## Data Point 3 - agent-to-agent control - BUILT + live, HONEST-MODEL (`demos/benchmark/datapoint3/`)
 
-- **Live result (2026-07-23):** `themis_api_mesh` runs the full mesh through real Themis
-  (:443) and **matches the oracle 12/12 event-for-event** (`verify-oracle.py` full-flow
-  re-simulation on `mesh.nol`), and equals the `listmesh` literal baseline to the count
-  (masked 2, handoff-blocked 1, routed 4, tool-blocked 1, final blocked 4 / tagged 3, 6
-  exposures prevented, 10/12 contract-aligned). Pack copied to `datapoint3/`; lists
-  curated for ISSUE-004; `demos/policies/build_mesh_policy.py` -> `mesh.nol` (17 rules);
-  `go/engine_mesh.go` (engine at every hop, sentinel-derived, mask-once semantics);
-  `go/main.go` dispatches `themis_api_mesh`/`aergia_api_mesh`. Compiles + runs on EC2.
-- **Report pipeline DONE (2026-07-23):** payload instrumentation added (downstream tokens
-  delivered per hop); `run.json` (`kind: dp3`) authored with live numbers; make-report.py
-  has the dp3 path (`mesh()` + `mesh_flows()` sections, reuses hero/stat-band/appendix);
-  `run-live.sh` (deploy, run all modes, combine, oracle-verify) and DEMO-NOTES written and
-  validated on EC2. Render: `python demos/benchmark/make-report.py
-  demos/benchmark/datapoint3/run.json demos/benchmark/datapoint3/agent-mesh-report.html`
-  (gitignored). Payload: nocontrol 797, re2/listmesh 410, **Themis 378 (52.6% less)**;
-  the engine delivers less than the detect-only sims because it redacts every matched
-  literal at every hop (documented in DEMO-NOTES).
-- **REMAINING:** Aergia parity column (add `aergia_api_mesh` to MODES) when :444 returns;
-  a DP3 *representative* insurer-mesh dataset (mirror DP2's representative set) as the
-  near-term bridge to the agentic story; Track B (agentic-mesh-lab) is the flagship.
-- **Plan / decisions / findings:** `demos/benchmark/DP3-PLAN.md` (headline=Both,
-  scenario=generic-now, ISSUE-004 curation, sentinel map, 3 findings).
+- **>>> The reframe (2026-07-23, per SA feedback [[nol8-is-substitution-not-enforcement]]):**
+  NOL8 does deterministic literal REPLACEMENT only. So DP3 splits actions into
+  **LIVE** (NOL8 transforms the data, oracle-verified): **redact** (-> `[REDACT]`),
+  **mask** (card -> `XXXX <last4>`, a real mask), **drop** (-> removed; = DP1 strip); and
+  **ROADMAP** (NOL8 emits a signal a control plane acts on, native enforcement later):
+  **route** (-> `[ROUTE]`), **block** (-> `[BLOCK]`). NOL8 does NOT route/block/stop a
+  message today; **no-stop flow** - it emits the signal and the redacted text flows on.
+  The report tags route/block `Roadmap`. "mask" is a real mask (last-4), NOT a sentinel;
+  capped at 15 chars by ISSUE-005 so `XXXX 1111` (compact).
+- **Live result (13 tasks, real Themis :443):** `themis_api_mesh` **matches the oracle
+  13/13 event-for-event** (`verify-oracle.py` full re-simulation over `mesh.nol` +
+  `mesh-actions.json`). **8 secrets stripped** (6 redact / 1 mask / 1 drop), **3 route +
+  3 block** signals emitted, **878 -> 737 downstream tokens (16% less)** - reduction from
+  redaction alone (no-stop); the bigger stop-based reduction is roadmap.
+- **Pipeline (all built + validated on EC2):** `build_mesh_policy.py` emits `mesh.nol`
+  (19 rules) + `mesh-actions.json` (marker/drop-list sidecar the engine + oracle load);
+  `go/engine_mesh.go` (new `MeshActions`/`deriveMeshAction`/`runMeshMode`/`MeshStats`,
+  no-stop, sidecar-driven; old sim code left dead); `go/main.go` runs nocontrol +
+  themis_api_mesh (aergia_api_mesh supported); `verify-oracle.py` (no-stop re-sim);
+  `run.json`+`kind:dp3` report with `mesh()`/`mesh_flows()` + **Roadmap badge**; run-live.sh
+  (`MODES="nocontrol themis_api_mesh"`, passes `--actions`), DEMO-NOTES. Render cmd in
+  DEMO-NOTES; HTML gitignored (`datapoint3/agent-mesh-report.html`).
+- **REMAINING:** update the **RE2 baseline** (in-process Go regexp, + networked Aergia
+  :444 when up) to the new redact/mask/drop/route/block action model (the old sim modes
+  re2_mesh/listmesh/nol8sim_agent are stale, dropped from the run); DP3 *representative*
+  insurer-mesh dataset (mirror DP2's representative set); native route/block (roadmap).
+- **Plan / decisions:** `demos/benchmark/DP3-PLAN.md`. NOTE: DP3-PLAN.md + the DP3 section
+  of DEMO-NOTES history reference the OLD sentinel/stop model (block_handoff/block_tool/
+  tag, mesh stops on route/block) - superseded by the honest model above.
 
 ### Original plan (for reference)
 
