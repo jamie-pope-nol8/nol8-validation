@@ -1,0 +1,144 @@
+{
+  "markers": {
+    "redact": "[REDACT]",
+    "route": "[ROUTE]",
+    "block": "[BLOCK]",
+    "maskPrefix": "XXXX "
+  },
+  "dropLiterals": [],
+  "rules": [
+    {
+      "literal": "Project Aurora Ledger",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "pre"
+    },
+    {
+      "literal": "Project Maple Vault",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "pre"
+    },
+    {
+      "literal": "Atlas Reserve",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "pre"
+    },
+    {
+      "literal": "ACC-1234-5678",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "pre+post"
+    },
+    {
+      "literal": "4111 1111 1111 1111",
+      "replacement": "XXXX 1111",
+      "action": "mask",
+      "roadmap": false,
+      "stage": "pre+post"
+    },
+    {
+      "literal": "privileged context",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "post"
+    },
+    {
+      "literal": "Northwind Trading",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "Contoso Advisory",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "Silverline Imports",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "Red Flag Logistics",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "approve release",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "Denied Entity:",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "legal hold escalation",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "compliance chair approval",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "Ignore prior safeguards",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "external distribution",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "full transcript export",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "send raw notes to reseller",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "pre"
+    },
+    {
+      "literal": "disallowed instructions",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "post"
+    }
+  ]
+}

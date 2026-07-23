@@ -1,14 +1,17 @@
 package main
 
-// Real-engine pre/post-inference control for Data Point 2.
+// Real-engine pre/post-inference control for Data Point 2, honest action model.
 //
-// The engine (NOL8/Themis :443 or RE2/Aergia :444) only does literal replacement,
-// so the boundary policy (demos/policies/boundary.nol) maps every governed literal
-// to a short sentinel. This mode calls the engine at BOTH control points - once on
-// the prompt (govern what reaches the model) and once on the model output (govern
-// what leaves it) - and derives the block/mask/route/tag action from which sentinel
-// the engine emitted. Same policy runs on both engines, exactly like Data Point 1,
-// so themis_api_infer vs aergia_api_infer is a like-for-like comparison.
+// NOL8 does deterministic literal REPLACEMENT only. Two honest families:
+//   LIVE TODAY (NOL8 transforms the data): redact (-> [REDACT]), mask (-> XXXX <last4>).
+//   ROADMAP (NOL8 emits a signal a control plane enforces): route (-> [ROUTE]),
+//     block (-> [BLOCK]). NOL8 does not stop a prompt reaching the model, or withhold an
+//     output, today; it redacts/masks the text and emits the signal, and the text flows on.
+//
+// So there is NO stopping today: the model is always called, but on a prompt with known
+// secrets redacted/masked. The live win is that secrets never reach the model or the
+// response. The same processor drives nocontrol (identity) and the engine modes
+// (themis_api_infer / aergia_api_infer), so they are directly comparable.
 
 import (
 	"bytes"
@@ -22,7 +25,8 @@ import (
 	"time"
 )
 
-// EngineConfig points at one real engine's data plane.
+// ---- engine transport ----
+
 type EngineConfig struct {
 	Endpoint  string
 	Token     string
@@ -42,16 +46,10 @@ func loadEngineConfig(modeLabel, endpointEnv, tokenEnv string) (EngineConfig, er
 			timeout = time.Duration(ms) * time.Millisecond
 		}
 	}
-	return EngineConfig{
-		Endpoint:  endpoint,
-		Token:     strings.TrimSpace(os.Getenv(tokenEnv)),
-		Timeout:   timeout,
-		ModeLabel: modeLabel,
-	}, nil
+	return EngineConfig{Endpoint: endpoint, Token: strings.TrimSpace(os.Getenv(tokenEnv)),
+		Timeout: timeout, ModeLabel: modeLabel}, nil
 }
 
-// callEngineProcess sends one string through the engine's literal redaction and
-// returns the processed text (policy sentinels substituted in place).
 func callEngineProcess(client *http.Client, cfg EngineConfig, text string) (string, error) {
 	payload, err := json.Marshal(map[string]string{"message": text})
 	if err != nil {
@@ -88,167 +86,191 @@ func callEngineProcess(client *http.Client, cfg EngineConfig, text string) (stri
 	return parsed.Result.Message, nil
 }
 
-// Sentinels emitted by demos/policies/boundary.nol.
-const (
-	sentBlock    = "[BLOCK]"
-	sentRoute    = "[ROUTE]"
-	sentMaskCard = "[MASK_CARD]"
-	sentMaskAcct = "[MASK_ACCT]"
-	sentTagInt   = "[TAG_INT]"
-	sentBlockOut = "[BLOCK_OUT]"
-	sentTagPriv  = "[TAG_PRIV]"
-)
+// ---- action model (shared shape with DP3's mesh-actions.json) ----
 
-func hasMaskSentinel(s string) bool {
-	return strings.Contains(s, sentMaskCard) || strings.Contains(s, sentMaskAcct)
+type BoundaryActions struct {
+	Markers struct {
+		Redact     string `json:"redact"`
+		Route      string `json:"route"`
+		Block      string `json:"block"`
+		MaskPrefix string `json:"maskPrefix"`
+	} `json:"markers"`
+	DropLiterals []string `json:"dropLiterals"`
 }
 
-// derivePreAction maps the engine's processed prompt to a pre-inference action.
-// block/route win (the prompt never reaches the model); otherwise mask (a value
-// was redacted) outranks tag (an internal project was flagged).
-func derivePreAction(processed string) (string, []string) {
-	switch {
-	case strings.Contains(processed, sentBlock):
-		return "block", []string{}
-	case strings.Contains(processed, sentRoute):
-		return "route", []string{}
+func loadBoundaryActions(path string) (BoundaryActions, error) {
+	var a BoundaryActions
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return a, fmt.Errorf("read boundary-actions %s: %w", path, err)
 	}
-	action := "allow"
-	tags := []string{}
-	if hasMaskSentinel(processed) {
-		action = "mask"
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return a, fmt.Errorf("parse boundary-actions %s: %w", path, err)
 	}
-	if strings.Contains(processed, sentTagInt) {
-		tags = append(tags, "internal_only")
-		if action == "allow" {
-			action = "tag"
+	return a, nil
+}
+
+// deriveAction labels a control point from its input and the engine's processed output. A
+// marker-based action counts only when the marker is NEW here. Precedence:
+// block > route > drop > mask > redact > allow. block/route are roadmap signals.
+func deriveAction(input, processed string, a BoundaryActions) string {
+	newMarker := func(m string) bool {
+		return m != "" && strings.Contains(processed, m) && !strings.Contains(input, m)
+	}
+	if newMarker(a.Markers.Block) {
+		return "block"
+	}
+	if newMarker(a.Markers.Route) {
+		return "route"
+	}
+	li, lp := strings.ToLower(input), strings.ToLower(processed)
+	for _, d := range a.DropLiterals {
+		if d == "" {
+			continue
+		}
+		ld := strings.ToLower(d)
+		if strings.Contains(li, ld) && !strings.Contains(lp, ld) {
+			return "drop"
 		}
 	}
-	return action, tags
+	if newMarker(a.Markers.MaskPrefix) {
+		return "mask"
+	}
+	if newMarker(a.Markers.Redact) {
+		return "redact"
+	}
+	return "allow"
 }
 
-// derivePostAction maps the engine's processed model output to a post action.
-func derivePostAction(processed string) (string, string, []string) {
-	if strings.Contains(processed, sentBlockOut) {
-		return "block", "[BLOCKED_OUTPUT]", []string{}
-	}
-	action := "allow"
-	tags := []string{}
-	if hasMaskSentinel(processed) {
-		action = "mask"
-	}
-	if strings.Contains(processed, sentTagPriv) {
-		tags = append(tags, "privileged_context")
-		if action == "allow" {
-			action = "tag"
-		}
-	}
-	return action, processed, tags
+// ---- stats ----
+
+type BoundaryStats struct {
+	Mode                  string
+	PromptsTotal          int
+	PromptsRedacted       int
+	PromptsMasked         int
+	PromptRouteSignals    int
+	PromptBlockSignals    int
+	OutputsRedacted       int
+	OutputsMasked         int
+	OutputBlockSignals    int
+	PromptTokensIn        int
+	PromptTokensForwarded int
+	OutputTokensRaw       int
+	OutputTokensReleased  int
+	PreprocessMs          float64
+	PostprocessMs         float64
 }
 
-func runEngineInfer(prompts []PromptRecord, outputDir string, cfg EngineConfig) (SummaryStats, error) {
-	start := time.Now()
-	stats := SummaryStats{Mode: cfg.ModeLabel}
+func (s *BoundaryStats) countPre(action string) {
+	switch action {
+	case "redact":
+		s.PromptsRedacted++
+	case "mask":
+		s.PromptsMasked++
+	case "route":
+		s.PromptRouteSignals++
+	case "block":
+		s.PromptBlockSignals++
+	}
+}
+
+func (s *BoundaryStats) countPost(action string) {
+	switch action {
+	case "redact":
+		s.OutputsRedacted++
+	case "mask":
+		s.OutputsMasked++
+	case "block":
+		s.OutputBlockSignals++
+	}
+}
+
+// ---- the run ----
+
+// runEngineInfer governs both edges of the model boundary with NO stopping (the honest
+// today behavior). `process` transforms text: identity for nocontrol, the engine call for
+// the api modes. The model is always called, on the redacted/masked prompt.
+func runEngineInfer(prompts []PromptRecord, mode, outputDir string, actions BoundaryActions,
+	process func(string) (string, error)) (BoundaryStats, error) {
+
+	stats := BoundaryStats{Mode: mode, PromptsTotal: len(prompts)}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return stats, err
+	}
 	var records []OutputRecord
-	client := &http.Client{Timeout: cfg.Timeout}
 
 	for _, prompt := range prompts {
-		stats.PromptsTotal++
-		stats.PromptTokensInEst += tokenEstimate(prompt.PromptText)
+		stats.PromptTokensIn += tokenEstimate(prompt.PromptText)
 
-		// Pre-inference control: govern what may reach the model.
+		// Pre-inference: NOL8 redacts/masks the prompt (live) and emits route/block signals.
 		preStart := time.Now()
-		preProcessed, err := callEngineProcess(client, cfg, prompt.PromptText)
+		preProcessed, err := process(prompt.PromptText)
 		if err != nil {
-			return stats, fmt.Errorf("prompt %s pre-inference: %w", prompt.PromptID, err)
+			return stats, fmt.Errorf("prompt %s pre: %w", prompt.PromptID, err)
 		}
 		stats.PreprocessMs += float64(time.Since(preStart).Microseconds()) / 1000.0
-		preAction, preTags := derivePreAction(preProcessed)
+		preAction := deriveAction(prompt.PromptText, preProcessed, actions)
+		stats.countPre(preAction)
+		stats.PromptTokensForwarded += tokenEstimate(preProcessed)
 
-		// allow/mask/tag forward the (possibly redacted) processed prompt;
-		// block/route stop it before the model.
-		promptProcessed := preProcessed
-		if preAction == "block" || preAction == "route" {
-			promptProcessed = prompt.PromptText
+		// The model is always called (no stopping today), on the redacted prompt.
+		stub := modelStub(prompt, preProcessed)
+		rawOutput := stub.RawModelOutput
+		stats.OutputTokensRaw += tokenEstimate(rawOutput)
+
+		// Post-inference: NOL8 redacts/masks the output (live) and emits block signals.
+		postStart := time.Now()
+		postProcessed, err := process(rawOutput)
+		if err != nil {
+			return stats, fmt.Errorf("prompt %s post: %w", prompt.PromptID, err)
 		}
-
-		switch preAction {
-		case "allow":
-			stats.PromptsAllowed++
-		case "mask":
-			stats.PromptsMasked++
-		case "block":
-			stats.PromptsBlocked++
-			stats.InferenceCallsAvoided++
-		case "route":
-			stats.PromptsRouted++
-			stats.InferenceCallsAvoided++
-		case "tag":
-			stats.PromptsTagged++
-		}
-
-		inferenceCalled := preAction != "block" && preAction != "route"
-		rawOutput := ""
-		postAction := "allow"
-		postTags := []string{}
-		finalOutput := ""
-
-		if inferenceCalled {
-			stats.InferenceCallsMade++
-			stats.PromptTokensForwardedEst += tokenEstimate(promptProcessed)
-
-			stub := modelStub(prompt, promptProcessed)
-			rawOutput = stub.RawModelOutput
-			stats.OutputsTotal++
-			stats.OutputTokensRawEst += tokenEstimate(rawOutput)
-
-			// Post-inference control: govern what may leave the model.
-			postStart := time.Now()
-			postProcessed, err := callEngineProcess(client, cfg, rawOutput)
-			if err != nil {
-				return stats, fmt.Errorf("prompt %s post-inference: %w", prompt.PromptID, err)
-			}
-			stats.PostprocessMs += float64(time.Since(postStart).Microseconds()) / 1000.0
-			postAction, finalOutput, postTags = derivePostAction(postProcessed)
-
-			switch postAction {
-			case "allow":
-				stats.OutputsAllowed++
-			case "mask":
-				stats.OutputsMasked++
-			case "block":
-				stats.OutputsBlocked++
-			case "tag":
-				stats.OutputsTagged++
-			}
-			stats.OutputTokensReleasedEst += tokenEstimate(finalOutput)
-		}
+		stats.PostprocessMs += float64(time.Since(postStart).Microseconds()) / 1000.0
+		postAction := deriveAction(rawOutput, postProcessed, actions)
+		stats.countPost(postAction)
+		stats.OutputTokensReleased += tokenEstimate(postProcessed)
 
 		records = append(records, OutputRecord{
 			PromptID:        prompt.PromptID,
-			Mode:            cfg.ModeLabel,
+			Mode:            mode,
 			Category:        prompt.Category,
 			PreAction:       preAction,
-			PreTags:         dedupeTags(preTags),
 			PromptOriginal:  prompt.PromptText,
-			PromptProcessed: promptProcessed,
-			InferenceCalled: inferenceCalled,
+			PromptProcessed: preProcessed,
+			InferenceCalled: true,
 			RawModelOutput:  rawOutput,
 			PostAction:      postAction,
-			PostTags:        dedupeTags(postTags),
-			FinalOutput:     finalOutput,
+			FinalOutput:     postProcessed,
 		})
 	}
 
-	totalElapsedMs := float64(time.Since(start).Milliseconds())
-	if totalElapsedMs <= 0 {
-		totalElapsedMs = 1
-	}
-	stats.TotalControlMs = stats.PreprocessMs + stats.PostprocessMs
-	stats.RecordsPerSec = float64(stats.PromptsTotal) / (totalElapsedMs / 1000.0)
-
-	if err := writeOutputJSONL(filepath.Join(outputDir, cfg.ModeLabel+"_output.jsonl"), records); err != nil {
+	if err := writeOutputJSONL(filepath.Join(outputDir, mode+"_output.jsonl"), records); err != nil {
 		return stats, err
 	}
-	return stats, writeSummaryCSV(filepath.Join(outputDir, "run_01.csv"), stats)
+	return stats, nil
+}
+
+func writeBoundaryCSV(path string, all []BoundaryStats) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	header := "mode,prompts_total,prompts_redacted,prompts_masked,prompt_route_signals,prompt_block_signals," +
+		"outputs_redacted,outputs_masked,output_block_signals,prompt_tokens_in,prompt_tokens_forwarded," +
+		"output_tokens_raw,output_tokens_released,preprocess_ms,postprocess_ms\n"
+	if _, err := file.WriteString(header); err != nil {
+		return err
+	}
+	for _, s := range all {
+		row := fmt.Sprintf("%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f\n",
+			s.Mode, s.PromptsTotal, s.PromptsRedacted, s.PromptsMasked, s.PromptRouteSignals,
+			s.PromptBlockSignals, s.OutputsRedacted, s.OutputsMasked, s.OutputBlockSignals,
+			s.PromptTokensIn, s.PromptTokensForwarded, s.OutputTokensRaw, s.OutputTokensReleased,
+			s.PreprocessMs, s.PostprocessMs)
+		if _, err := file.WriteString(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -64,60 +64,59 @@ def oracle_output(text: str, matcher: LiteralMatcher, rules: dict[str, str]) -> 
     return "".join(out)
 
 
-# The harness's action derivation, mirrored (engine_infer.go).
-def derive_pre(processed: str):
-    if "[BLOCK]" in processed:
-        return "block", []
-    if "[ROUTE]" in processed:
-        return "route", []
-    action, tags = "allow", []
-    if "[MASK_CARD]" in processed or "[MASK_ACCT]" in processed:
-        action = "mask"
-    if "[TAG_INT]" in processed:
-        tags.append("internal_only")
-        if action == "allow":
-            action = "tag"
-    return action, tags
+# The harness's action derivation, mirrored from engine_infer.go deriveAction. A
+# marker-based action counts only when the marker is NEW here. Precedence:
+# block > route > drop > mask > redact > allow. block/route are roadmap signals.
+def load_actions(path: Path) -> dict:
+    return json.loads(path.read_text())
 
 
-def derive_post(processed: str):
-    if "[BLOCK_OUT]" in processed:
-        return "block", "[BLOCKED_OUTPUT]", []
-    action, tags = "allow", []
-    if "[MASK_CARD]" in processed or "[MASK_ACCT]" in processed:
-        action = "mask"
-    if "[TAG_PRIV]" in processed:
-        tags.append("privileged_context")
-        if action == "allow":
-            action = "tag"
-    return action, processed, tags
+def derive_action(input_text: str, processed: str, actions: dict) -> str:
+    m = actions.get("markers", {})
+
+    def new_marker(mk: str) -> bool:
+        return bool(mk) and mk in processed and mk not in input_text
+
+    if new_marker(m.get("block", "")):
+        return "block"
+    if new_marker(m.get("route", "")):
+        return "route"
+    li, lp = input_text.lower(), processed.lower()
+    for d in actions.get("dropLiterals", []):
+        if d and d.lower() in li and d.lower() not in lp:
+            return "drop"
+    if new_marker(m.get("maskPrefix", "")):
+        return "mask"
+    if new_marker(m.get("redact", "")):
+        return "redact"
+    return "allow"
 
 
 def load_records(path: Path) -> list[dict]:
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
 
 
-def verify_engine(records, matcher, rules, samples):
+def verify_engine(records, matcher, rules, actions, samples):
+    """No-stop model: verify both edges independently. Pre transforms the prompt, post
+    transforms the model output; the engine's processed text and derived action must match
+    the oracle at each edge."""
     problems = []
     for r in records:
         oracle_pre = oracle_output(r["prompt_original"], matcher, rules)
-        exp_action, exp_tags = derive_pre(oracle_pre)
-        if r["pre_action"] != exp_action or sorted(r["pre_tags"]) != sorted(exp_tags):
-            problems.append((r["prompt_id"], "pre_action",
-                             f"{r['pre_action']}{r['pre_tags']}", f"{exp_action}{exp_tags}"))
-        elif exp_action in ("allow", "mask", "tag") and r["prompt_processed"] != oracle_pre:
+        exp_pre = derive_action(r["prompt_original"], oracle_pre, actions)
+        if r["pre_action"] != exp_pre:
+            problems.append((r["prompt_id"], "pre_action", r["pre_action"], exp_pre))
+        elif r["prompt_processed"] != oracle_pre:
             problems.append((r["prompt_id"], "prompt_processed",
                              repr(r["prompt_processed"]), repr(oracle_pre)))
 
-        if r["inference_called"]:
-            oracle_post = oracle_output(r["raw_model_output"], matcher, rules)
-            exp_paction, exp_final, exp_ptags = derive_post(oracle_post)
-            if r["post_action"] != exp_paction or sorted(r["post_tags"]) != sorted(exp_ptags):
-                problems.append((r["prompt_id"], "post_action",
-                                 f"{r['post_action']}{r['post_tags']}", f"{exp_paction}{exp_ptags}"))
-            elif r["final_output"] != exp_final:
-                problems.append((r["prompt_id"], "final_output",
-                                 repr(r["final_output"]), repr(exp_final)))
+        oracle_post = oracle_output(r["raw_model_output"], matcher, rules)
+        exp_post = derive_action(r["raw_model_output"], oracle_post, actions)
+        if r["post_action"] != exp_post:
+            problems.append((r["prompt_id"], "post_action", r["post_action"], exp_post))
+        elif r["final_output"] != oracle_post:
+            problems.append((r["prompt_id"], "final_output",
+                             repr(r["final_output"]), repr(oracle_post)))
     return problems
 
 
@@ -125,12 +124,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("engines", nargs="+")
     ap.add_argument("--policy", type=Path, default=REPO_ROOT / "demos/policies/boundary.nol")
+    ap.add_argument("--actions", type=Path, default=REPO_ROOT / "demos/policies/boundary-actions.json")
     ap.add_argument("--results", type=Path, default=REPO_ROOT / "demos/benchmark/datapoint2/results")
     ap.add_argument("--samples", type=int, default=5)
     args = ap.parse_args()
 
     rules = parse_policy(args.policy)
     matcher = LiteralMatcher(rules.keys())
+    actions = load_actions(args.actions)
     print(f"Policy: {args.policy.name} ({len(rules)} literal rules)\n")
 
     any_bad = False
@@ -141,7 +142,7 @@ def main() -> int:
             any_bad = True
             continue
         records = load_records(path)
-        problems = verify_engine(records, matcher, rules, args.samples)
+        problems = verify_engine(records, matcher, rules, actions, args.samples)
         verdict = "MATCHES ORACLE" if not problems else "DIVERGES FROM ORACLE"
         print(f"[{engine}] {len(records)} prompts; {len(records) - len({p[0] for p in problems})}"
               f"/{len(records)} fully match oracle -> {verdict}")

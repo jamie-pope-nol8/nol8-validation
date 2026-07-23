@@ -1052,74 +1052,70 @@ func writeSummaryCSV(path string, stats SummaryStats) error {
 
 func main() {
 	inputPath := flag.String("input", "../data/prompts/sample_prompts.jsonl", "Path to prompt JSONL input")
-	mode := flag.String("mode", "nocontrol", "Benchmark mode to run")
+	mode := flag.String("mode", "", "Mode to run, or empty for the default set (nocontrol, themis_api_infer)")
 	outputDir := flag.String("output-dir", "../results", "Directory for benchmark outputs")
-	listDir := flag.String("list-dir", "../data/reference_lists", "Directory containing listguard reference lists")
+	_ = flag.String("list-dir", "../data/reference_lists", "Reference-list dir (unused in the current action model)")
+	actionsPath := flag.String("actions", "../../../policies/boundary-actions.json", "boundary-actions.json (from build_boundary_policy.py)")
 	flag.Parse()
 
 	if err := os.MkdirAll(*outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "create output dir: %v\n", err)
 		os.Exit(1)
 	}
-
 	prompts, err := loadPrompts(*inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load prompts: %v\n", err)
 		os.Exit(1)
 	}
-
-	var stats SummaryStats
-	switch *mode {
-	case "nocontrol":
-		stats, err = runNoControl(prompts, *outputDir)
-	case "re2_guard":
-		stats, err = runRE2Guard(prompts, *outputDir)
-	case "listguard":
-		var cfg ListGuardConfig
-		cfg, err = loadListGuardConfig(*listDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load listguard config: %v\n", err)
-			os.Exit(1)
-		}
-		stats, err = runListGuard(prompts, *outputDir, cfg)
-	case "nol8sim_infer":
-		stats, err = runNol8SimInfer(prompts, *outputDir)
-	case "nol8_api_infer":
-		var cfg Nol8APIConfig
-		cfg, err = loadNol8APIConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load nol8 api config: %v\n", err)
-			os.Exit(1)
-		}
-		stats, err = runNol8APIInfer(prompts, *outputDir, cfg)
-	case "themis_api_infer":
-		var cfg EngineConfig
-		cfg, err = loadEngineConfig("themis_api_infer", "THEMIS_ENDPOINT", "THEMIS_TOKEN")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load themis engine config: %v\n", err)
-			os.Exit(1)
-		}
-		stats, err = runEngineInfer(prompts, *outputDir, cfg)
-	case "aergia_api_infer":
-		var cfg EngineConfig
-		cfg, err = loadEngineConfig("aergia_api_infer", "AERGIA_ENDPOINT", "AERGIA_TOKEN")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load aergia engine config: %v\n", err)
-			os.Exit(1)
-		}
-		stats, err = runEngineInfer(prompts, *outputDir, cfg)
-	default:
-		fmt.Fprintf(os.Stderr, "mode %q not implemented yet\n", *mode)
-		os.Exit(1)
-	}
+	actions, err := loadBoundaryActions(*actionsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "run benchmark: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Mode: %s\n", stats.Mode)
-	fmt.Printf("Prompts total: %d\n", stats.PromptsTotal)
-	fmt.Printf("Inference calls made: %d\n", stats.InferenceCallsMade)
-	fmt.Printf("Output rows written: %d\n", stats.OutputsTotal)
-	fmt.Printf("Summary CSV: %s\n", filepath.Join(*outputDir, "run_01.csv"))
+	modes := []string{"nocontrol", "themis_api_infer"}
+	if *mode != "" {
+		modes = []string{*mode}
+	}
+	identity := func(s string) (string, error) { return s, nil }
+
+	var allStats []BoundaryStats
+	for _, m := range modes {
+		var stats BoundaryStats
+		var rerr error
+		switch m {
+		case "nocontrol":
+			stats, rerr = runEngineInfer(prompts, m, *outputDir, actions, identity)
+		case "themis_api_infer", "aergia_api_infer":
+			endpointEnv, tokenEnv := "THEMIS_ENDPOINT", "THEMIS_TOKEN"
+			if m == "aergia_api_infer" {
+				endpointEnv, tokenEnv = "AERGIA_ENDPOINT", "AERGIA_TOKEN"
+			}
+			cfg, cerr := loadEngineConfig(m, endpointEnv, tokenEnv)
+			if cerr != nil {
+				fmt.Fprintf(os.Stderr, "config %s: %v\n", m, cerr)
+				os.Exit(1)
+			}
+			client := &http.Client{Timeout: cfg.Timeout}
+			proc := func(s string) (string, error) { return callEngineProcess(client, cfg, s) }
+			stats, rerr = runEngineInfer(prompts, m, *outputDir, actions, proc)
+		default:
+			fmt.Fprintf(os.Stderr, "unknown mode %q (supported: nocontrol, themis_api_infer, aergia_api_infer)\n", m)
+			os.Exit(1)
+		}
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "run %s: %v\n", m, rerr)
+			os.Exit(1)
+		}
+		allStats = append(allStats, stats)
+		fmt.Printf("Mode: %-18s | pre: redact %d mask %d route-sig %d block-sig %d | post: redact %d mask %d block-sig %d | prompt tokens %d->%d, output %d->%d\n",
+			stats.Mode, stats.PromptsRedacted, stats.PromptsMasked, stats.PromptRouteSignals, stats.PromptBlockSignals,
+			stats.OutputsRedacted, stats.OutputsMasked, stats.OutputBlockSignals,
+			stats.PromptTokensIn, stats.PromptTokensForwarded, stats.OutputTokensRaw, stats.OutputTokensReleased)
+	}
+
+	if err := writeBoundaryCSV(filepath.Join(*outputDir, "run_01.csv"), allStats); err != nil {
+		fmt.Fprintf(os.Stderr, "write csv: %v\n", err)
+		os.Exit(1)
+	}
 }
