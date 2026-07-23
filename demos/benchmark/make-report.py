@@ -675,9 +675,15 @@ SCRIPT = """
 
 
 # ---- DP2 (pre/post-inference control) sections ----
-_ACTION_COLOR = {"block": WARN, "block_handoff": WARN, "block_tool": WARN,
-                 "route": "var(--accent)", "mask": "var(--accent)",
+_ACTION_COLOR = {"block": WARN, "block_handoff": WARN, "block_tool": WARN, "route": WARN,
+                 "redact": "var(--accent)", "mask": "var(--accent)", "drop": "var(--accent)",
                  "tag": "var(--accent)", "allow": "var(--fg3)"}
+
+
+def _roadmap_badge() -> str:
+    return ('<span style="display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.1em;'
+            f'text-transform:uppercase;color:{WARN};border:1px solid {WARN};border-radius:999px;'
+            'padding:1px 8px;white-space:nowrap;">Roadmap</span>')
 
 
 def _action_badge(action: str, tags=None) -> str:
@@ -855,6 +861,8 @@ def mesh_flows(d) -> str:
         steps = ""
         for st in it["steps"]:
             badge = _action_badge(st["action"])
+            if st.get("roadmap"):
+                badge += " " + _roadmap_badge()
             body = (f'<span style="white-space:pre-wrap;color:var(--fg2);">{_chipify(esc(st["text"]))}</span>'
                     if st.get("text") else "")
             steps += (f'<div><div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;'
@@ -869,7 +877,8 @@ def mesh_flows(d) -> str:
             f'<div data-card style="background:var(--card);border:1px solid var(--cardline);border-radius:12px;'
             f'padding:18px 20px;margin-top:14px;">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">'
-            f'<span style="color:var(--fg1);font-size:13px;font-weight:700;">{esc(it["label"])}</span>'
+            f'<span style="color:var(--fg1);font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">'
+            f'{esc(it["label"])}{(" " + _roadmap_badge()) if it.get("roadmap") else ""}</span>'
             f'<span style="color:var(--fg3);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;">{esc(it.get("category",""))}</span>'
             f'</div>'
             f'<div style="font-size:10px;letter-spacing:.11em;text-transform:uppercase;font-weight:600;color:var(--fg3);margin-bottom:4px;">Task in</div>'
