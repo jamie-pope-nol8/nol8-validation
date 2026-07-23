@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -549,9 +550,10 @@ func writeCSV(path string, stats []SummaryStats) error {
 }
 
 func main() {
-	mode := flag.String("mode", "", "Mode to run, or empty for all modes")
+	mode := flag.String("mode", "", "Mode to run, or empty for the default set (nocontrol, themis_api_mesh)")
 	input := flag.String("input", "../data/tasks/sample_agent_tasks.jsonl", "Input JSONL task file")
-	policyDir := flag.String("policy-dir", "../data/policies", "Policy list directory")
+	_ = flag.String("policy-dir", "../data/policies", "Reference-list dir (unused in the current action model; kept for compatibility)")
+	actionsPath := flag.String("actions", "../../../policies/mesh-actions.json", "mesh-actions.json (emitted by build_mesh_policy.py)")
 	outputDir := flag.String("output-dir", "../results", "Output directory")
 	flag.Parse()
 
@@ -560,47 +562,53 @@ func main() {
 		fmt.Fprintf(os.Stderr, "load tasks: %v\n", err)
 		os.Exit(1)
 	}
-	cfg, err := loadPolicies(*policyDir)
+	actions, err := loadMeshActions(*actionsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "load policies: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	modes := []string{"nocontrol", "re2_mesh", "listmesh", "nol8sim_agent"}
+	modes := []string{"nocontrol", "themis_api_mesh"}
 	if *mode != "" {
 		modes = []string{*mode}
 	}
 
-	var allStats []SummaryStats
+	identity := func(s string) (string, error) { return s, nil }
+
+	var allStats []MeshStats
 	for _, m := range modes {
-		var stats SummaryStats
-		var err error
+		var stats MeshStats
+		var rerr error
 		switch m {
-		case "themis_api_mesh":
-			cfg, cerr := loadEngineConfig(m, "THEMIS_ENDPOINT", "THEMIS_TOKEN")
+		case "nocontrol":
+			stats, rerr = runMeshMode(tasks, m, *outputDir, actions, identity)
+		case "themis_api_mesh", "aergia_api_mesh":
+			endpointEnv, tokenEnv := "THEMIS_ENDPOINT", "THEMIS_TOKEN"
+			if m == "aergia_api_mesh" {
+				endpointEnv, tokenEnv = "AERGIA_ENDPOINT", "AERGIA_TOKEN"
+			}
+			cfg, cerr := loadEngineConfig(m, endpointEnv, tokenEnv)
 			if cerr != nil {
 				fmt.Fprintf(os.Stderr, "config %s: %v\n", m, cerr)
 				os.Exit(1)
 			}
-			stats, err = runEngineMesh(tasks, *outputDir, cfg)
-		case "aergia_api_mesh":
-			cfg, cerr := loadEngineConfig(m, "AERGIA_ENDPOINT", "AERGIA_TOKEN")
-			if cerr != nil {
-				fmt.Fprintf(os.Stderr, "config %s: %v\n", m, cerr)
-				os.Exit(1)
-			}
-			stats, err = runEngineMesh(tasks, *outputDir, cfg)
+			client := &http.Client{Timeout: cfg.Timeout}
+			proc := func(s string) (string, error) { return callEngineProcess(client, cfg, s) }
+			stats, rerr = runMeshMode(tasks, m, *outputDir, actions, proc)
 		default:
-			stats, err = runMode(tasks, m, *outputDir, cfg)
+			fmt.Fprintf(os.Stderr, "unknown mode %q (supported: nocontrol, themis_api_mesh, aergia_api_mesh)\n", m)
+			os.Exit(1)
 		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "run %s: %v\n", m, err)
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "run %s: %v\n", m, rerr)
 			os.Exit(1)
 		}
 		allStats = append(allStats, stats)
+		fmt.Printf("Mode: %-16s | redacted %d  masked %d  dropped %d  route-sig %d  block-sig %d  | downstream tokens %d\n",
+			stats.Mode, stats.Redacted, stats.Masked, stats.Dropped, stats.RouteSignals, stats.BlockSignals, stats.DownstreamTokensDelivered)
 	}
 
-	if err := writeCSV(filepath.Join(*outputDir, "run_all.csv"), allStats); err != nil {
+	if err := writeMeshCSV(filepath.Join(*outputDir, "run_all.csv"), allStats); err != nil {
 		fmt.Fprintf(os.Stderr, "write csv: %v\n", err)
 		os.Exit(1)
 	}

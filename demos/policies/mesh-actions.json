@@ -1,0 +1,147 @@
+{
+  "markers": {
+    "redact": "[REDACT]",
+    "route": "[ROUTE]",
+    "block": "[BLOCK]",
+    "maskPrefix": "XXXX "
+  },
+  "dropLiterals": [
+    "4024 0071 2345 6789",
+    "6011 0090 1234 5678"
+  ],
+  "rules": [
+    {
+      "literal": "Project Maple Vault",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "Project Aurora Ledger",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "ACC-1234-5678",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "ACC-7701-4432",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "privileged context",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "final"
+    },
+    {
+      "literal": "executive escalation",
+      "replacement": "[REDACT]",
+      "action": "redact",
+      "roadmap": false,
+      "stage": "final"
+    },
+    {
+      "literal": "4111 1111 1111 1111",
+      "replacement": "XXXX 1111",
+      "action": "mask",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "5555 5555 5555 4444",
+      "replacement": "XXXX 4444",
+      "action": "mask",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "4024 0071 2345 6789",
+      "replacement": "",
+      "action": "drop",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "6011 0090 1234 5678",
+      "replacement": "",
+      "action": "drop",
+      "roadmap": false,
+      "stage": "handoff"
+    },
+    {
+      "literal": "Contoso Advisory",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "handoff"
+    },
+    {
+      "literal": "Silverline Imports",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "handoff"
+    },
+    {
+      "literal": "Denied Entity: Red Flag Logistics",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "handoff"
+    },
+    {
+      "literal": "Shadow Harbor Holdings",
+      "replacement": "[ROUTE]",
+      "action": "route",
+      "roadmap": true,
+      "stage": "handoff"
+    },
+    {
+      "literal": "full transcript export",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "tool"
+    },
+    {
+      "literal": "send raw notes to reseller",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "tool"
+    },
+    {
+      "literal": "Ignore prior safeguards",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "tool"
+    },
+    {
+      "literal": "disallowed instructions",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "final"
+    },
+    {
+      "literal": "external distribution package",
+      "replacement": "[BLOCK]",
+      "action": "block",
+      "roadmap": true,
+      "stage": "final"
+    }
+  ]
+}

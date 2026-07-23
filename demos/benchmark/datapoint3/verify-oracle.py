@@ -74,39 +74,33 @@ def oracle_output(text: str, matcher: LiteralMatcher, rules: dict[str, str]) -> 
     return "".join(out)
 
 
-# The harness's per-stage action derivation, mirrored from engine_mesh.go.
-def _mask_added_this_stage(input_text: str, processed: str) -> bool:
-    """A NEW mask sentinel appeared while processing this stage (a value redacted here).
-    A sentinel already present in the input (masked at an earlier hop, carried forward)
-    does not count - masking is a governance action once, at the first hop."""
-    for s in ("[MASK_CARD]", "[MASK_ACCT]"):
-        if s in processed and s not in input_text:
-            return True
-    return False
+# The harness's per-hop action derivation, mirrored from engine_mesh.go deriveMeshAction.
+# A marker-based action counts only when the marker is NEW this hop (a value redacted here,
+# not one carried forward). Precedence: block > route > drop > mask > redact > allow.
+# block/route are roadmap signals; the rest are live data actions.
+def load_actions(path: Path) -> dict:
+    return json.loads(path.read_text())
 
 
-def derive_handoff(input_text: str, processed: str) -> str:
-    if "[ROUTE]" in processed:
+def derive_action(input_text: str, processed: str, actions: dict) -> str:
+    m = actions.get("markers", {})
+
+    def new_marker(mk: str) -> bool:
+        return bool(mk) and mk in processed and mk not in input_text
+
+    if new_marker(m.get("block", "")):
+        return "block"
+    if new_marker(m.get("route", "")):
         return "route"
-    if "[BLOCK_HAND]" in processed:
-        return "block_handoff"
-    if _mask_added_this_stage(input_text, processed):
+    li = input_text.lower()
+    for d in actions.get("dropLiterals", []):
+        if d and d.lower() in li:
+            return "drop"
+    if new_marker(m.get("maskPrefix", "")):
         return "mask"
+    if new_marker(m.get("redact", "")):
+        return "redact"
     return "allow"
-
-
-def derive_tool(processed: str) -> str:
-    return "block_tool" if "[BLOCK_TOOL]" in processed else "allow"
-
-
-def derive_final(input_text: str, processed: str) -> tuple[str, str]:
-    if "[BLOCK_OUT]" in processed:
-        return "block", "[BLOCKED_OUTPUT]"
-    if "[TAG_PRIV]" in processed:
-        return "tag", processed
-    if _mask_added_this_stage(input_text, processed):
-        return "mask", processed
-    return "allow", processed
 
 
 def model_output(task: dict, processed: str) -> str:
@@ -126,44 +120,30 @@ def model_output(task: dict, processed: str) -> str:
     return f"Final response is benign for {task_id}."
 
 
-def oracle_events(task: dict, matcher: LiteralMatcher, rules: dict[str, str]) -> list[dict]:
+def oracle_events(task: dict, matcher: LiteralMatcher, rules: dict[str, str],
+                  actions: dict) -> list[dict]:
     """Re-run the whole mesh flow for one task using the oracle matcher; return the
-    expected event stream (stage, event_type, action, processed_text)."""
+    expected event stream (stage, event_type, action, processed_text). No stopping: NOL8
+    redacts/masks/drops and the text flows on; route/block are recorded signals."""
     events: list[dict] = []
     text = task["user_task"]
-    mesh_stopped = terminal_blocked = False
 
     for stage_name, _src, _dst in _HANDOFF_STAGES:
         processed = oracle_output(text, matcher, rules)
-        action = derive_handoff(text, processed)
         events.append({"stage": stage_name, "event_type": "agent_message",
-                       "action": action, "processed_text": processed})
+                       "action": derive_action(text, processed, actions), "processed_text": processed})
         text = processed
-        if action == "block_handoff":
-            mesh_stopped = terminal_blocked = True
-            break
-        if action == "route":
-            mesh_stopped = True
-            break
 
-    if not mesh_stopped:
-        processed = oracle_output(text, matcher, rules)
-        action = derive_tool(processed)
-        events.append({"stage": "tool", "event_type": "tool_call",
-                       "action": action, "processed_text": processed})
-        if action == "block_tool":
-            terminal_blocked = True
-        else:
-            text = processed
+    processed = oracle_output(text, matcher, rules)
+    events.append({"stage": "tool", "event_type": "tool_call",
+                   "action": derive_action(text, processed, actions), "processed_text": processed})
+    text = processed
 
     final_text = model_output(task, text)
-    if terminal_blocked:
-        final_action, final_processed = "block", "[BLOCKED_OUTPUT]"
-    else:
-        processed = oracle_output(final_text, matcher, rules)
-        final_action, final_processed = derive_final(final_text, processed)
+    final_processed = oracle_output(final_text, matcher, rules)
     events.append({"stage": "final", "event_type": "final_output",
-                   "action": final_action, "processed_text": final_processed})
+                   "action": derive_action(final_text, final_processed, actions),
+                   "processed_text": final_processed})
     return events
 
 
@@ -181,12 +161,12 @@ def load_events_by_task(path: Path) -> dict[str, list[dict]]:
     return grouped
 
 
-def verify_engine(tasks, engine_events, matcher, rules):
+def verify_engine(tasks, engine_events, matcher, rules, actions):
     """Return list of (task_id, detail) divergences."""
     problems = []
     for task in tasks:
         tid = task["task_id"]
-        expected = oracle_events(task, matcher, rules)
+        expected = oracle_events(task, matcher, rules, actions)
         actual = engine_events.get(tid, [])
         if len(actual) != len(expected):
             problems.append((tid, f"event count: engine {len(actual)} vs oracle {len(expected)}"))
@@ -206,6 +186,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("engines", nargs="+")
     ap.add_argument("--policy", type=Path, default=REPO_ROOT / "demos/policies/mesh.nol")
+    ap.add_argument("--actions", type=Path, default=REPO_ROOT / "demos/policies/mesh-actions.json")
     ap.add_argument("--results", type=Path, default=REPO_ROOT / "demos/benchmark/datapoint3/results")
     ap.add_argument("--tasks", type=Path,
                     default=REPO_ROOT / "demos/benchmark/datapoint3/data/tasks/sample_agent_tasks.jsonl")
@@ -214,6 +195,7 @@ def main() -> int:
 
     rules = parse_policy(args.policy)
     matcher = LiteralMatcher(rules.keys())
+    actions = load_actions(args.actions)
     tasks = load_tasks(args.tasks)
     print(f"Policy: {args.policy.name} ({len(rules)} literal rules); {len(tasks)} tasks\n")
 
@@ -225,7 +207,7 @@ def main() -> int:
             any_bad = True
             continue
         engine_events = load_events_by_task(path)
-        problems = verify_engine(tasks, engine_events, matcher, rules)
+        problems = verify_engine(tasks, engine_events, matcher, rules, actions)
         bad_tasks = {p[0] for p in problems}
         verdict = "MATCHES ORACLE" if not problems else "DIVERGES FROM ORACLE"
         print(f"[{engine}] {len(tasks) - len(bad_tasks)}/{len(tasks)} tasks "

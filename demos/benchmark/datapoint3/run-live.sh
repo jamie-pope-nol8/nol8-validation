@@ -21,9 +21,10 @@ set -a; source config/demo.env; source .env; set +a
 export PATH="$HOME/.local/go/bin:$PATH"
 
 POLICY="${POLICY:-demos/policies/mesh.nol}"
-# Engine modes call the real engine; sim modes run in-process. Default omits
+ACTIONS="${ACTIONS:-$ROOT/demos/policies/mesh-actions.json}"
+# nocontrol is the payload baseline; themis_api_mesh is the live engine. Default omits
 # aergia_api_mesh (its :444 data plane was down); add it once check-engines.sh is green.
-MODES="${MODES:-nocontrol re2_mesh listmesh nol8sim_agent themis_api_mesh}"
+MODES="${MODES:-nocontrol themis_api_mesh}"
 export ENGINE_TIMEOUT_MS="${ENGINE_TIMEOUT_MS:-15000}"
 
 echo ">> deploying the mesh policy to Themis"
@@ -54,7 +55,7 @@ export AERGIA_ENDPOINT="$AERGIA_PROCESS_ENDPOINT"
 for mode in $MODES; do
   echo ">> mode: $mode"
   ( cd "$ROOT/$PACK/go" && GOCACHE="$ROOT/$PACK/.gocache" \
-      go run . --mode "$mode" --input "$INPUT" --policy-dir "$POLICYDIR" --output-dir "$RESULTS" ) \
+      go run . --mode "$mode" --input "$INPUT" --actions "$ACTIONS" --output-dir "$RESULTS" ) \
     | sed 's/^/   /'
   if [ ! -f "$COMBINED" ]; then head -n 1 "$RESULTS/run_all.csv" > "$COMBINED"; fi
   tail -n +2 "$RESULTS/run_all.csv" >> "$COMBINED"
