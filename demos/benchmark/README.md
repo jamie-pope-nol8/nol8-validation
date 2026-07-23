@@ -1,70 +1,93 @@
-# Benchmark harness (demo)
+# NOL8 benchmark demos - run it yourself
 
-The pre-index benchmark from `~/Code/nol8/preindex-benchmark-kit`, copied here
-(never edited in place) so it can run against **real Themis** instead of the
-kit's local simulation. See `datapoint1/` for the datapoint being measured.
+Three data points that measure NOL8 (Themis, FPGA) against Aergia (our stand-up of Google
+RE2, the incumbent), on the **identical literal policy**, adjudicated against an independent
+oracle. Everything here is measured on the **live engines**, not simulated.
 
-## What it measures
+Each data point is self-contained: its own runner (`run-live.sh`), notes (`DEMO-NOTES.md`),
+policy, and report. Start with the preflight, then run whichever data point you want.
 
-`datapoint1` = **Pre-Index Optimization**: govern sensitive text *before* it lands
-in embeddings. The Go harness (`datapoint1/go/benchmark.go`) streams a 1,000-chunk
-corpus through one or more *modes* and records, per mode, how much was
-kept/masked/dropped/routed, how many tokens were forwarded downstream (the embed
-cost saved), and throughput (chunks/sec, wall time via `/usr/bin/time`).
+## What NOL8 does (the honest action model)
 
-Modes:
+NOL8 does **deterministic literal replacement only**. That gives two families of action,
+and the reports keep them separate:
 
-| mode | what it is | measured? |
+- **LIVE today (NOL8 transforms the data, oracle-verified):** **redact** (`value -> [REDACT]`),
+  **mask** (`card -> XXXX <last4>`), **drop** (`value -> removed`).
+- **ROADMAP (NOL8 emits a signal a control plane acts on; native enforcement later):**
+  **route** (`-> [ROUTE]`), **block** (`-> [BLOCK]`).
+
+NOL8 does not itself route, block, or stop a message today - it emits the signal and the
+redacted text flows on. Reports mark route/block `Roadmap`. Scope is **listMatch (literal),
+case-insensitive**; regex is on the roadmap, not in these demos.
+
+## Two-host workflow
+
+| | Mac | EC2 (`nol8-demo`, `/opt/nol8/nol8-validation`) |
 |---|---|---|
-| `nofilter` | passthrough baseline (everything forwarded) | yes |
-| `re2` | traditional RE2 **regex** masking, in local Go (email/SSN/phone/ACC-ID + boilerplate) | yes |
-| `listmatch` | **literal** reference-list matching, in local Go (software equivalent of Themis' approach) | yes |
-| `nol8sim` | hard-coded placeholder — **not** real, excluded from our runs | no |
-| `nol8_api` | **real Themis**, via the adapter below | yes |
+| purpose | edit, commit, render reports | run against the live engines |
+| why | no Go; can't reach the engines | has Go 1.22; reaches Themis :443 + Aergia :444 |
 
-The honest comparison axes: `re2` (pattern approach) vs `listmatch`/`nol8_api`
-(literal approach), and `listmatch` (literal matching in software) vs `nol8_api`
-(the same literal matching on Themis' FPGA path).
+Edit + `git push` on the Mac, `git pull` + run on EC2. Reports render on either host.
 
-## How `nol8_api` reaches Themis
-
-The harness speaks the benchmark contract `{"text"} -> {"action","text"}`
-(keep/mask/drop/route). Themis speaks `{"message"} -> {"result":{"message"}}`
-(redaction only). Our adapter bridges them:
-
-```
-benchmark.go (nol8_api)  --{"text"}-->  themis-adapter (127.0.0.1:8799)  --{"message"}-->  Themis
-                         <--{action,text}--                              <--{result.message}--
-```
-
-The adapter (`demos/themis-adapter/adapter.py`) derives the action: unchanged ->
-`keep`, changed -> `mask`, sentinel tokens -> `drop`/`route`. Themis is a *literal*
-matcher, so `nol8_api` masks the corpus's **known governed values** (entities,
-accounts, cards, projects — the ones in the starter policy) and leaves
-**regex-class PII** (arbitrary emails/SSNs/phones) untouched. That gap is real and
-intended: pattern classes are Aergia's (RE2) job — see the combined-report plan in
-`docs/continue-conversation.md`.
-
-## Run it (on EC2 — the box that can reach Themis)
+## Step 0 - preflight (always run this first)
 
 ```bash
-cd /opt/nol8/nol8-validation && source .venv/bin/activate
-export PATH=$HOME/.local/go/bin:$PATH            # Go 1.22 installed here
-
-# 1. Deploy the starter policy (governs the corpus's known values)
-validate policy --file demos/policies/starter-known-values.nol --target themis
-
-# 2. Start the adapter (reads THEMIS_PROCESS_ENDPOINT + THEMIS_TOKEN)
-source config/demo.env && source .env
-ADAPTER_PORT=8799 python demos/themis-adapter/adapter.py &
-
-# 3. Run the harness against the adapter
-cd demos/benchmark/datapoint1
-export NOL8_ENDPOINT="http://127.0.0.1:8799"
-export MODES="nofilter re2 listmatch nol8_api"
-bash scripts/run_all.sh
-# -> results/run_01.csv, results/*_output.jsonl, report/report.html
+# on EC2
+bash demos/check-engines.sh          # both engines must show all OK (6/6)
 ```
 
-Everything under `results/` and `report/report.html` and the Go binary are
-generated (gitignored). Source, corpus, and reference lists are tracked.
+Deploys a harmless probe policy to each engine and confirms DNS + control-plane deploy +
+data-plane round-trip. On failure it deep-probes and tells you whether it is the host, the
+port, or a policy/propagation delay. (Tunables: `RELOAD_WAIT`, `ROUNDTRIP_TRIES`.)
+
+## The three data points
+
+| | Use case | Run (on EC2) | Notes |
+|---|---|---|---|
+| **DP1** | **Pre-index optimization** - clean text before it becomes embeddings | `bash demos/benchmark/run-live.sh` | [DEMO-NOTES.md](DEMO-NOTES.md) |
+| **DP2** | **Pre/post-inference boundary** - keep secrets out of the model and the response | `bash demos/benchmark/datapoint2/run-live.sh` | [datapoint2/DEMO-NOTES.md](datapoint2/DEMO-NOTES.md) |
+| **DP3** | **Agent-to-agent mesh** - strip secrets at every hop of an agent workflow | `bash demos/benchmark/datapoint3/run-live.sh` | [datapoint3/DEMO-NOTES.md](datapoint3/DEMO-NOTES.md) |
+
+Each `run-live.sh` deploys the policy, runs the modes, prints a combined CSV, and (DP2/DP3)
+adjudicates the engines against the oracle. DP2 and DP3 use the honest action model above;
+DP1 is the pre-index optimization flow (redact/drop for embedding cost + governance).
+
+**Latest live results (2026-07-23):**
+- **DP2:** Themis == Aergia == oracle, **53/53**; 25 secrets stripped (redact + last-4 mask).
+- **DP3:** Themis == Aergia == oracle, **13/13**; 8 secrets stripped (redact/mask/drop); 878 -> 737 downstream tokens.
+
+### Getting the Aergia/RE2 parity column
+
+DP2's runner includes Aergia by default. DP3 defaults to Themis-only; add Aergia with:
+
+```bash
+MODES="nocontrol themis_api_mesh aergia_api_mesh" bash demos/benchmark/datapoint3/run-live.sh
+```
+
+### Regenerating a policy (optional - the committed `.nol` files are ready to run)
+
+```bash
+python demos/policies/build_boundary_policy.py   # DP2 -> boundary.nol + boundary-actions.json
+python demos/policies/build_mesh_policy.py        # DP3 -> mesh.nol + mesh-actions.json
+```
+
+Both refuse an unsafe policy (over-length replacement = ISSUE-005; contained literals =
+ISSUE-004). The `*-actions.json` sidecar is the action map the engine mode and oracle read.
+
+## The reports
+
+```bash
+# render on either host (self-contained HTML: web = dark, deck = Export to PDF = light)
+python demos/benchmark/make-report.py demos/benchmark/datapoint2/run.json demos/benchmark/datapoint2/pre-post-report.html
+python demos/benchmark/make-report.py demos/benchmark/datapoint3/run.json demos/benchmark/datapoint3/agent-mesh-report.html
+```
+
+The shared renderer dispatches on `run.json`'s `kind` (default DP1, `dp2`, `dp3`). `run.json`,
+`make-report.py`, and `brand/` are tracked; results and rendered HTML are gitignored.
+
+## What's tracked vs generated
+
+Tracked: source, corpus/reference lists, `.nol` policies + `*-actions.json`, `run.json`,
+notes. Gitignored: everything under `**/results/`, the Go binaries and `.gocache/`, and the
+rendered `*-report.html`.

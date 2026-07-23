@@ -18,10 +18,17 @@ here. See the review in `docs/continue-conversation.md` ("Next horizon").
 
 ## Contents
 
-- `themis-adapter/` - the bridge that lets the benchmark harness run against real
-  Themis. The benchmark speaks `{"text"}->{"action","text"}` (keep/mask/drop/
-  route); Themis speaks `{"message"}->{"result":{"message"}}` (redaction only).
-  The adapter translates between them and derives the action.
+- **`benchmark/` - the three benchmark data points (DP1 pre-index, DP2 pre/post-
+  inference, DP3 agent mesh). Start here to run anything:
+  [benchmark/README.md](benchmark/README.md)** - preflight, the two-host workflow,
+  and a copy-paste run command per data point.
+- `policies/` - the policy generators (`build_*_policy.py`) and generated `.nol`
+  files + `*-actions.json` sidecars.
+- `check-engines.sh` - the engine preflight ("are things where they need to be?").
+- `themis-adapter/` - the bridge DP1 uses to run against real Themis. The benchmark
+  speaks `{"text"}->{"action","text"}`; Themis speaks `{"message"}->{"result":
+  {"message"}}` (redaction only). The adapter translates and derives the action.
+  (DP2/DP3 call the engine directly in Go instead.)
 
 ## Running the adapter tests
 
