@@ -132,9 +132,14 @@ func deriveMeshAction(input, processed string, a MeshActions) string {
 	if newMarker(a.Markers.Route) {
 		return "route"
 	}
-	li := strings.ToLower(input)
+	li, lp := strings.ToLower(input), strings.ToLower(processed)
 	for _, d := range a.DropLiterals {
-		if d != "" && strings.Contains(li, strings.ToLower(d)) {
+		if d == "" {
+			continue
+		}
+		ld := strings.ToLower(d)
+		// drop = the value was present in the input and the engine removed it here.
+		if strings.Contains(li, ld) && !strings.Contains(lp, ld) {
 			return "drop"
 		}
 	}

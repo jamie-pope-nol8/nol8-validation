@@ -92,9 +92,10 @@ def derive_action(input_text: str, processed: str, actions: dict) -> str:
         return "block"
     if new_marker(m.get("route", "")):
         return "route"
-    li = input_text.lower()
+    li, lp = input_text.lower(), processed.lower()
     for d in actions.get("dropLiterals", []):
-        if d and d.lower() in li:
+        # drop = the value was present in the input and removed here.
+        if d and d.lower() in li and d.lower() not in lp:
             return "drop"
     if new_marker(m.get("maskPrefix", "")):
         return "mask"
