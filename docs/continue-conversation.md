@@ -23,13 +23,14 @@ continue without reconstructing context from chat history.
 >   244->189 tokens fwd) and **oracle-verified 24/24**. Parity column (Aergia==Themis)
 >   still pending - blocked only by :444 being down (below). See the DP2 section +
 >   [[demo-positioning-and-data-strategy]].
-> - **Data Point 3 (agent-to-agent) - CORE BUILT + oracle-verified (2026-07-23).** DP2
+> - **Data Point 3 (agent-to-agent) - BUILT + live, report done (2026-07-23).** DP2
 >   generalized to many control points: live Themis governs every hop of a 5-stage agent
->   mesh (4 handoffs -> tool -> final). **themis_api_mesh == oracle, 12/12 event-for-event**,
->   and == the listmesh literal baseline to the count. Built: `mesh.nol` generator,
->   `engine_mesh.go`, full-flow re-simulation `verify-oracle.py`. REMAINING: payload/token
->   instrumentation (the "Both" headline), run.json + report (`kind: dp3`), run-live.sh,
->   DEMO-NOTES; Aergia parity column waits on :444. Decisions + findings in DP3-PLAN.md.
+>   mesh (4 handoffs -> tool -> final). **themis_api_mesh == oracle, 12/12 event-for-event.**
+>   "Both" headline live: governance-survives (12/12) + payload-reduction (**797 -> 378
+>   downstream tokens, 52.6% less delivered**). Full pipeline built and validated on EC2:
+>   `mesh.nol` generator, `engine_mesh.go`, `verify-oracle.py`, payload instrumentation,
+>   `run.json`+`kind:dp3` report (mesh + mesh_flows sections), `run-live.sh`, DEMO-NOTES.
+>   ONLY REMAINING: Aergia parity column (waits on :444) + a DP3 representative insurer set.
 >
 > **>>> OPERATIONAL STATUS (2026-07-23): Themis :443 is BACK; Aergia :444 still down.**
 > `check-engines.sh` on EC2: Themis (NOL8) DNS + control plane + data-plane round-trip
@@ -327,11 +328,18 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   curated for ISSUE-004; `demos/policies/build_mesh_policy.py` -> `mesh.nol` (17 rules);
   `go/engine_mesh.go` (engine at every hop, sentinel-derived, mask-once semantics);
   `go/main.go` dispatches `themis_api_mesh`/`aergia_api_mesh`. Compiles + runs on EC2.
-- **REMAINING:** payload/token instrumentation (the "Both" headline = governance-
-  survives + payload-reduction-across-hops); `run.json` (`kind: dp3`) + make-report.py
-  dp3 path; `run-live.sh`; DEMO-NOTES (carry the 3 honest listMatch findings from
-  DP3-PLAN.md); Aergia parity column when :444 returns. Near-term bridge to the agentic
-  story = a DP3 *representative* insurer-mesh dataset (mirror DP2's representative set).
+- **Report pipeline DONE (2026-07-23):** payload instrumentation added (downstream tokens
+  delivered per hop); `run.json` (`kind: dp3`) authored with live numbers; make-report.py
+  has the dp3 path (`mesh()` + `mesh_flows()` sections, reuses hero/stat-band/appendix);
+  `run-live.sh` (deploy, run all modes, combine, oracle-verify) and DEMO-NOTES written and
+  validated on EC2. Render: `python demos/benchmark/make-report.py
+  demos/benchmark/datapoint3/run.json demos/benchmark/datapoint3/agent-mesh-report.html`
+  (gitignored). Payload: nocontrol 797, re2/listmesh 410, **Themis 378 (52.6% less)**;
+  the engine delivers less than the detect-only sims because it redacts every matched
+  literal at every hop (documented in DEMO-NOTES).
+- **REMAINING:** Aergia parity column (add `aergia_api_mesh` to MODES) when :444 returns;
+  a DP3 *representative* insurer-mesh dataset (mirror DP2's representative set) as the
+  near-term bridge to the agentic story; Track B (agentic-mesh-lab) is the flagship.
 - **Plan / decisions / findings:** `demos/benchmark/DP3-PLAN.md` (headline=Both,
   scenario=generic-now, ISSUE-004 curation, sentinel map, 3 findings).
 
