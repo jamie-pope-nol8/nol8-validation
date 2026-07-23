@@ -23,8 +23,13 @@ continue without reconstructing context from chat history.
 >   244->189 tokens fwd) and **oracle-verified 24/24**. Parity column (Aergia==Themis)
 >   still pending - blocked only by :444 being down (below). See the DP2 section +
 >   [[demo-positioning-and-data-strategy]].
-> - **Data Point 3 (agent-to-agent) - PLANNED only.** Full build spec in
->   `demos/benchmark/DP3-PLAN.md`. DP2 generalized to many control points. Not built.
+> - **Data Point 3 (agent-to-agent) - CORE BUILT + oracle-verified (2026-07-23).** DP2
+>   generalized to many control points: live Themis governs every hop of a 5-stage agent
+>   mesh (4 handoffs -> tool -> final). **themis_api_mesh == oracle, 12/12 event-for-event**,
+>   and == the listmesh literal baseline to the count. Built: `mesh.nol` generator,
+>   `engine_mesh.go`, full-flow re-simulation `verify-oracle.py`. REMAINING: payload/token
+>   instrumentation (the "Both" headline), run.json + report (`kind: dp3`), run-live.sh,
+>   DEMO-NOTES; Aergia parity column waits on :444. Decisions + findings in DP3-PLAN.md.
 >
 > **>>> OPERATIONAL STATUS (2026-07-23): Themis :443 is BACK; Aergia :444 still down.**
 > `check-engines.sh` on EC2: Themis (NOL8) DNS + control plane + data-plane round-trip
@@ -312,9 +317,27 @@ which deliberately reuse the framework's tested matcher as the independent oracl
   :444 returns, rerun with `MODES="themis_api_infer aergia_api_infer"` and verify both;
   that closes DP2 fully. Command in representative/README.md.
 
-## Data Point 3 - agent-to-agent control - PLANNED (`demos/benchmark/DP3-PLAN.md`)
+## Data Point 3 - agent-to-agent control - CORE BUILT + oracle-verified (`demos/benchmark/datapoint3/`)
 
-- **Not built.** Full build spec in `demos/benchmark/DP3-PLAN.md`. DP3 is DP2
+- **Live result (2026-07-23):** `themis_api_mesh` runs the full mesh through real Themis
+  (:443) and **matches the oracle 12/12 event-for-event** (`verify-oracle.py` full-flow
+  re-simulation on `mesh.nol`), and equals the `listmesh` literal baseline to the count
+  (masked 2, handoff-blocked 1, routed 4, tool-blocked 1, final blocked 4 / tagged 3, 6
+  exposures prevented, 10/12 contract-aligned). Pack copied to `datapoint3/`; lists
+  curated for ISSUE-004; `demos/policies/build_mesh_policy.py` -> `mesh.nol` (17 rules);
+  `go/engine_mesh.go` (engine at every hop, sentinel-derived, mask-once semantics);
+  `go/main.go` dispatches `themis_api_mesh`/`aergia_api_mesh`. Compiles + runs on EC2.
+- **REMAINING:** payload/token instrumentation (the "Both" headline = governance-
+  survives + payload-reduction-across-hops); `run.json` (`kind: dp3`) + make-report.py
+  dp3 path; `run-live.sh`; DEMO-NOTES (carry the 3 honest listMatch findings from
+  DP3-PLAN.md); Aergia parity column when :444 returns. Near-term bridge to the agentic
+  story = a DP3 *representative* insurer-mesh dataset (mirror DP2's representative set).
+- **Plan / decisions / findings:** `demos/benchmark/DP3-PLAN.md` (headline=Both,
+  scenario=generic-now, ISSUE-004 curation, sentinel map, 3 findings).
+
+### Original plan (for reference)
+
+- Full build spec in `demos/benchmark/DP3-PLAN.md`. DP3 is DP2
   generalized: governance at every agent hop (handoff), tool call, and final output
   across `Triage -> Research -> Decision -> Action -> Final`. Kit pack:
   `~/Code/nol8/preindex-benchmark-kit/datapoint3_agent_mesh_pack_v1` (same structure as
